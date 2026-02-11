@@ -191,7 +191,13 @@ Public Sub Seguimento_Registar( _
     If mapa.exists("Modos") Then ws.Cells(linha, mapa("Modos")).value = prompt.modos
     If mapa.exists("Storage") Then ws.Cells(linha, mapa("Storage")).value = IIf(prompt.storage, "TRUE", "FALSE")
 
-    If mapa.exists("Config extra (amigável)") Then ws.Cells(linha, mapa("Config extra (amigável)")).value = prompt.ConfigExtra
+    If mapa.exists("Config extra (amigável)") Then
+        ws.Cells(linha, mapa("Config extra (amigável)")).value = prompt.ConfigExtra
+    ElseIf mapa.exists("Config extra (amigavel)") Then
+        ws.Cells(linha, mapa("Config extra (amigavel)")).value = prompt.ConfigExtra
+    ElseIf mapa.exists("Config extra (amigÃ¡vel)") Then
+        ws.Cells(linha, mapa("Config extra (amigÃ¡vel)")).value = prompt.ConfigExtra
+    End If
     If mapa.exists("Config extra (JSON convertido)") Then ws.Cells(linha, mapa("Config extra (JSON convertido)")).value = auditJson
 
     If mapa.exists("HTTP Status") Then
