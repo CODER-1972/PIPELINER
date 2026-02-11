@@ -555,7 +555,9 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     Call Files_SetRunToken(runToken)
 
     ' Garantir colunas/headers de ContextKV (idempotente)
+    On Error Resume Next
     Call ContextKV_EnsureLayout
+    On Error GoTo TrataErro
     ' Estruturas de controlo
     Dim visitas As Object
     Set visitas = CreateObject("Scripting.Dictionary")
@@ -617,16 +619,34 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         modeloUsado = Trim$(prompt.modelo)
         If modeloUsado = "" Then modeloUsado = modeloDefault
 
+        Dim promptTextFinal As String
         Dim injectedVarsJson As String
         Dim injectErro As String
+        Dim injectOk As Boolean
+        promptTextFinal = prompt.textoPrompt
         injectedVarsJson = ""
         injectErro = ""
+        injectOk = True
 
-        If Not ContextKV_InjectForStep(pipelineNome, passo, prompt.Id, outputFolderBase, runToken, prompt.textoPrompt, injectedVarsJson, injectErro) Then
-            Call Debug_Registar(passo, prompt.Id, "ERRO", "", "ContextKV", _
-                "Falha na injecao de variaveis: " & injectErro, _
-                "Sugestao: valide placeholders {{VAR:...}}, directiva VARS e chaves capturadas em passos anteriores.")
-            Call Seguimento_Registar(passo, prompt, modeloUsado, "{}", 0, "", "[ERRO CONTEXT_KV] " & injectErro, pipelineNome)
+        On Error Resume Next
+        injectOk = ContextKV_InjectForStep(pipelineNome, passo, prompt.Id, outputFolderBase, runToken, promptTextFinal, injectedVarsJson, injectErro)
+        If Err.Number <> 0 Then
+            Call Debug_Registar(passo, prompt.Id, "ALERTA", "", "CONTEXT_KV", _
+                "Falha a executar ContextKV_InjectForStep: " & Err.Description, _
+                "Sugestao: compilar o VBAProject e verificar se M13_ContextKV esta presente.")
+            Err.Clear
+            injectOk = True
+            injectErro = ""
+            injectedVarsJson = ""
+            promptTextFinal = prompt.textoPrompt
+        End If
+        On Error GoTo TrataErro
+
+        If injectOk = False Then
+            Call Debug_Registar(passo, prompt.Id, "ERRO", "", "CONTEXT_KV", _
+                injectErro, _
+                "Sugestao: verifique captured_vars do passo anterior e placeholders {{VAR:...}} / {@OUTPUT:...}.")
+            Call Seguimento_Registar(passo, prompt, modeloUsado, "{}", 0, "", "[ERRO CONTEXT_KV] " & injectErro, pipelineNome, "STOP", "", "", "")
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
             GoTo SaidaLimpa
         End If
@@ -743,7 +763,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Call FileOutput_PrepareRequest(fo_outputKind, fo_processMode, fo_structuredMode, modosEfetivo, extraFragmentFO)
 
 
-        resultado = OpenAI_Executar(apiKey, modeloUsado, prompt.textoPrompt, temperaturaDefault, maxTokensDefault, _
+        resultado = OpenAI_Executar(apiKey, modeloUsado, promptTextFinal, temperaturaDefault, maxTokensDefault, _
                                     modosEfetivo, prompt.storage, inputJsonFinal, extraFragmentFO, prompt.Id)
 
         execCount = execCount + 1
@@ -787,11 +807,16 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, resultado.httpStatus, resultado.responseId, _
             textoSeguimento, pipelineNome, "", filesUsedResumo, filesOpsResumo, fileIds)
 
-        If Len(Trim$(injectedVarsJson)) > 0 Then
-            Call ContextKV_WriteInjectedVars(pipelineNome, passo, prompt.Id, injectedVarsJson, outputFolderBase, runToken)
-        End If
-
+        On Error Resume Next
+        Call ContextKV_WriteInjectedVars(pipelineNome, passo, prompt.Id, injectedVarsJson, outputFolderBase, runToken)
         Call ContextKV_CaptureRow(pipelineNome, passo, prompt.Id, outputFolderBase, runToken)
+        If Err.Number <> 0 Then
+            Call Debug_Registar(passo, prompt.Id, "ALERTA", "", "CONTEXT_KV", _
+                "Falha em WriteInjectedVars/CaptureRow: " & Err.Description, _
+                "Sugestao: confirme cabecalhos Seguimento/DEBUG e compile o VBAProject.")
+            Err.Clear
+        End If
+        On Error GoTo TrataErro
 
 
         If Trim$(resultado.Erro) <> "" Then
