@@ -2,7 +2,7 @@ Attribute VB_Name = "M00_JsonUtil"
 Option Explicit
 
 ' ============================================================
-' JSON Utils — Escape estrito para strings em JSON
+' JSON Utils â€” Escape estrito para strings em JSON
 ' - Escapa \ e "
 ' - TAB -> \t
 ' - CR/LF -> \n (CRLF tratado como 1 quebra)

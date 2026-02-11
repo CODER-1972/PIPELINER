@@ -3,7 +3,7 @@ Option Explicit
 
 Private Const SHEET_DEBUG As String = "DEBUG"
 Private Const SHEET_SEGUIMENTO As String = "Seguimento"
-Private Const SHEET_HISTORICO As String = "HIST”RICO"
+Private Const SHEET_HISTORICO As String = "HIST√ìRICO"
 
 ' ============================================================================
 ' Debug_Registar (robusto)
@@ -313,30 +313,30 @@ End Function
 
 
 ' =============================================================================
-' Seguimento_ArquivarLimpar (vers„o hÌbrida por HEADERS ó alinhada aos teus nomes reais)
+' Seguimento_ArquivarLimpar (vers√£o h√≠brida por HEADERS ‚Äî alinhada aos teus nomes reais)
 '
 ' Seguimento (headers):
 '   Timestamp | Passo | Prompt ID | Texto da prompt | Modelo | Modos | Storage |
-'   Config extra (amig·vel) | Config extra (JSON convertido) | HTTP Status | Response ID |
+'   Config extra (amig√°vel) | Config extra (JSON convertido) | HTTP Status | Response ID |
 '   Output (texto) | pipeline_name | Next prompt decidido | files_used | files_ops_log |
 '   file_ids_used | captured_vars | captured_vars_meta | injected_vars
 '
-' HIST”RICO (headers):
+' HIST√ìRICO (headers):
 '   Timestamp | Nome do Pipeline | Passo | Prompt ID | Texto da prompt | Output (texto) |
-'   Modelo | Modos | Storage | Config extra (amig·vel) | Config extra (JSON convertido) |
+'   Modelo | Modos | Storage | Config extra (amig√°vel) | Config extra (JSON convertido) |
 '   HTTP Status | Response ID | Next prompt decidido | files_used | files_ops_log | file_ids_used |
 '   captured_vars | captured_vars_meta | injected_vars
 '
-' MantÈm a lÛgica do original:
-' - Insere no topo (linha 2 do HIST”RICO)
+' Mant√©m a l√≥gica do original:
+' - Insere no topo (linha 2 do HIST√ìRICO)
 ' - Cria linha separadora preta (altura 6) abaixo do bloco novo
 ' - Limpa Seguimento (ClearContents + ClearComments)
-' - AutoFit ‡s linhas do Seguimento
+' - AutoFit √†s linhas do Seguimento
 ' - Em erro: tenta Debug_Registar (se existir), e fallback MsgBox
 '
-' ImplementaÁ„o:
-' - Mapeia por nome de cabeÁalho (case-insensitive; tolerante a acentos e espaÁos)
-' - N„o depende de posiÁıes fixas nem de "20 colunas"
+' Implementa√ß√£o:
+' - Mapeia por nome de cabe√ßalho (case-insensitive; tolerante a acentos e espa√ßos)
+' - N√£o depende de posi√ß√µes fixas nem de "20 colunas"
 ' =============================================================================
 Public Sub Seguimento_ArquivarLimpar()
     On Error GoTo EH
@@ -347,9 +347,9 @@ Public Sub Seguimento_ArquivarLimpar()
     
     Dim wsS As Worksheet, wsH As Worksheet
     Set wsS = ThisWorkbook.Worksheets("Seguimento")
-    Set wsH = ThisWorkbook.Worksheets("HIST”RICO")
+    Set wsH = ThisWorkbook.Worksheets("HIST√ìRICO")
     
-    ' Ordem canÛnica no HIST”RICO (exactamente como o teu cabeÁalho)
+    ' Ordem can√≥nica no HIST√ìRICO (exactamente como o teu cabe√ßalho)
     Dim histHeaders As Variant
     histHeaders = Array( _
         "Timestamp", _
@@ -361,7 +361,7 @@ Public Sub Seguimento_ArquivarLimpar()
         "Modelo", _
         "Modos", _
         "Storage", _
-        "Config extra (amig·vel)", _
+        "Config extra (amig√°vel)", _
         "Config extra (JSON convertido)", _
         "HTTP Status", _
         "Response ID", _
@@ -374,8 +374,8 @@ Public Sub Seguimento_ArquivarLimpar()
         "injected_vars" _
     )
     
-    ' Mapeamento Seguimento -> HistÛrico por nome (sem taxonomias; sÛ headers)
-    ' Nota: no Seguimento o pipeline chama-se pipeline_name; no HistÛrico chama-se Nome do Pipeline.
+    ' Mapeamento Seguimento -> Hist√≥rico por nome (sem taxonomias; s√≥ headers)
+    ' Nota: no Seguimento o pipeline chama-se pipeline_name; no Hist√≥rico chama-se Nome do Pipeline.
     Dim srcForHist As Object
     Set srcForHist = CreateObject("Scripting.Dictionary")
     srcForHist.CompareMode = 1 ' TextCompare
@@ -389,7 +389,7 @@ Public Sub Seguimento_ArquivarLimpar()
     srcForHist("Modelo") = "Modelo"
     srcForHist("Modos") = "Modos"
     srcForHist("Storage") = "Storage"
-    srcForHist("Config extra (amig·vel)") = "Config extra (amig·vel)"
+    srcForHist("Config extra (amig√°vel)") = "Config extra (amig√°vel)"
     srcForHist("Config extra (JSON convertido)") = "Config extra (JSON convertido)"
     srcForHist("HTTP Status") = "HTTP Status"
     srcForHist("Response ID") = "Response ID"
@@ -406,7 +406,7 @@ Public Sub Seguimento_ArquivarLimpar()
     Set mapS = HeaderMap_ByName(wsS)
     Set mapH = HeaderMap_ByName(wsH)
     
-    ' Garantir headers no HIST”RICO (e, opcionalmente, no Seguimento para as 3 novas colunas)
+    ' Garantir headers no HIST√ìRICO (e, opcionalmente, no Seguimento para as 3 novas colunas)
     EnsureHeader wsS, mapS, "captured_vars", AUTO_CREATE_MISSING_HEADERS
     EnsureHeader wsS, mapS, "captured_vars_meta", AUTO_CREATE_MISSING_HEADERS
     EnsureHeader wsS, mapS, "injected_vars", AUTO_CREATE_MISSING_HEADERS
@@ -418,7 +418,7 @@ Public Sub Seguimento_ArquivarLimpar()
     Next i
     Set mapH = HeaderMap_ByName(wsH)
     
-    ' Determinar a ˙ltima linha com dados no Seguimento (usando colunas chave)
+    ' Determinar a √∫ltima linha com dados no Seguimento (usando colunas chave)
     Dim lastRowS As Long
     lastRowS = LastDataRow_Seguimento(wsS, mapS)
     If lastRowS < 2 Then Exit Sub
@@ -426,14 +426,14 @@ Public Sub Seguimento_ArquivarLimpar()
     Dim nLin As Long
     nLin = lastRowS - 1 ' linhas 2..lastRowS
     
-    ' Inserir espaÁo no topo do HIST”RICO: nLin + 1 (linha separadora)
+    ' Inserir espa√ßo no topo do HIST√ìRICO: nLin + 1 (linha separadora)
     wsH.rowS(HIST_TOP_ROW).Resize(nLin + 1).Insert Shift:=xlDown
     
     ' Copiar linha a linha / coluna a coluna (por headers)
     Dim r As Long, c As Long
     For r = 1 To nLin
         Dim srcRow As Long
-        srcRow = r + 1 ' comeÁa na linha 2
+        srcRow = r + 1 ' come√ßa na linha 2
         
         For c = LBound(histHeaders) To UBound(histHeaders)
             Dim hDest As String
@@ -467,7 +467,7 @@ Public Sub Seguimento_ArquivarLimpar()
         .Font.Color = vbWhite
     End With
     
-    ' Evitar wrap no bloco novo (mantÈm legibilidade)
+    ' Evitar wrap no bloco novo (mant√©m legibilidade)
     Dim firstDataRowH As Long, lastDataRowH As Long
     firstDataRowH = HIST_TOP_ROW
     lastDataRowH = HIST_TOP_ROW + nLin - 1
@@ -480,7 +480,7 @@ Public Sub Seguimento_ArquivarLimpar()
         End If
     Next c
     
-    ' Limpar Seguimento (dados + coment·rios) e AutoFit (como no original)
+    ' Limpar Seguimento (dados + coment√°rios) e AutoFit (como no original)
     Dim lastColS As Long
     lastColS = wsS.Cells(1, wsS.Columns.Count).End(xlToLeft).Column
     If lastColS < 1 Then lastColS = 1
@@ -540,8 +540,8 @@ End Function
 
 Private Function RemoveDiacritics(ByVal s As String) As String
     Dim a As Variant, b As Variant, i As Long
-    a = Array("·", "‡", "„", "‚", "‰", "È", "Ë", "Í", "Î", "Ì", "Ï", "Ó", "Ô", "Û", "Ú", "ı", "Ù", "ˆ", "˙", "˘", "˚", "¸", "Á", _
-              "¡", "¿", "√", "¬", "ƒ", "…", "»", " ", "À", "Õ", "Ã", "Œ", "œ", "”", "“", "’", "‘", "÷", "⁄", "Ÿ", "€", "‹", "«")
+    a = Array("√°", "√†", "√£", "√¢", "√§", "√©", "√®", "√™", "√´", "√≠", "√¨", "√Æ", "√Ø", "√≥", "√≤", "√µ", "√¥", "√∂", "√∫", "√π", "√ª", "√º", "√ß", _
+              "√Å", "√Ä", "√É", "√Ç", "√Ñ", "√â", "√à", "√ä", "√ã", "√ç", "√å", "√é", "√è", "√ì", "√í", "√ï", "√î", "√ñ", "√ö", "√ô", "√õ", "√ú", "√á")
     b = Array("a", "a", "a", "a", "a", "e", "e", "e", "e", "i", "i", "i", "i", "o", "o", "o", "o", "o", "u", "u", "u", "u", "c", _
               "a", "a", "a", "a", "a", "e", "e", "e", "e", "i", "i", "i", "i", "o", "o", "o", "o", "o", "u", "u", "u", "u", "c")
     For i = LBound(a) To UBound(a)
@@ -566,7 +566,7 @@ Private Sub EnsureHeader(ByVal ws As Worksheet, ByVal map As Object, ByVal heade
     If map.exists(k) Then Exit Sub
     
     If Not autoCreate Then
-        Log_Debug "ALERTA", "Seguimento_ArquivarLimpar", "Header em falta (n„o criado): " & headerName & " na folha " & ws.name
+        Log_Debug "ALERTA", "Seguimento_ArquivarLimpar", "Header em falta (n√£o criado): " & headerName & " na folha " & ws.name
         Exit Sub
     End If
     

@@ -218,8 +218,8 @@ Private Function ExtraFragment_TemTools(ByVal extraFragmentSemInput As String) A
         Exit Function
     End If
 
-    ' Apenas considerar tools explícitas.
-    ' NOTA: tool_choice sozinho NÃO deve desactivar a auto-injecção de tools,
+    ' Apenas considerar tools explÃ­citas.
+    ' NOTA: tool_choice sozinho NÃƒO deve desactivar a auto-injecÃ§Ã£o de tools,
     ' porque a API exige que o tool escolhido exista em "tools".
     If InStr(1, t, """tools""", vbTextCompare) > 0 Then
         ExtraFragment_TemTools = True

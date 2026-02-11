@@ -3,9 +3,9 @@ Option Explicit
 
 ' ============================================================
 ' M10_FileOutput
-'   Gest„o de outputs em ficheiro (metadata + code_interpreter)
+'   Gest√£o de outputs em ficheiro (metadata + code_interpreter)
 '   - Resolve config (FLOW_TEMPLATE > PAINEL > Config)
-'   - Prepara request (tools + Structured Outputs quando aplic·vel)
+'   - Prepara request (tools + Structured Outputs quando aplic√°vel)
 '   - Grava raw outputs em disco (por step)
 '   - Processa manifest metadata/files[] e grava ficheiros
 '   - Detecta container_file_citation e descarrega bytes (CI)
@@ -14,13 +14,13 @@ Option Explicit
 ' ============================================================
 
 Private Const SAFE_LIMIT As Long = 32000
-Private Const MAX_PATH_SAFE_DEFAULT As Long = 240 ' [POR CONFIRMAR] depende da polÌtica de Long Paths no Windows
+Private Const MAX_PATH_SAFE_DEFAULT As Long = 240 ' [POR CONFIRMAR] depende da pol√≠tica de Long Paths no Windows
 
 ' Cache simples por pipeline (0..10) para Run_ID
 Private gRunId(0 To 10) As String
 
 ' -------------------------------
-' PUBLIC - Resolver Config (precedÍncia)
+' PUBLIC - Resolver Config (preced√™ncia)
 ' -------------------------------
 Public Sub FileOutput_ResolveEffectiveConfig( _
     ByVal pipelineIndex As Long, _
@@ -172,7 +172,7 @@ Public Sub FileOutput_PrepareRequest( _
     ByRef modos As String, _
     ByRef extraFragment As String _
 )
-    ' Tools: code_interpreter (M05 trata a injecÁ„o via "modos")
+    ' Tools: code_interpreter (M05 trata a injec√ß√£o via "modos")
     If LCase$(Trim$(processMode)) = "code_interpreter" Then
         If InStr(1, modos, "Code Interpreter", vbTextCompare) = 0 Then
             If Trim$(modos) <> "" Then
@@ -195,7 +195,7 @@ Public Sub FileOutput_PrepareRequest( _
 End Sub
 
 ' -------------------------------
-' PUBLIC - PÛs-resposta (gravar ficheiros + logs)
+' PUBLIC - P√≥s-resposta (gravar ficheiros + logs)
 '   Devolve texto curto para Seguimento (sem colar JSON/base64 gigantes).
 ' -------------------------------
 Public Function FileOutput_ProcessAfterResponse( _
@@ -231,9 +231,9 @@ Public Function FileOutput_ProcessAfterResponse( _
     Call EnsureFolder(runFolder)
     If Dir(runFolder, vbDirectory) = "" Then
         Call Debug_Registar(passo, promptId, "ERRO", "", "M10_RUNFOLDER", _
-            "N„o foi possÌvel criar/aceder ‡ pasta de execuÁ„o: " & runFolder, _
-            "Verifique permissıes, OneDrive/Sync, e OUTPUT Folder no PAINEL.")
-        FileOutput_ProcessAfterResponse = "[ERRO] N„o foi possÌvel criar/aceder ‡ pasta de execuÁ„o: " & runFolder
+            "N√£o foi poss√≠vel criar/aceder √† pasta de execu√ß√£o: " & runFolder, _
+            "Verifique permiss√µes, OneDrive/Sync, e OUTPUT Folder no PAINEL.")
+        FileOutput_ProcessAfterResponse = "[ERRO] N√£o foi poss√≠vel criar/aceder √† pasta de execu√ß√£o: " & runFolder
         Exit Function
     End If
     Dim rawFolder As String
@@ -241,9 +241,9 @@ Public Function FileOutput_ProcessAfterResponse( _
     Call EnsureFolder(rawFolder)
     If Dir(rawFolder, vbDirectory) = "" Then
         Call Debug_Registar(passo, promptId, "ERRO", "", "M10_RAWFOLDER", _
-            "N„o foi possÌvel criar/aceder ‡ pasta _raw: " & rawFolder, _
-            "Verifique permissıes e path demasiado longo.")
-        FileOutput_ProcessAfterResponse = "[ERRO] N„o foi possÌvel criar/aceder ‡ pasta _raw: " & rawFolder
+            "N√£o foi poss√≠vel criar/aceder √† pasta _raw: " & rawFolder, _
+            "Verifique permiss√µes e path demasiado longo.")
+        FileOutput_ProcessAfterResponse = "[ERRO] N√£o foi poss√≠vel criar/aceder √† pasta _raw: " & rawFolder
         Exit Function
     End If
     ' Guardar raw response JSON (sempre, para auditoria)
@@ -253,8 +253,8 @@ Public Function FileOutput_ProcessAfterResponse( _
         Call WriteTextUTF8(rawPath, Nz(resultado.rawResponseJson))
         If Dir(rawPath) = "" Then
             Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_RAW_WRITE_FAIL", _
-                "Tentativa de guardar rawResponseJson falhou (ficheiro n„o encontrado apÛs SaveToFile): " & rawPath, _
-                "Verifique permissıes e/ou path longo.")
+                "Tentativa de guardar rawResponseJson falhou (ficheiro n√£o encontrado ap√≥s SaveToFile): " & rawPath, _
+                "Verifique permiss√µes e/ou path longo.")
         End If
     Else
         Call Debug_Registar(passo, promptId, "ERRO", "", "M10_PATH_TOO_LONG", msgRaw, _
@@ -266,8 +266,8 @@ Public Function FileOutput_ProcessAfterResponse( _
     End If
     Dim aAuto As String
     aAuto = LCase$(Trim$(autoSave))
-    If aAuto = "n„o" Or aAuto = "nao" Or aAuto = "n√£o" Then
-        FileOutput_ProcessAfterResponse = "[FILE OUTPUT] auto_save=N„o (config) - raw guardado: " & rawPath
+    If aAuto = "n√£o" Or aAuto = "nao" Or aAuto = "n√£o" Then
+        FileOutput_ProcessAfterResponse = "[FILE OUTPUT] auto_save=N√£o (config) - raw guardado: " & rawPath
         Exit Function
     End If
     Dim summary As String
@@ -287,7 +287,7 @@ Falha:
 End Function
 
 ' ============================================================
-' ImplementaÁ„o - METADATA (manifest JSON)
+' Implementa√ß√£o - METADATA (manifest JSON)
 ' ============================================================
 Private Function Process_Metadata( _
     ByVal runFolder As String, _
@@ -359,7 +359,7 @@ Private Function Process_Metadata( _
         file_type = LCase$(Json_GetString(obj, "file_type"))
         subFolder = Json_GetString(obj, "subfolder")
         payload_kind = LCase$(Json_GetString(obj, "payload_kind"))
-        payload = Json_GetString(obj, "payload") ' j· unescaped
+        payload = Json_GetString(obj, "payload") ' j√° unescaped
 
         If Trim$(file_name) = "" Then file_name = "output_" & Format$(i, "00")
         file_name = FileOutput_SafeFileName(file_name)
@@ -441,7 +441,7 @@ Falha:
 End Function
 
 ' ============================================================
-' ImplementaÁ„o - CODE_INTERPRETER (container_file_citation)
+' Implementa√ß√£o - CODE_INTERPRETER (container_file_citation)
 ' ============================================================
 Private Function Process_CodeInterpreter( _
     ByVal apiKey As String, _
@@ -465,8 +465,8 @@ Private Function Process_CodeInterpreter( _
     rawJson = Nz(resultado.rawResponseJson)
     If Trim$(rawJson) = "" Then
         Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_RAW_MISSING", _
-            "process_mode=code_interpreter mas rawResponseJson est· vazio.", _
-            "Confirme se M05 est· a guardar resultado.rawResponseJson.")
+            "process_mode=code_interpreter mas rawResponseJson est√° vazio.", _
+            "Confirme se M05 est√° a guardar resultado.rawResponseJson.")
         Process_CodeInterpreter = "[FILE OUTPUT/CI] Sem rawResponseJson."
         Exit Function
     End If
@@ -476,7 +476,7 @@ Private Function Process_CodeInterpreter( _
     usedFallback = False
     ' ------------------------------------------------------------
     ' FALLBACK robusto:
-    ' - Quando n„o h· container_file_citation, tenta obter container_id
+    ' - Quando n√£o h√° container_file_citation, tenta obter container_id
     '   a partir de code_interpreter_call e listar ficheiros no container.
     ' ------------------------------------------------------------
     If ciList.Count = 0 Then
@@ -488,7 +488,7 @@ Private Function Process_CodeInterpreter( _
         If Trim$(containerFromCall) = "" Then
             Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_NO_CONTAINER_ID", _
                 "Sem container_file_citation e sem container_id em code_interpreter_call.", _
-                "Isto sugere que o Code Interpreter n„o foi realmente executado, ou o formato mudou.")
+                "Isto sugere que o Code Interpreter n√£o foi realmente executado, ou o formato mudou.")
             Process_CodeInterpreter = "[FILE OUTPUT/CI] Sem container_file_citation e sem container_id (code_interpreter_call)."
             Exit Function
         End If
@@ -507,7 +507,7 @@ Private Function Process_CodeInterpreter( _
         If listStatus < 200 Or listStatus >= 300 Then
             Call Debug_Registar(passo, promptId, "ERRO", "", "M10_CI_LIST_FAIL", _
                 "Falha ao listar ficheiros no container (HTTP " & CStr(listStatus) & "). container_id=" & containerFromCall, _
-                "Verifique API key/permissıes e se o endpoint /containers/{id}/files est· disponÌvel.")
+                "Verifique API key/permiss√µes e se o endpoint /containers/{id}/files est√° dispon√≠vel.")
             Process_CodeInterpreter = "[FILE OUTPUT/CI] Fallback list container falhou (HTTP " & CStr(listStatus) & ")."
             Exit Function
         End If
@@ -515,13 +515,13 @@ Private Function Process_CodeInterpreter( _
         Dim ciList2 As Collection
         Set ciList2 = CI_BuildCitationsFromContainerList(containerFromCall, files, eligible)
         Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_CONTAINER_LIST", _
-            "container_id=" & containerFromCall & " | total=" & CStr(files.Count) & " | elegÌveis=" & CStr(eligible), _
-            "ElegÌveis = extensıes tÌpicas (docx/xlsx/pptx/pdf/imagens/txt/csv/...).")
+            "container_id=" & containerFromCall & " | total=" & CStr(files.Count) & " | eleg√≠veis=" & CStr(eligible), _
+            "Eleg√≠veis = extens√µes t√≠picas (docx/xlsx/pptx/pdf/imagens/txt/csv/...).")
         If ciList2.Count = 0 Then
             Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_CONTAINER_EMPTY", _
-                "Listagem do container devolveu 0 ficheiros elegÌveis para download.", _
+                "Listagem do container devolveu 0 ficheiros eleg√≠veis para download.", _
                 "Confirme se o CI gravou o ficheiro em disco (ex.: /mnt/data/...).")
-            Process_CodeInterpreter = "[FILE OUTPUT/CI] Sem container_file_citation; container_id=" & containerFromCall & "; 0 ficheiros elegÌveis."
+            Process_CodeInterpreter = "[FILE OUTPUT/CI] Sem container_file_citation; container_id=" & containerFromCall & "; 0 ficheiros eleg√≠veis."
             Exit Function
         End If
         Set ciList = ciList2
@@ -548,8 +548,8 @@ Private Function Process_CodeInterpreter( _
         folderAbs = FileOutput_ResolveSubfolder(runFolder, pipelineNome, promptId, passo, runId, "", subfolderTemplate)
         If Dir(folderAbs, vbDirectory) = "" Then
             Call Debug_Registar(passo, promptId, "ERRO", "", "M10_FOLDER_CREATE_FAIL", _
-                "Pasta de output n„o existe (falha MkDir/Permissıes?): " & folderAbs, _
-                "Verifique permissıes e OUTPUT Folder no PAINEL.")
+                "Pasta de output n√£o existe (falha MkDir/Permiss√µes?): " & folderAbs, _
+                "Verifique permiss√µes e OUTPUT Folder no PAINEL.")
             GoTo ProximoFicheiro
         End If
         Dim fullPath As String
@@ -567,13 +567,13 @@ Private Function Process_CodeInterpreter( _
         If Not ok Then
             Call Debug_Registar(passo, promptId, "ERRO", "", "M10_CI_DOWNLOAD_FAIL", _
                 "Falha download (HTTP " & CStr(dlStatus) & ") " & container_id & ":" & file_id & " -> " & fullPath & IIf(Trim$(dlErr) <> "", " | " & dlErr, ""), _
-                "Verifique API key, permissıes, conectividade e path local.")
+                "Verifique API key, permiss√µes, conectividade e path local.")
             GoTo ProximoFicheiro
         End If
         If Not FileOutput_FileExists(fullPath) Then
             Call Debug_Registar(passo, promptId, "ERRO", "", "M10_CI_DOWNLOAD_NOFILE", _
-                "Download reportado como OK, mas o ficheiro n„o existe no disco: " & fullPath, _
-                "PossÌvel falha de permissıes/OneDrive/antivÌrus/paths longos.")
+                "Download reportado como OK, mas o ficheiro n√£o existe no disco: " & fullPath, _
+                "Poss√≠vel falha de permiss√µes/OneDrive/antiv√≠rus/paths longos.")
             GoTo ProximoFicheiro
         End If
         Dim bytesLen As Double
@@ -584,7 +584,7 @@ Private Function Process_CodeInterpreter( _
         If bytesLen = 0 Then
             Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_ZERO_BYTES", _
                 "Ficheiro gravado com 0 bytes: " & fullPath, _
-                "Confirme se o ficheiro no container tem conte˙do.")
+                "Confirme se o ficheiro no container tem conte√∫do.")
         End If
         savedCount = savedCount + 1
         ' Sidecar meta (best-effort; se path demasiado longo, regista alerta e segue)
@@ -649,7 +649,7 @@ Private Sub ExtraFragment_Append(ByRef extraFragment As String, ByVal fragmentSe
     If f = "" Then Exit Sub
 
     ' O M05 faz: json = json & "," & extraFragment
-    ' Logo: aqui N√O queremos que extraFragment comece por vÌrgula.
+    ' Logo: aqui N√ÉO queremos que extraFragment comece por v√≠rgula.
     Dim e As String
     e = Trim$(extraFragment)
 
@@ -692,7 +692,7 @@ Private Function FlowTemplate_GetPromptRow(ByVal promptId As String) As Object
 
     ' Suporta 2 layouts:
     '   A) Tabela simples (coluna "Prompt ID" + colunas dedicadas output_kind/process_mode/...)
-    '   B) Layout cat·logo/blocos (coluna "ID" + coluna "Config extra" com linhas chave: valor)
+    '   B) Layout cat√°logo/blocos (coluna "ID" + coluna "Config extra" com linhas chave: valor)
 
     Dim colId As Long
 
@@ -768,7 +768,7 @@ Private Function FlowTemplate_GetPromptRow(ByVal promptId As String) As Object
 
             Else
 
-                ' Layout cat·logo/blocos: ler da coluna "Config extra" e fazer parse sÛ ‡s chaves de File Output
+                ' Layout cat√°logo/blocos: ler da coluna "Config extra" e fazer parse s√≥ √†s chaves de File Output
                 Dim colCfg As Long
 
                 colCfg = 0
@@ -777,9 +777,9 @@ Private Function FlowTemplate_GetPromptRow(ByVal promptId As String) As Object
 
                     colCfg = CLng(mapa("Config extra"))
 
-                ElseIf mapa.exists("Config extra (amig·vel)") Then
+                ElseIf mapa.exists("Config extra (amig√°vel)") Then
 
-                    colCfg = CLng(mapa("Config extra (amig·vel)"))
+                    colCfg = CLng(mapa("Config extra (amig√°vel)"))
 
                 End If
 
@@ -890,11 +890,11 @@ End Function
 
 ' ============================================================
 
-' Parser mÌnimo (File Output): extrair chaves internas a partir de "Config extra"
+' Parser m√≠nimo (File Output): extrair chaves internas a partir de "Config extra"
 
 '   - Aceita linhas "chave: valor" (uma por linha)
 
-'   - Ignora coment·rios (# ou // no inÌcio da linha)
+'   - Ignora coment√°rios (# ou // no in√≠cio da linha)
 
 '   - Devolve apenas as chaves relevantes para File Output
 
@@ -1083,9 +1083,9 @@ Falha:
     Config_Get = defaultValue
 End Function
 Private Function FileOutput_MaxPathSafe() As Long
-    ' [POR CONFIRMAR] O limite real pode variar (polÌtica de Long Paths no Windows).
+    ' [POR CONFIRMAR] O limite real pode variar (pol√≠tica de Long Paths no Windows).
     ' Usamos um default conservador para reduzir falhas de I/O em VBA/Office.
-    ' Pode ser parametrizado em Config: FILE_MAX_PATH_SAFE (n˙mero).
+    ' Pode ser parametrizado em Config: FILE_MAX_PATH_SAFE (n√∫mero).
     On Error GoTo Falha
     Dim s As String
     s = Config_Get("FILE_MAX_PATH_SAFE", CStr(MAX_PATH_SAFE_DEFAULT))
@@ -1184,7 +1184,7 @@ Private Function FileOutput_ResolveSubfolder(ByVal runFolder As String, ByVal pi
     rel = Replace(rel, "/", "\")
     rel = Trim$(rel)
 
-    ' seguranÁa: bloquear path traversal e absolutos
+    ' seguran√ßa: bloquear path traversal e absolutos
     If rel <> "" Then
         If InStr(1, rel, "..", vbTextCompare) > 0 Then rel = ""
         If InStr(1, rel, ":\", vbTextCompare) > 0 Then rel = ""
@@ -1230,7 +1230,7 @@ Private Function FileOutput_ResolveCollision(ByVal fullPath As String, ByVal ove
     End If
 
     If overwriteMode = "fail" Then
-        Err.Raise vbObjectError + 513, "FileOutput_ResolveCollision", "Ficheiro j· existe e overwrite_mode=fail: " & fullPath
+        Err.Raise vbObjectError + 513, "FileOutput_ResolveCollision", "Ficheiro j√° existe e overwrite_mode=fail: " & fullPath
     End If
 
     ' suffix
@@ -1278,7 +1278,7 @@ Private Function FileOutput_SafeFileName(ByVal s As String) As String
     s = Replace(s, "/", "_")
     s = FileOutput_SafeCommon(s)
 
-    ' n„o terminar em ponto/espaÁo
+    ' n√£o terminar em ponto/espa√ßo
     Do While Right$(s, 1) = "." Or Right$(s, 1) = " "
         s = Left$(s, Len(s) - 1)
         If Len(s) = 0 Then s = "output": Exit Do
@@ -1541,7 +1541,7 @@ Private Function CI_ExtractContainerIdFromCall(ByVal rawJson As String) As Strin
     Dim pos As Long
     pos = InStr(1, rawJson, """type"":""code_interpreter_call""", vbTextCompare)
 
-    ' fallback: procurar primeiro container_id disponÌvel
+    ' fallback: procurar primeiro container_id dispon√≠vel
     If pos = 0 Then
         pos = InStr(1, rawJson, """container_id""", vbTextCompare)
         If pos = 0 Then Exit Function
@@ -1591,7 +1591,7 @@ Private Function CI_ListContainerFiles(ByVal apiKey As String, ByVal containerId
 
     Dim ms As Object
 
-    ' padr„o principal (id + object=container_file + path)
+    ' padr√£o principal (id + object=container_file + path)
     re.pattern = """id""\s*:\s*""([^""]+)""[\s\S]{0,200}?""object""\s*:\s*""container\.file""[\s\S]{0,800}?""path""\s*:\s*""([^""]+)"""
     Set ms = re.Execute(txt)
 
@@ -1745,7 +1745,7 @@ Falha:
 End Sub
 
 Private Function Try_SHA256_File(ByVal fullPath As String) As String
-    ' Best-effort: tenta usar funÁ„o existente no projecto (ex.: em M09).
+    ' Best-effort: tenta usar fun√ß√£o existente no projecto (ex.: em M09).
     On Error Resume Next
     Dim v As Variant
     v = Application.Run("Files_SHA256_File", fullPath)
@@ -1768,7 +1768,7 @@ Private Sub Try_Files_LogEventOutput( _
     ByVal notes As String, _
     ByVal responseId As String _
 )
-    ' Best-effort: evita "Sub or Function not defined" se o wrapper ainda n„o existir/importado.
+    ' Best-effort: evita "Sub or Function not defined" se o wrapper ainda n√£o existir/importado.
     On Error Resume Next
     Application.Run "Files_LogEventOutput", pipelineNome, promptId, runFolder, fullPath, usageMode, op, notes, responseId
     On Error GoTo 0
@@ -1784,7 +1784,7 @@ Private Function Json_Q(ByVal s As String) As String
 End Function
 
 ' ============================================================
-' JSON helpers (mÌnimos; suficiente para manifest determinÌstico)
+' JSON helpers (m√≠nimos; suficiente para manifest determin√≠stico)
 ' ============================================================
 Private Function Json_GetString(ByVal json As String, ByVal key As String) As String
     On Error GoTo Falha
@@ -1892,7 +1892,7 @@ Private Function Json_FindMatching(ByVal s As String, ByVal startPos As Long, By
     Dim depth As Long
     depth = 0
 
-    ' IMPORTANTE: n„o usar nome "inStr" (colide semanticamente com a funÁ„o InStr)
+    ' IMPORTANTE: n√£o usar nome "inStr" (colide semanticamente com a fun√ß√£o InStr)
     Dim inString As Boolean
     inString = False
 
@@ -1964,7 +1964,7 @@ Private Function Json_ReadQuoted(ByVal s As String, ByVal startQuotePos As Long)
 End Function
 
 Private Function Json_Unescape(ByVal s As String) As String
-    ' Unescape robusto (evita erros de Replace em sequÍncias como \\n)
+    ' Unescape robusto (evita erros de Replace em sequ√™ncias como \\n)
     Dim i As Long
     i = 1
 
@@ -2003,7 +2003,7 @@ Private Function Json_Unescape(ByVal s As String) As String
                             res = res & ChrW$(CLng("&H" & hex4))
                             i = i + 6
                         Else
-                            ' fallback: mantÈm literal
+                            ' fallback: mant√©m literal
                             res = res & "\u"
                             i = i + 2
                         End If
@@ -2092,7 +2092,7 @@ Public Sub Test_FileOutput()
     Dim outputFolderBase As String
     outputFolderBase = Trim$(CStr(wsP.Range("B3").value))
     If outputFolderBase = "" Then
-        MsgBox "PAINEL!B3 (OUTPUT Folder) est· vazio. Preenche e volta a executar.", vbExclamation
+        MsgBox "PAINEL!B3 (OUTPUT Folder) est√° vazio. Preenche e volta a executar.", vbExclamation
         Exit Sub
     End If
 
@@ -2111,7 +2111,7 @@ Public Sub Test_FileOutput()
 
     Dim manifest As String
     manifest = "{""output_kind"":""file"",""files"":[" & _
-        "{""file_name"":""exemplo.txt"",""file_type"":""txt"",""payload_kind"":""text"",""payload"":""Ol·\nMundo""}," & _
+        "{""file_name"":""exemplo.txt"",""file_type"":""txt"",""payload_kind"":""text"",""payload"":""Ol√°\nMundo""}," & _
         "{""file_name"":""exemplo.docx"",""file_type"":""docx"",""payload_kind"":""text"",""payload"":""Documento Word de teste""}" & _
         "]}"
 
@@ -2125,13 +2125,13 @@ Public Sub Test_FileOutput()
         "file", "metadata", "Sim", "suffix", "{PIPELINE}_{PROMPT_ID}_{STEP}_{YYYYMMDD}_{HHMMSS}", "docs", _
         "structure", "structure", "export", "base64", filesUsed, filesOps)
 
-    ' overwrite_mode=suffix: correr 2x para forÁar _001
+    ' overwrite_mode=suffix: correr 2x para for√ßar _001
     Dim logTxt2 As String
     logTxt2 = FileOutput_ProcessAfterResponse(apiKey, outputFolderBase, pipelineNome, 0, passo, promptId, res, _
         "file", "metadata", "Sim", "suffix", "{PIPELINE}_{PROMPT_ID}_{STEP}_{YYYYMMDD}_{HHMMSS}", "docs", _
         "structure", "structure", "export", "base64", filesUsed, filesOps)
 
-    ' Teste Seguimento: output longo -> m˙ltiplas linhas sem truncagem (M02)
+    ' Teste Seguimento: output longo -> m√∫ltiplas linhas sem truncagem (M02)
     Dim big As String
     big = String$(SAFE_LIMIT + 5000, "A") & String$(SAFE_LIMIT + 5000, "B")
 
@@ -2140,10 +2140,10 @@ Public Sub Test_FileOutput()
     p.textoPrompt = "(teste)"
     Call Seguimento_Registar(1, p, "TEST_MODEL", "", 200, "resp_TEST_LONG", big, "TEST", "", "", "", "")
 
-    MsgBox "Test_FileOutput concluÌdo." & vbCrLf & _
+    MsgBox "Test_FileOutput conclu√≠do." & vbCrLf & _
            "- Ver pasta OUTPUT do PAINEL (subpasta TEST\...\Run_*) " & vbCrLf & _
            "- Ver FILES_MANAGEMENT (novas entradas no topo)" & vbCrLf & _
-           "- Ver Seguimento (linhas de continuaÁ„o).", vbInformation
+           "- Ver Seguimento (linhas de continua√ß√£o).", vbInformation
     Exit Sub
 
 Falha:
