@@ -16,6 +16,11 @@ Regra de ouro:
 - Alterações ao VBA **não devem exigir** alterações estruturais no Excel, salvo necessidade explícita.
 - Alterações às folhas devem ser feitas como “dados” (conteúdo), preservando layout, nomes e cabeçalhos.
 
+Diretriz de documentação (README):
+- O `README.md` é a referência principal de **funcionamento global do projeto** (arquitetura, fluxo, componentes e operação).
+- Evitar transformar o README num guia exclusivo de um único teste/caso.
+- Guias de teste específicos (ex.: T1/T3/selftests) devem ser adicionados como secções complementares ou documentos dedicados, sem substituir a visão end-to-end do sistema.
+
 ---
 
 ## “Mapa mental” do funcionamento (pipeline em 60 segundos)

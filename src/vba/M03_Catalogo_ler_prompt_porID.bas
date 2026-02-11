@@ -7,11 +7,27 @@ Public Function Catalogo_ObterPromptPorID(ByVal promptId As String) As PromptDef
     p.Id = Trim$(promptId)
     p.nomeFolha = ExtrairNomeFolhaDoID(p.Id)
 
+    If Trim$(p.nomeFolha) = "" Then
+        Catalogo_ObterPromptPorID = p
+        Exit Function
+    End If
+
     Dim ws As Worksheet
+    On Error Resume Next
     Set ws = ThisWorkbook.Worksheets(p.nomeFolha)
+    On Error GoTo 0
+
+    If ws Is Nothing Then
+        Catalogo_ObterPromptPorID = p
+        Exit Function
+    End If
 
     Dim ultimaLinha As Long
-    ultimaLinha = ws.Cells(ws.rowS.Count, "A").End(xlUp).Row
+    ultimaLinha = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    If ultimaLinha < 2 Then
+        Catalogo_ObterPromptPorID = p
+        Exit Function
+    End If
 
     Dim linha As Long
     For linha = 2 To ultimaLinha
@@ -61,4 +77,3 @@ Private Function TextoParaBooleano(ByVal valor As String) As Boolean
     v = UCase$(Trim$(valor))
     TextoParaBooleano = (v = "TRUE" Or v = "VERDADEIRO" Or v = "1" Or v = "SIM")
 End Function
-
