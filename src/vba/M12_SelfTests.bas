@@ -46,6 +46,12 @@ Public Sub SelfTest_RunAll()
     ' 4) Check simples de Config (sem imprimir a key)
     SelfTest_ConfigApiKeyPresence
 
+    ' 5) Esquema mínimo da FILES_MANAGEMENT para output chain
+    SelfTest_Schema_FilesManagement
+
+    ' 6) Fluxo register/resolve output->input
+    SelfTest_OutputRegister_And_Resolve
+
     SelfTest_Log SEV_INFO, "SELFTEST_RUN", "Fim dos testes internos.", "OK"
     Exit Sub
 
@@ -200,6 +206,100 @@ Private Sub SelfTest_ConfigApiKeyPresence()
 EH:
     SelfTest_Log SEV_ERRO, "SELFTEST_CONFIG", "Exceção no SelfTest_ConfigApiKeyPresence: " & Err.Number & " - " & Err.Description, "Verificar folha Config e estrutura A:B (chave/valor)."
 End Sub
+
+
+Private Sub SelfTest_Schema_FilesManagement()
+    On Error GoTo EH
+
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets("FILES_MANAGEMENT")
+
+    Dim must As Variant
+    must = Array("Timestamp", "File name", "Full path", "notes")
+
+    Dim i As Long
+    For i = LBound(must) To UBound(must)
+        If SelfTest_FindHeader(ws, CStr(must(i))) = 0 Then
+            SelfTest_Log SEV_ERRO, "SELFTEST_SCHEMA", "Header em falta na FILES_MANAGEMENT: " & CStr(must(i)), "Adicionar cabeçalho em linha 1 sem renomear colunas existentes."
+            Exit Sub
+        End If
+    Next i
+
+    SelfTest_Log SEV_INFO, "SELFTEST_SCHEMA", "Schema FILES_MANAGEMENT mínimo: PASS", "OK"
+    Exit Sub
+EH:
+    SelfTest_Log SEV_ERRO, "SELFTEST_SCHEMA", "Exceção no SelfTest_Schema_FilesManagement: " & Err.Number & " - " & Err.Description, "Verificar folha FILES_MANAGEMENT e headers."
+End Sub
+
+Private Sub SelfTest_OutputRegister_And_Resolve()
+    On Error GoTo EH
+
+    Dim runId As String
+    runId = "SELFTEST_RUN_" & Format$(Now, "yyyymmdd_hhnnss")
+
+    Call Files_SetRunToken(runId)
+
+    Dim tempFolder As String
+    tempFolder = Environ$("TEMP")
+    If Trim$(tempFolder) = "" Then tempFolder = ThisWorkbook.Path
+
+    Dim f1 As String
+    f1 = tempFolder & "\pipeliner_selftest_output1.txt"
+
+    Dim ff As Integer
+    ff = FreeFile
+    Open f1 For Output As #ff
+    Print #ff, "SELFTEST OUTPUT 1"
+    Close #ff
+
+    Call Files_LogEventOutput("SELFTEST_PIPE", "SELFTEST/PROMPT/A", tempFolder, f1, "output(selftest)", "DL", "selftest=1", "", runId, 1, 0, "OUTPUT")
+
+    Dim rp As String, rn As String, st As String, cand As String
+    Call SelfTest_InvokeResolve("@LAST_OUTPUT", 2, rp, rn, st, cand)
+
+    If st = "OK" And Len(Trim$(rp)) > 0 Then
+        SelfTest_Log SEV_INFO, "SELFTEST_OUTPUT_CHAIN", "@LAST_OUTPUT resolve: PASS -> " & rn, "OK"
+    Else
+        SelfTest_Log SEV_ERRO, "SELFTEST_OUTPUT_CHAIN", "@LAST_OUTPUT resolve: FAIL | status=" & st & " | " & cand, "Confirmar registo de output e parser de tokens @LAST_OUTPUT/@OUTPUT(...)."
+    End If
+
+    Call SelfTest_InvokeResolve("@OUTPUT(step_n=1,index=0)", 2, rp, rn, st, cand)
+    If st = "OK" Then
+        SelfTest_Log SEV_INFO, "SELFTEST_OUTPUT_CHAIN", "@OUTPUT(...) resolve: PASS -> " & rn, "OK"
+    Else
+        SelfTest_Log SEV_ERRO, "SELFTEST_OUTPUT_CHAIN", "@OUTPUT(...) resolve: FAIL | status=" & st & " | " & cand, "Confirmar filtros prompt_id/step_n/filename/index."
+    End If
+
+    On Error Resume Next
+    Kill f1
+    On Error GoTo 0
+    Exit Sub
+EH:
+    SelfTest_Log SEV_ERRO, "SELFTEST_OUTPUT_CHAIN", "Exceção no SelfTest_OutputRegister_And_Resolve: " & Err.Number & " - " & Err.Description, "Verificar M09 (Files_LogEventOutput / resolução de tokens)."
+End Sub
+
+Private Sub SelfTest_InvokeResolve(ByVal token As String, ByVal stepN As Long, ByRef resolvedPath As String, ByRef resolvedName As String, ByRef status As String, ByRef candidatos As String)
+    On Error GoTo EH
+    Application.Run "Files_ResolverOutputToken", "SELFTEST_PIPE", "SELFTEST", stepN, token, resolvedPath, resolvedName, status, candidatos
+    Exit Sub
+EH:
+    status = "NOT_FOUND"
+    candidatos = "invoke-fail: " & Err.Description
+End Sub
+
+Private Function SelfTest_FindHeader(ByVal ws As Worksheet, ByVal headerName As String) As Long
+    On Error GoTo Fim
+    Dim lastCol As Long
+    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+    Dim c As Long
+    For c = 1 To lastCol
+        If StrComp(Trim$(CStr(ws.Cells(1, c).value)), headerName, vbTextCompare) = 0 Then
+            SelfTest_FindHeader = c
+            Exit Function
+        End If
+    Next c
+Fim:
+End Function
 
 ' =============================================================================
 ' Logging (compatível com o PIPELINER)

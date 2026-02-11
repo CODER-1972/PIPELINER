@@ -683,7 +683,9 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 filesOps, _
                 fileIds, _
                 falhaCriticaFiles, _
-                erroFiles _
+                erroFiles, _
+                False, _
+                passo _
             )
         Else
             ' Sem FILES declarados: nao chamar M09 (mais rapido / menos ruido)

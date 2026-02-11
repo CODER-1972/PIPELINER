@@ -163,7 +163,8 @@ Public Function Files_PrepararContextoDaPrompt( _
     ByRef outFileIdsUsed As String, _
     ByRef outFalhaCritica As Boolean, _
     ByRef outErroMsg As String, _
-    Optional ByVal forceAsIsToTextEmbed As Boolean = False _
+    Optional ByVal forceAsIsToTextEmbed As Boolean = False, _
+    Optional ByVal stepN As Long = 0 _
 ) As Boolean
 
     ' ============================================================
@@ -313,9 +314,17 @@ Public Function Files_PrepararContextoDaPrompt( _
         dbgPath = ""
         dbgUsoFinal = ""
 
-        Call Files_ResolverFicheiro( _
-            apiKey, promptId, inputFolder, reqNome, wantLatest, enableIAFallback, _
-            resolvedPath, resolvedName, status, candidatosLog, overrideUsado, houveAmbiguidade)
+        If Left$(reqNome, 1) = "@" Then
+            Call Files_ResolverOutputToken( _
+                pipelineNome, promptId, stepN, reqNome, resolvedPath, resolvedName, status, candidatosLog)
+
+            If status = "AMBIGUOUS" Then houveAmbiguidade = True
+            overrideUsado = False
+        Else
+            Call Files_ResolverFicheiro( _
+                apiKey, promptId, inputFolder, reqNome, wantLatest, enableIAFallback, _
+                resolvedPath, resolvedName, status, candidatosLog, overrideUsado, houveAmbiguidade)
+        End If
 
         dbgFile = resolvedName
         dbgPath = resolvedPath
@@ -1180,11 +1189,20 @@ Private Function Files_ParseItem(ByVal itemRaw As String) As Object
 
     Dim nome As String
     nome = raw
-    Dim p As Long
-    p = InStr(1, raw, "(", vbTextCompare)
-    If p > 0 Then nome = Trim$(Left$(raw, p - 1))
 
-    nome = Replace(nome, """", "")
+    Dim lowTrim As String
+    lowTrim = LCase$(Trim$(raw))
+
+    If Left$(lowTrim, 8) = "@output(" Then
+        ' Preservar expressão completa: @OUTPUT(...)
+        nome = Trim$(raw)
+    Else
+        Dim p As Long
+        p = InStr(1, raw, "(", vbTextCompare)
+        If p > 0 Then nome = Trim$(Left$(raw, p - 1))
+    End If
+
+    nome = Replace(nome, """, "")
     nome = Replace(nome, "'", "")
 
     d("requested_name") = Trim$(nome)
@@ -1222,6 +1240,287 @@ End Sub
 ' ============================================================
 ' RESOLUCAO DE FICHEIROS (deterministico + IA fallback opcional)
 ' ============================================================
+
+Public Sub Files_ResolverOutputToken( _
+    ByVal pipelineNome As String, _
+    ByVal promptId As String, _
+    ByVal stepN As Long, _
+    ByVal token As String, _
+    ByRef resolvedPath As String, _
+    ByRef resolvedName As String, _
+    ByRef status As String, _
+    ByRef candidatosLog As String _
+)
+    On Error GoTo Falha
+
+    Dim modeAmb As String
+    modeAmb = UCase$(Trim$(Files_Config_GetByKey("FILES_OUTPUT_CHAIN_AMBIGUITY_MODE", "STRICT")))
+    If modeAmb <> "STRICT" And modeAmb <> "LAST_CREATED" Then
+        modeAmb = "STRICT"
+        Call Debug_Registar(0, promptId, "ALERTA", "", "CONFIG_OUTPUT_CHAIN_MODE_INVALID", _
+            "FILES_OUTPUT_CHAIN_AMBIGUITY_MODE inválido. Usado STRICT.", _
+            "Valores suportados: STRICT | LAST_CREATED.")
+    End If
+
+    Dim candidates As Collection
+    Set candidates = Files_OutputCandidatesForRun(gRunToken)
+
+    If candidates.Count = 0 Then
+        status = "NOT_FOUND"
+        candidatosLog = "run_id=" & gRunToken
+        Call Debug_Registar(0, promptId, "ALERTA", "", "OUTPUT_CHAIN_NOT_FOUND", _
+            "Sem outputs registados para o run atual.", _
+            "Confirme se já houve passo de File Output e se FILES_MANAGEMENT foi atualizado.")
+        Exit Sub
+    End If
+
+    Dim filtered As Collection
+    Set filtered = candidates
+
+    Dim t As String
+    t = UCase$(Trim$(token))
+
+    If t = "@LAST_OUTPUT" Then
+        Dim prevStep As Long
+        prevStep = stepN - 1
+        Set filtered = Files_FilterCandidatesByStep(filtered, prevStep)
+
+    ElseIf Left$(t, 8) = "@OUTPUT(" And Right$(t, 1) = ")" Then
+        Dim args As Object
+        Set args = Files_ParseOutputArgs(Mid$(token, 9, Len(token) - 9))
+
+        If args.Exists("prompt_id") Then
+            Set filtered = Files_FilterCandidatesByPrompt(filtered, CStr(args("prompt_id")))
+        End If
+
+        If args.Exists("step_n") Then
+            Set filtered = Files_FilterCandidatesByStep(filtered, CLng(Val(CStr(args("step_n")))))
+        End If
+
+        If args.Exists("filename") Then
+            Set filtered = Files_FilterCandidatesByFilename(filtered, CStr(args("filename")))
+        End If
+
+        If args.Exists("index") Then
+            Dim idx As Long
+            idx = CLng(Val(CStr(args("index"))))
+            Set filtered = Files_PickByIndex(filtered, idx)
+        End If
+    Else
+        status = "NOT_FOUND"
+        candidatosLog = "token inválido: " & token
+        Call Debug_Registar(0, promptId, "ERRO", "", "OUTPUT_CHAIN_NOT_FOUND", _
+            "Token de output não reconhecido: " & token, _
+            "Use @LAST_OUTPUT ou @OUTPUT(prompt_id=..., step_n=..., filename=..., index=...).")
+        Exit Sub
+    End If
+
+    If filtered.Count = 0 Then
+        status = "NOT_FOUND"
+        candidatosLog = token
+        Call Debug_Registar(0, promptId, "ALERTA", "", "OUTPUT_CHAIN_NOT_FOUND", _
+            "Token sem candidatos: " & token, _
+            "Refine os critérios (@OUTPUT) ou valide o passo anterior (@LAST_OUTPUT).")
+        Exit Sub
+    End If
+
+    Dim chosen As Object
+    If filtered.Count = 1 Then
+        Set chosen = filtered(1)
+    ElseIf modeAmb = "LAST_CREATED" Then
+        Set chosen = Files_PickMostRecent(filtered)
+        status = "OK"
+        candidatosLog = Files_CandidatesShortList(filtered)
+        Call Debug_Registar(0, promptId, "ALERTA", "", "OUTPUT_CHAIN_AMBIGUOUS", _
+            "Múltiplos candidatos para " & token & ". Selecionado mais recente por configuração.", _
+            "Para determinismo total, adicione step_n/index/filename ao @OUTPUT(...).")
+    Else
+        status = "AMBIGUOUS"
+        candidatosLog = Files_CandidatesShortList(filtered)
+        Call Debug_Registar(0, promptId, "ERRO", "", "OUTPUT_CHAIN_AMBIGUOUS", _
+            "Múltiplos candidatos para " & token & ": " & candidatosLog, _
+            "Use @OUTPUT(..., index=n) ou mude FILES_OUTPUT_CHAIN_AMBIGUITY_MODE para LAST_CREATED.")
+        Exit Sub
+    End If
+
+    resolvedPath = CStr(chosen("full_path"))
+    resolvedName = CStr(chosen("file_name"))
+
+    If Dir(resolvedPath) = "" Then
+        status = "NOT_FOUND"
+        candidatosLog = resolvedPath
+        Call Debug_Registar(0, promptId, "ERRO", "", "OUTPUT_FILE_MISSING_ON_DISK", _
+            "Ficheiro registado mas não encontrado no disco: " & resolvedPath, _
+            "Confirme OUTPUT Folder, permissões e se o ficheiro foi movido/apagado.")
+        Exit Sub
+    End If
+
+    status = "OK"
+    Call Debug_Registar(0, promptId, "INFO", "", "OUTPUT_CHAIN_RESOLVE", _
+        "Token " & token & " resolvido para: " & resolvedName, _
+        "OK")
+    Exit Sub
+
+Falha:
+    status = "NOT_FOUND"
+    candidatosLog = "erro: " & Err.Description
+    Call Debug_Registar(0, promptId, "ERRO", "", "OUTPUT_CHAIN_NOT_FOUND", _
+        "Falha ao resolver token de output: " & token & " | " & Err.Description, _
+        "Verifique FILES_MANAGEMENT e formato da diretiva FILES.")
+End Sub
+
+Private Function Files_OutputCandidatesForRun(ByVal runId As String) As Collection
+    On Error GoTo Falha
+    Dim col As New Collection
+
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(SHEET_FILES)
+
+    Dim m As Object
+    Set m = Files_MapaCabecalhos(ws)
+
+    Dim cFull As Long, cName As Long, cTs As Long, cNotes As Long
+    cFull = Files_Col(m, H_FULL_PATH)
+    cName = Files_Col(m, H_FILE_NAME)
+    cTs = Files_Col(m, H_TIMESTAMP)
+    cNotes = Files_Col(m, H_NOTES)
+
+    Dim lastRow As Long
+    lastRow = Files_LastDataRow(ws)
+
+    Dim r As Long
+    For r = 2 To lastRow
+        Dim notes As String
+        notes = CStr(ws.Cells(r, cNotes).value)
+
+        If InStr(1, notes, "source_type=OUTPUT", vbTextCompare) > 0 And InStr(1, notes, "run_id=" & runId, vbTextCompare) > 0 Then
+            Dim fullPath As String
+            fullPath = CStr(ws.Cells(r, cFull).value)
+            If Trim$(fullPath) <> "" Then
+                Dim d As Object
+                Set d = CreateObject("Scripting.Dictionary")
+                d("row") = r
+                d("full_path") = fullPath
+                d("file_name") = CStr(ws.Cells(r, cName).value)
+                d("ts") = ws.Cells(r, cTs).value
+                d("prompt_id") = Files_NoteValue(notes, "prompt_id")
+                d("step_n") = CLng(Val(Files_NoteValue(notes, "step_n")))
+                d("output_index") = CLng(Val(Files_NoteValue(notes, "output_index")))
+                col.Add d
+            End If
+        End If
+    Next r
+
+    Set Files_OutputCandidatesForRun = col
+    Exit Function
+Falha:
+    Set Files_OutputCandidatesForRun = New Collection
+End Function
+
+Private Function Files_ParseOutputArgs(ByVal argsText As String) As Object
+    Dim d As Object
+    Set d = CreateObject("Scripting.Dictionary")
+
+    Dim parts() As String
+    parts = Split(argsText, ",")
+
+    Dim i As Long
+    For i = LBound(parts) To UBound(parts)
+        Dim kv As String
+        kv = Trim$(parts(i))
+        Dim p As Long
+        p = InStr(1, kv, "=", vbTextCompare)
+        If p > 1 Then
+            Dim k As String, v As String
+            k = LCase$(Trim$(Left$(kv, p - 1)))
+            v = Trim$(Mid$(kv, p + 1))
+            d(k) = v
+        End If
+    Next i
+
+    Set Files_ParseOutputArgs = d
+End Function
+
+Private Function Files_FilterCandidatesByStep(ByVal src As Collection, ByVal stepN As Long) As Collection
+    Dim out As New Collection
+    Dim i As Long
+    For i = 1 To src.Count
+        If CLng(src(i)("step_n")) = stepN Then out.Add src(i)
+    Next i
+    Set Files_FilterCandidatesByStep = out
+End Function
+
+Private Function Files_FilterCandidatesByPrompt(ByVal src As Collection, ByVal promptId As String) As Collection
+    Dim out As New Collection
+    Dim i As Long
+    For i = 1 To src.Count
+        If StrComp(CStr(src(i)("prompt_id")), promptId, vbTextCompare) = 0 Then out.Add src(i)
+    Next i
+    Set Files_FilterCandidatesByPrompt = out
+End Function
+
+Private Function Files_FilterCandidatesByFilename(ByVal src As Collection, ByVal pattern As String) As Collection
+    Dim out As New Collection
+    Dim i As Long
+    For i = 1 To src.Count
+        If LCase$(CStr(src(i)("file_name"))) Like LCase$(pattern) Then out.Add src(i)
+    Next i
+    Set Files_FilterCandidatesByFilename = out
+End Function
+
+Private Function Files_PickByIndex(ByVal src As Collection, ByVal idx As Long) As Collection
+    Dim out As New Collection
+    If idx < 0 Then
+        Set Files_PickByIndex = out
+        Exit Function
+    End If
+    If src.Count = 0 Then
+        Set Files_PickByIndex = out
+        Exit Function
+    End If
+    If idx + 1 <= src.Count Then out.Add src(idx + 1)
+    Set Files_PickByIndex = out
+End Function
+
+Private Function Files_PickMostRecent(ByVal src As Collection) As Object
+    Dim i As Long
+    Dim best As Object
+    If src.Count = 0 Then Exit Function
+    Set best = src(1)
+    For i = 2 To src.Count
+        If CDbl(src(i)("ts")) > CDbl(best("ts")) Then Set best = src(i)
+    Next i
+    Set Files_PickMostRecent = best
+End Function
+
+Private Function Files_CandidatesShortList(ByVal src As Collection) As String
+    Dim i As Long
+    Dim s As String
+    s = ""
+    For i = 1 To src.Count
+        If i > 1 Then s = s & " | "
+        s = s & CStr(src(i)("file_name")) & "(step=" & CStr(src(i)("step_n")) & ",idx=" & CStr(src(i)("output_index")) & ")"
+        If Len(s) > 400 Then Exit For
+    Next i
+    Files_CandidatesShortList = s
+End Function
+
+Private Function Files_NoteValue(ByVal notes As String, ByVal keyName As String) As String
+    Dim parts() As String
+    parts = Split(notes, "|")
+
+    Dim i As Long
+    For i = LBound(parts) To UBound(parts)
+        Dim t As String
+        t = Trim$(parts(i))
+        If LCase$(Left$(t, Len(keyName) + 1)) = LCase$(keyName & "=") Then
+            Files_NoteValue = Mid$(t, Len(keyName) + 2)
+            Exit Function
+        End If
+    Next i
+
+    Files_NoteValue = ""
+End Function
 
 Private Sub Files_ResolverFicheiro( _
     ByVal apiKey As String, _
@@ -1893,7 +2192,11 @@ Public Sub Files_LogEventOutput( _
     Optional ByVal usageMode As String = "output", _
     Optional ByVal dlUl As String = "", _
     Optional ByVal notes As String = "", _
-    Optional ByVal responseId As String = "" _
+    Optional ByVal responseId As String = "", _
+    Optional ByVal runId As String = "", _
+    Optional ByVal stepN As Long = 0, _
+    Optional ByVal outputIndex As Long = -1, _
+    Optional ByVal sourceType As String = "OUTPUT" _
 )
     On Error GoTo Falha
 
@@ -1956,6 +2259,20 @@ Public Sub Files_LogEventOutput( _
     On Error Resume Next
     hashUsed = Files_SHA256_File(fullPath)
     On Error GoTo Falha
+
+
+    Dim chainMeta As String
+    chainMeta = "source_type=" & sourceType
+    If Trim$(runId) <> "" Then chainMeta = chainMeta & " | run_id=" & runId
+    If stepN > 0 Then chainMeta = chainMeta & " | step_n=" & CStr(stepN)
+    If outputIndex >= 0 Then chainMeta = chainMeta & " | output_index=" & CStr(outputIndex)
+    chainMeta = chainMeta & " | prompt_id=" & promptId
+
+    If Trim$(notes) <> "" Then
+        notes = notes & " | " & chainMeta
+    Else
+        notes = chainMeta
+    End If
 
     If Trim$(responseId) <> "" Then
         If Trim$(notes) <> "" Then
