@@ -1,7 +1,7 @@
 Attribute VB_Name = "M11_DebugLogging"
 Option Explicit
 
-' Logging leve e compatível com folhas DEBUG/Seguimento.
+' Logging leve e compatÃ­vel com folhas DEBUG/Seguimento.
 ' Escreve apenas texto e metadados; nunca escreve chaves nem bytes de ficheiros.
 
 Public Enum LogSeverity

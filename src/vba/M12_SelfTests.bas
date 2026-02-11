@@ -3,9 +3,9 @@ Option Explicit
 
 ' =============================================================================
 ' M12_SelfTests
-' - Testes internos idempotentes (não alteram Config permanentemente)
+' - Testes internos idempotentes (nÃ£o alteram Config permanentemente)
 ' - Escrevem resultados na folha DEBUG via Debug_Registar (M02_Logger_DEBUG_e_Seguimento)
-' - Não dependem de funções inexistentes no M09 (evita "Sub or Function not defined")
+' - NÃ£o dependem de funÃ§Ãµes inexistentes no M09 (evita "Sub or Function not defined")
 '
 ' Como usar:
 '   - Corre SelfTest_RunAll a partir do Editor VBA (F5) ou via Macro.
@@ -29,12 +29,12 @@ Private Const SELFTEST_PARAM_PREFIX As String = "SELFTEST_"
 Public Sub SelfTest_RunAll()
     On Error GoTo EH
 
-    ' Idempotência: remove apenas linhas antigas do SELFTEST (sem tocar noutros logs)
+    ' IdempotÃªncia: remove apenas linhas antigas do SELFTEST (sem tocar noutros logs)
     SelfTest_ClearPreviousDebugRows
 
-    SelfTest_Log SEV_INFO, "SELFTEST_RUN", "Início dos testes internos.", "OK"
+    SelfTest_Log SEV_INFO, "SELFTEST_RUN", "InÃ­cio dos testes internos.", "OK"
 
-    ' 1) Sanitização de filename (ASCII_SAFE) - teste local
+    ' 1) SanitizaÃ§Ã£o de filename (ASCII_SAFE) - teste local
     SelfTest_SanitizeFilename
 
     ' 2) Multipart em bytes - teste local (estrutura boundary/CRLF/fecho)
@@ -50,18 +50,18 @@ Public Sub SelfTest_RunAll()
     Exit Sub
 
 EH:
-    SelfTest_Log SEV_ERRO, "SELFTEST_RUN", "Exceção no SelfTest_RunAll: " & Err.Number & " - " & Err.Description, "Verifique o código do M12 e o logger (M02)."
+    SelfTest_Log SEV_ERRO, "SELFTEST_RUN", "ExceÃ§Ã£o no SelfTest_RunAll: " & Err.Number & " - " & Err.Description, "Verifique o cÃ³digo do M12 e o logger (M02)."
 End Sub
 
 ' =============================================================================
-' Teste 1: Sanitização ASCII_SAFE
+' Teste 1: SanitizaÃ§Ã£o ASCII_SAFE
 ' =============================================================================
 
 Private Sub SelfTest_SanitizeFilename()
     On Error GoTo EH
 
     Dim inName As String
-    inName = "MODELO – RELATÓRIO – Comunicação CPSA – 2026-02-08_1517.docx"
+    inName = "MODELO â€“ RELATÃ“RIO â€“ ComunicaÃ§Ã£o CPSA â€“ 2026-02-08_1517.docx"
 
     Dim outName As String
     outName = SanitizeFilename_AsciiSafe(inName)
@@ -69,24 +69,24 @@ Private Sub SelfTest_SanitizeFilename()
     Dim ok As Boolean
     ok = True
 
-    ' Checks mínimos
+    ' Checks mÃ­nimos
     If Right$(LCase$(outName), 5) <> ".docx" Then ok = False
     If InStr(1, outName, " ", vbBinaryCompare) > 0 Then ok = False
-    If InStr(1, outName, ChrW(8211), vbBinaryCompare) > 0 Then ok = False ' – en dash
-    If InStr(1, outName, ChrW(8212), vbBinaryCompare) > 0 Then ok = False ' — em dash
+    If InStr(1, outName, ChrW(8211), vbBinaryCompare) > 0 Then ok = False ' â€“ en dash
+    If InStr(1, outName, ChrW(8212), vbBinaryCompare) > 0 Then ok = False ' â€” em dash
     If InStr(1, UCase$(outName), "RELATORIO", vbBinaryCompare) = 0 Then ok = False
     If Not IsAsciiOnly(outName) Then ok = False
 
     If ok Then
         SelfTest_Log SEV_INFO, "SELFTEST_FILENAME", "FILENAME_SANITIZED PASS: " & outName, "OK"
     Else
-        SelfTest_Log SEV_ALERTA, "SELFTEST_FILENAME", "FILENAME_SANITIZED FAIL: " & outName, "Rever regras ASCII_SAFE (acentos, espaços, extensão, caracteres especiais)."
+        SelfTest_Log SEV_ALERTA, "SELFTEST_FILENAME", "FILENAME_SANITIZED FAIL: " & outName, "Rever regras ASCII_SAFE (acentos, espaÃ§os, extensÃ£o, caracteres especiais)."
     End If
 
     Exit Sub
 
 EH:
-    SelfTest_Log SEV_ERRO, "SELFTEST_FILENAME", "Exceção no SelfTest_SanitizeFilename: " & Err.Number & " - " & Err.Description, "Rever função SanitizeFilename_AsciiSafe no M12."
+    SelfTest_Log SEV_ERRO, "SELFTEST_FILENAME", "ExceÃ§Ã£o no SelfTest_SanitizeFilename: " & Err.Number & " - " & Err.Description, "Rever funÃ§Ã£o SanitizeFilename_AsciiSafe no M12."
 End Sub
 
 ' =============================================================================
@@ -104,7 +104,7 @@ Private Sub SelfTest_MultipartBuild_Local()
     Dim contentType As String: contentType = "application/octet-stream"
 
     Dim fileBytes() As Byte
-    fileBytes = ToBytes_Ansi("ABC123") ' bytes fictícios (não lê ficheiro em disco)
+    fileBytes = ToBytes_Ansi("ABC123") ' bytes fictÃ­cios (nÃ£o lÃª ficheiro em disco)
 
     Dim body() As Byte
     body = BuildMultipartBody_Bytes(boundary, purpose, fileName, contentType, fileBytes)
@@ -112,7 +112,7 @@ Private Sub SelfTest_MultipartBuild_Local()
     Dim ok As Boolean
     ok = True
 
-    ' Validações estruturais
+    ' ValidaÃ§Ãµes estruturais
     If ByteLen(body) <= ByteLen(fileBytes) Then ok = False
 
     Dim startNeedle() As Byte
@@ -133,23 +133,23 @@ Private Sub SelfTest_MultipartBuild_Local()
     needleFile = ToBytes_Ansi("name=""file""; filename=""" & fileName & """")
     If BytesIndexOf(body, needleFile) < 0 Then ok = False
 
-    ' Deve conter os bytes do ficheiro fictício (ABC123)
+    ' Deve conter os bytes do ficheiro fictÃ­cio (ABC123)
     If BytesIndexOf(body, fileBytes) < 0 Then ok = False
 
     If ok Then
         SelfTest_Log SEV_INFO, "SELFTEST_MULTIPART", "MULTIPART_BUILD PASS (len=" & CStr(ByteLen(body)) & "; boundary=" & boundary & ")", "OK"
     Else
-        SelfTest_Log SEV_ALERTA, "SELFTEST_MULTIPART", "MULTIPART_BUILD FAIL (len=" & CStr(ByteLen(body)) & "; boundary=" & boundary & ")", "Rever CRLF/boundary/fecho --boundary-- e concatenação de bytes."
+        SelfTest_Log SEV_ALERTA, "SELFTEST_MULTIPART", "MULTIPART_BUILD FAIL (len=" & CStr(ByteLen(body)) & "; boundary=" & boundary & ")", "Rever CRLF/boundary/fecho --boundary-- e concatenaÃ§Ã£o de bytes."
     End If
 
     Exit Sub
 
 EH:
-    SelfTest_Log SEV_ERRO, "SELFTEST_MULTIPART", "Exceção no SelfTest_MultipartBuild_Local: " & Err.Number & " - " & Err.Description, "Rever BuildMultipartBody_Bytes/BytesIndexOf no M12."
+    SelfTest_Log SEV_ERRO, "SELFTEST_MULTIPART", "ExceÃ§Ã£o no SelfTest_MultipartBuild_Local: " & Err.Number & " - " & Err.Description, "Rever BuildMultipartBody_Bytes/BytesIndexOf no M12."
 End Sub
 
 ' =============================================================================
-' Teste 3: Engines COM disponíveis (WinHTTP / MSXML)
+' Teste 3: Engines COM disponÃ­veis (WinHTTP / MSXML)
 ' =============================================================================
 
 Private Sub SelfTest_EnginesAvailability()
@@ -162,25 +162,25 @@ Private Sub SelfTest_EnginesAvailability()
     okMsxml = TryCreateObject("MSXML2.ServerXMLHTTP.6.0", errMsxml)
 
     If okWinHttp Then
-        SelfTest_Log SEV_INFO, "SELFTEST_ENGINE", "WINHTTP disponível (CreateObject OK).", "OK"
+        SelfTest_Log SEV_INFO, "SELFTEST_ENGINE", "WINHTTP disponÃ­vel (CreateObject OK).", "OK"
     Else
-        SelfTest_Log SEV_ALERTA, "SELFTEST_ENGINE", "WINHTTP indisponível: " & errWinHttp, "Pode falhar upload. Verificar instalação/políticas do Windows."
+        SelfTest_Log SEV_ALERTA, "SELFTEST_ENGINE", "WINHTTP indisponÃ­vel: " & errWinHttp, "Pode falhar upload. Verificar instalaÃ§Ã£o/polÃ­ticas do Windows."
     End If
 
     If okMsxml Then
-        SelfTest_Log SEV_INFO, "SELFTEST_ENGINE", "MSXML disponível (CreateObject OK).", "OK"
+        SelfTest_Log SEV_INFO, "SELFTEST_ENGINE", "MSXML disponÃ­vel (CreateObject OK).", "OK"
     Else
-        SelfTest_Log SEV_ALERTA, "SELFTEST_ENGINE", "MSXML indisponível: " & errMsxml, "Fallback de engine pode não funcionar. Verificar MSXML6."
+        SelfTest_Log SEV_ALERTA, "SELFTEST_ENGINE", "MSXML indisponÃ­vel: " & errMsxml, "Fallback de engine pode nÃ£o funcionar. Verificar MSXML6."
     End If
 
     Exit Sub
 
 EH:
-    SelfTest_Log SEV_ERRO, "SELFTEST_ENGINE", "Exceção no SelfTest_EnginesAvailability: " & Err.Number & " - " & Err.Description, "Rever TryCreateObject no M12."
+    SelfTest_Log SEV_ERRO, "SELFTEST_ENGINE", "ExceÃ§Ã£o no SelfTest_EnginesAvailability: " & Err.Number & " - " & Err.Description, "Rever TryCreateObject no M12."
 End Sub
 
 ' =============================================================================
-' Teste 4: presença de OPENAI_API_KEY na Config (sem imprimir a key)
+' Teste 4: presenÃ§a de OPENAI_API_KEY na Config (sem imprimir a key)
 ' =============================================================================
 
 Private Sub SelfTest_ConfigApiKeyPresence()
@@ -190,19 +190,19 @@ Private Sub SelfTest_ConfigApiKeyPresence()
     v = Config_GetValue("OPENAI_API_KEY")
 
     If Trim$(v) <> "" Then
-        SelfTest_Log SEV_INFO, "SELFTEST_CONFIG", "OPENAI_API_KEY presente na Config (valor não exibido).", "OK"
+        SelfTest_Log SEV_INFO, "SELFTEST_CONFIG", "OPENAI_API_KEY presente na Config (valor nÃ£o exibido).", "OK"
     Else
-        SelfTest_Log SEV_ALERTA, "SELFTEST_CONFIG", "OPENAI_API_KEY ausente/vazia na Config.", "Sem API key, uploads e chamadas à OpenAI falham."
+        SelfTest_Log SEV_ALERTA, "SELFTEST_CONFIG", "OPENAI_API_KEY ausente/vazia na Config.", "Sem API key, uploads e chamadas Ã  OpenAI falham."
     End If
 
     Exit Sub
 
 EH:
-    SelfTest_Log SEV_ERRO, "SELFTEST_CONFIG", "Exceção no SelfTest_ConfigApiKeyPresence: " & Err.Number & " - " & Err.Description, "Verificar folha Config e estrutura A:B (chave/valor)."
+    SelfTest_Log SEV_ERRO, "SELFTEST_CONFIG", "ExceÃ§Ã£o no SelfTest_ConfigApiKeyPresence: " & Err.Number & " - " & Err.Description, "Verificar folha Config e estrutura A:B (chave/valor)."
 End Sub
 
 ' =============================================================================
-' Logging (compatível com o PIPELINER)
+' Logging (compatÃ­vel com o PIPELINER)
 ' =============================================================================
 
 Private Sub SelfTest_Log(ByVal severidade As String, ByVal parametro As String, ByVal problema As String, ByVal sugestao As String)
@@ -212,8 +212,8 @@ Private Sub SelfTest_Log(ByVal severidade As String, ByVal parametro As String, 
 End Sub
 
 ' =============================================================================
-' Idempotência: limpar linhas antigas do SELFTEST na folha DEBUG
-' (Só remove linhas cujo Prompt ID seja SELFTEST e Parametro comece por SELFTEST_)
+' IdempotÃªncia: limpar linhas antigas do SELFTEST na folha DEBUG
+' (SÃ³ remove linhas cujo Prompt ID seja SELFTEST e Parametro comece por SELFTEST_)
 ' =============================================================================
 
 Private Sub SelfTest_ClearPreviousDebugRows()
@@ -224,7 +224,7 @@ Private Sub SelfTest_ClearPreviousDebugRows()
 
     Dim colPrompt As Long, colParam As Long
     colPrompt = FindHeaderColumn(ws, "Prompt ID")
-    colParam = FindHeaderColumn(ws, "Parâmetro") ' ou "Parametro" (normalização trata)
+    colParam = FindHeaderColumn(ws, "ParÃ¢metro") ' ou "Parametro" (normalizaÃ§Ã£o trata)
 
     If colPrompt = 0 Or colParam = 0 Then Exit Sub
 
@@ -248,7 +248,7 @@ Private Sub SelfTest_ClearPreviousDebugRows()
     Exit Sub
 
 FailSoft:
-    ' não falhar o pipeline por causa de limpeza de logs
+    ' nÃ£o falhar o pipeline por causa de limpeza de logs
 End Sub
 
 Private Function FindHeaderColumn(ByVal ws As Worksheet, ByVal headerName As String) As Long
@@ -309,7 +309,7 @@ EH:
 End Function
 
 ' =============================================================================
-' Helpers: sanitização ASCII_SAFE
+' Helpers: sanitizaÃ§Ã£o ASCII_SAFE
 ' =============================================================================
 
 Private Function SanitizeFilename_AsciiSafe(ByVal fileName As String) As String
@@ -319,26 +319,26 @@ Private Function SanitizeFilename_AsciiSafe(ByVal fileName As String) As String
     Dim s As String
     s = base
 
-    ' Remover diacríticos (PT)
+    ' Remover diacrÃ­ticos (PT)
     s = RemoveDiacriticsPT(s)
 
-    ' Normalizar travessões
-    s = Replace(s, ChrW(8211), "-") ' –
-    s = Replace(s, ChrW(8212), "-") ' —
+    ' Normalizar travessÃµes
+    s = Replace(s, ChrW(8211), "-") ' â€“
+    s = Replace(s, ChrW(8212), "-") ' â€”
 
-    ' Espaços para hífen
+    ' EspaÃ§os para hÃ­fen
     s = Replace(s, " ", "-")
 
-    ' Remover/normalizar caracteres problemáticos
+    ' Remover/normalizar caracteres problemÃ¡ticos
     s = SanitizeForbiddenChars(s)
 
-    ' Colapsar hífens repetidos
+    ' Colapsar hÃ­fens repetidos
     s = CollapseRepeats(s, "-")
 
     ' Limpar extremos
     s = TrimChars(s, "-_.")
 
-    ' Limite simples (preserva extensão)
+    ' Limite simples (preserva extensÃ£o)
     If Len(s) > 160 Then s = Left$(s, 160)
 
     If ext <> "" Then
@@ -432,7 +432,7 @@ Private Function RemoveDiacriticsPT(ByVal s As String) As String
     s = Replace(s, ChrW(231), "c")
     s = Replace(s, ChrW(199), "C")
 
-    ' n/N (não PT puro, mas aparece)
+    ' n/N (nÃ£o PT puro, mas aparece)
     s = Replace(s, ChrW(241), "n")
     s = Replace(s, ChrW(209), "N")
 

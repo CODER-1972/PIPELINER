@@ -3,9 +3,9 @@ Option Explicit
 
 
 ' =============================================================================
-' PARSER DID¡CTICO: "Config extra" amig·vel -> JSON
+' PARSER DID√ÅCTICO: "Config extra" amig√°vel -> JSON
 '
-' ConvenÁ„o:
+' Conven√ß√£o:
 '   - Cada linha: chave: valor
 '   - Separador de linhas: ALT+ENTER (Excel)
 '   - input como bloco:
@@ -16,7 +16,7 @@ Option Explicit
 ' Comportamento:
 '   - Se encontrar erros de sintaxe: regista alerta no DEBUG e ignora apenas essa parte
 '   - Se houver conflitos (ex.: conversation + previous_response_id): ignora previous_response_id e alerta
-'   - ProÌbe chaves dedicadas (model/temperature/max_output_tokens/store/tools): ignora e alerta
+'   - Pro√≠be chaves dedicadas (model/temperature/max_output_tokens/store/tools): ignora e alerta
 ' =============================================================================
 
 Private Function NormalizarQuebrasDeLinha(ByVal texto As String) As String
@@ -72,7 +72,7 @@ Private Function ChaveProibida(ByVal chave As String) As Boolean
 End Function
 
 
-' ---- cria/obtÈm um dicion·rio (late binding) para permitir nesting via keys com "."
+' ---- cria/obt√©m um dicion√°rio (late binding) para permitir nesting via keys com "."
 Private Function NovoDict() As Object
     Set NovoDict = CreateObject("Scripting.Dictionary")
 End Function
@@ -102,7 +102,7 @@ Private Sub Dict_SetPathValue(ByVal dictRaiz As Object, ByVal path As String, By
 
     Dim pack(1) As Variant
     pack(0) = valorTipo         ' "raw" ou "str"
-    pack(1) = valorJsonLiteral  ' j· pronto para JSON (sem chave)
+    pack(1) = valorJsonLiteral  ' j√° pronto para JSON (sem chave)
     If d.exists(folha) Then d.Remove folha
     d.Add folha, pack
 End Sub
@@ -176,7 +176,7 @@ Private Function ParseListaSimples(ByVal valor As String, ByVal passo As Long, B
 
     If Left$(valor, 1) <> "[" Or Right$(valor, 1) <> "]" Then
         Debug_Registar passo, promptId, "ALERTA", linhaN, parametro, _
-            "Lista mal formada: deve comeÁar por '[' e terminar em ']'.", _
+            "Lista mal formada: deve come√ßar por '[' e terminar em ']'.", _
             "Ex.: include: [web_search_call.action.sources]"
         Exit Function
     End If
@@ -214,7 +214,7 @@ Private Function ParseObjectoSimples(ByVal valor As String, ByVal passo As Long,
 
     If Left$(valor, 1) <> "{" Or Right$(valor, 1) <> "}" Then
         Debug_Registar passo, promptId, "ALERTA", linhaN, parametro, _
-            "Objecto mal formado: deve comeÁar por '{' e terminar em '}'.", _
+            "Objecto mal formado: deve come√ßar por '{' e terminar em '}'.", _
             "Ex.: metadata: {projeto: AvalCap, versao: A}"
         Exit Function
     End If
@@ -237,12 +237,12 @@ Private Function ParseObjectoSimples(ByVal valor As String, ByVal passo As Long,
             Dim k As String, v As String
             If Not SplitPrimeiro(par, ":", k, v) Then
                 Debug_Registar passo, promptId, "ALERTA", linhaN, parametro, _
-                    "Par inv·lido em objecto (falta ':'): " & par, _
+                    "Par inv√°lido em objecto (falta ':'): " & par, _
                     "Use o formato {chave: valor, ...}"
                 GoTo ProximoPar
             End If
 
-            ' valores: boolean/n˙mero/strings
+            ' valores: boolean/n√∫mero/strings
             Dim vJsonTipo As String, vJsonLiteral As String
             Call ConverterValorParaJson(v, passo, promptId, linhaN, parametro, vJsonTipo, vJsonLiteral)
 
@@ -252,7 +252,7 @@ Private Function ParseObjectoSimples(ByVal valor As String, ByVal passo As Long,
             If vJsonTipo = "raw" Then
                 pack(1) = vJsonLiteral
             Else
-                pack(1) = v ' string original (ser· escapada no Dict_ToJsonObject)
+                pack(1) = v ' string original (ser√° escapada no Dict_ToJsonObject)
             End If
 
             If d.exists(k) Then d.Remove k
@@ -273,8 +273,8 @@ Private Sub ConverterValorParaJson( _
     ByRef outTipo As String, ByRef outJsonLiteralOrText As String _
 )
     ' outTipo:
-    '   - "raw": outJsonLiteralOrText contÈm literal JSON (true/123/{"a":1}/["x"])
-    '   - "str": outJsonLiteralOrText contÈm texto (ser· escapado e entre aspas)
+    '   - "raw": outJsonLiteralOrText cont√©m literal JSON (true/123/{"a":1}/["x"])
+    '   - "str": outJsonLiteralOrText cont√©m texto (ser√° escapado e entre aspas)
 
     Dim v As String
     v = Trim$(valorTexto)
@@ -298,7 +298,7 @@ Private Sub ConverterValorParaJson( _
         Exit Sub
     End If
 
-    ' listas/objectos amig·veis
+    ' listas/objectos amig√°veis
     If Left$(v, 1) = "[" Then
         Dim okList As Boolean
         Dim jsonList As String
@@ -336,7 +336,7 @@ Private Function IsChaveInternaFileOutput(ByVal chave As String) As Boolean
     Dim k As String
     k = LCase$(Trim$(chave))
 
-    ' File Output (interno PIPELINER) ó n„o deve ir para o request /v1/responses
+    ' File Output (interno PIPELINER) ‚Äî n√£o deve ir para o request /v1/responses
     If k = "output_kind" Or k = "process_mode" Or k = "auto_save" Or k = "overwrite_mode" Then
         IsChaveInternaFileOutput = True
         Exit Function
@@ -352,7 +352,7 @@ Private Function IsChaveInternaFileOutput(ByVal chave As String) As Boolean
         Exit Function
     End If
 
-    ' Qualquer chave "file_*" È tratada como interna ao PIPELINER (ex.: file_output_encoding)
+    ' Qualquer chave "file_*" √© tratada como interna ao PIPELINER (ex.: file_output_encoding)
     If Left$(k, 5) = "file_" Then
         IsChaveInternaFileOutput = True
         Exit Function
@@ -414,7 +414,7 @@ Public Sub ConfigExtra_Converter( _
             GoTo ProximaLinha
         End If
 
-        ' Detectar inÌcio de bloco input:
+        ' Detectar in√≠cio de bloco input:
         If LCase$(linhaTrim) = "input:" Then
             emInputBloco = True
             GoTo ProximaLinha
@@ -429,7 +429,7 @@ Public Sub ConfigExtra_Converter( _
                 Dim kIn As String, vIn As String
                 If Not SplitPrimeiro(linhaTrim, ":", kIn, vIn) Then
                     Debug_Registar passo, promptId, "ALERTA", linhaN, "input", _
-                        "Linha inv·lida no bloco input (falta ':'): " & linhaTrim, _
+                        "Linha inv√°lida no bloco input (falta ':'): " & linhaTrim, _
                         "Use, por exemplo: 'role: user' e 'content: ...' (indentados)."
                     GoTo ProximaLinha
                 End If
@@ -440,7 +440,7 @@ Public Sub ConfigExtra_Converter( _
                     inputContent = vIn
                 Else
                     Debug_Registar passo, promptId, "ALERTA", linhaN, "input." & kIn, _
-                        "Chave n„o reconhecida no bloco input: " & kIn, _
+                        "Chave n√£o reconhecida no bloco input: " & kIn, _
                         "Use apenas 'role' e 'content' (ou deixe vazio)."
                 End If
 
@@ -452,14 +452,14 @@ Public Sub ConfigExtra_Converter( _
         Dim chave As String, valor As String
         If Not SplitPrimeiro(linhaTrim, ":", chave, valor) Then
             Debug_Registar passo, promptId, "ALERTA", linhaN, "(linha)", _
-                "Linha ignorada (n„o segue 'chave: valor'): " & linhaTrim, _
+                "Linha ignorada (n√£o segue 'chave: valor'): " & linhaTrim, _
                 "Ex.: truncation: auto"
             GoTo ProximaLinha
         End If
 
         If ChaveProibida(chave) Then
             Debug_Registar passo, promptId, "ALERTA", linhaN, chave, _
-                "Par‚metro proibido em Config extra (j· existe em colunas dedicadas).", _
+                "Par√¢metro proibido em Config extra (j√° existe em colunas dedicadas).", _
                 "Remova '" & chave & "' daqui e use a coluna apropriada (Modelo/Storage/Modos/etc.)."
             GoTo ProximaLinha
         End If
@@ -477,13 +477,13 @@ Public Sub ConfigExtra_Converter( _
 ProximaLinha:
     Next i
 
-    ' ---- Aplicar regras pÛs-parse
+    ' ---- Aplicar regras p√≥s-parse
     ' Conflito conversation + previous_response_id
     If Dict_ExistsTop(d, "conversation") And Dict_ExistsTop(d, "previous_response_id") Then
         Dict_RemoveTop d, "previous_response_id"
         Debug_Registar passo, promptId, "ALERTA", "", "previous_response_id", _
-            "Conflito: n„o usar 'conversation' e 'previous_response_id' em simult‚neo. Ignorado previous_response_id.", _
-            "Remova um dos dois. Se quer conversa persistente use 'conversation'; caso contr·rio use 'previous_response_id'."
+            "Conflito: n√£o usar 'conversation' e 'previous_response_id' em simult√¢neo. Ignorado previous_response_id.", _
+            "Remova um dos dois. Se quer conversa persistente use 'conversation'; caso contr√°rio use 'previous_response_id'."
     End If
 
     ' ---- Input override (se foi definido em bloco input)
@@ -495,11 +495,11 @@ ProximaLinha:
         ' input como array de mensagens
         outInputJsonLiteral = "[{""role"":""" & JsonEscapar(inputRole) & """,""content"":""" & JsonEscapar(inputContent) & """}]"
 
-        ' Para auditoria, guardamos tambÈm no JSON convertido:
+        ' Para auditoria, guardamos tamb√©m no JSON convertido:
         Dict_SetPathValue d, "input", "raw", outInputJsonLiteral
     End If
 
-    ' ---- Gerar JSON audit·vel (config extra convertido)
+    ' ---- Gerar JSON audit√°vel (config extra convertido)
     outAuditJson = Dict_ToJsonObject(d)
 
     ' ---- Gerar fragmento sem "input" para merge no request

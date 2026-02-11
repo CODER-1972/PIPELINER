@@ -228,7 +228,6 @@ Public Function Files_PrepararContextoDaPrompt( _
     Dim textoInputs As String
     textoInputs = CStr(celInputsValor.value)
 
-    Call Files_EnsureConfig_DocxPolicies
     ' garantir que existe a opção de config para reutilização
     Call Files_EnsureConfig_ReutilizacaoUpload
 
@@ -4894,6 +4893,7 @@ End Function
 
 Private Sub Files_EnsureConfig_DocxPolicies()
     ' ============================================================
+    ' Garante que as políticas/limites para DOCX/PPTX e text_embed
     ' existem na folha Config (auto-documentação).
     '
     ' Cria (se não existir) as chaves:

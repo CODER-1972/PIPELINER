@@ -2,26 +2,26 @@ Attribute VB_Name = "M13_ContextKV"
 Option Explicit
 ' =============================================================================
 ' M11_ContextKV
-' Captura + InjeÁ„o de Vari·veis (Key-Value) usando a folha "Seguimento"
+' Captura + Inje√ß√£o de Vari√°veis (Key-Value) usando a folha "Seguimento"
 '
 ' Objectivos:
-' 1) CAPTURA: ApÛs cada passo, extrair blocos (Key-Value) do Output (texto)
+' 1) CAPTURA: Ap√≥s cada passo, extrair blocos (Key-Value) do Output (texto)
 ' registado no Seguimento e guardar em:
 ' - captured_vars
 ' - captured_vars_meta
-' 2) INJE«√O: Antes do passo seguinte, se a prompt pedir explicitamente:
+' 2) INJE√á√ÉO: Antes do passo seguinte, se a prompt pedir explicitamente:
 ' - {{VAR:NOME}}
 ' - VARS: NOME1, NOME2
 ' - {@OUTPUT: "Prompt Anterior" | "Todas as prompts" | "<Prompt ID>"}
-' ent„o resolver valores a partir do Seguimento e injectar no input final.
+' ent√£o resolver valores a partir do Seguimento e injectar no input final.
 ' 3) Observabilidade: logging na folha DEBUG (sem dumps grandes nem segredos).
 '
 ' Compatibilidade:
-' - N„o altera comportamento de pipelines antigos, porque sÛ injecta quando h·
+' - N√£o altera comportamento de pipelines antigos, porque s√≥ injecta quando h√°
 ' placeholders/directivas no texto da prompt (ou VARS no INPUTS).
-' - CAPTURA escreve apenas colunas novas no Seguimento (n„o mexe no Output).
+' - CAPTURA escreve apenas colunas novas no Seguimento (n√£o mexe no Output).
 '
-' NOTA: Este mÛdulo n„o depende de bibliotecas externas (late-binding para RegExp
+' NOTA: Este m√≥dulo n√£o depende de bibliotecas externas (late-binding para RegExp
 ' e ADODB.Stream).
 ' =============================================================================
 Private Const CONTEXTKV_DEFAULT_MAX_CELL_CHARS As Long = 32000
@@ -29,11 +29,11 @@ Private Const CONTEXTKV_DEFAULT_SUBFOLDER As String = "vars"
 ' Marcador usado pelo PIPELINER para outputs longos (ver Seguimento_EscreverOutputSemTruncagem)
 Private Const MARKER_FULL_OUTPUT_SAVED As String = "[[FULL_OUTPUT_SAVED:"
 Private Function ContextKV_Fence() As String
-' Devolve uma "fence" de 3 backticks (sem os escrever literalmente no cÛdigo)
+' Devolve uma "fence" de 3 backticks (sem os escrever literalmente no c√≥digo)
 ContextKV_Fence = String$(3, ChrW(96))
 End Function
 ' -----------------------------
-' API p˙blica (chamada por M07)
+' API p√∫blica (chamada por M07)
 ' -----------------------------
 Public Sub ContextKV_EnsureLayout()
 On Error Resume Next
@@ -81,7 +81,7 @@ Dim varsFromPrompt As Object
 Set varsFromPrompt = CreateObject("Scripting.Dictionary")
 ContextKV_ExtractVarsDirectiveKeys promptText, varsFromPrompt, True ' remove do texto
 
-' 2) VARS: ... (no INPUTS: da prompt no cat·logo)
+' 2) VARS: ... (no INPUTS: da prompt no cat√°logo)
 Dim inputsText As String
 inputsText = ContextKV_TryReadInputsTextByPromptId(promptId)
 Dim varsFromInputs As Object
@@ -115,22 +115,22 @@ For i = 1 To placeholders.Count
     If Not dictNeeded.exists(keyName) Then dictNeeded.Add keyName, True
 Next i
 
-' 4) ReferÍncias {@OUTPUT: ...}
+' 4) Refer√™ncias {@OUTPUT: ...}
 Dim outputRefs As Collection
 Set outputRefs = ContextKV_FindOutputRefs(promptText)
 
 If outputRefs.Count > 0 Then
-    ContextKV_LogEvent pipelineName, stepN, promptId, "OUTPUT_REF_FOUND", "", "INFO", "Encontradas " & CStr(outputRefs.Count) & " referÍncias {@OUTPUT: ...}."
+    ContextKV_LogEvent pipelineName, stepN, promptId, "OUTPUT_REF_FOUND", "", "INFO", "Encontradas " & CStr(outputRefs.Count) & " refer√™ncias {@OUTPUT: ...}."
 End If
 
-' Se n„o h· nada para injectar, sai (compatibilidade)
+' Se n√£o h√° nada para injectar, sai (compatibilidade)
 If dictNeeded.Count = 0 And outputRefs.Count = 0 Then Exit Function
 
-ContextKV_LogEvent pipelineName, stepN, promptId, "INJECT_START", "", "INFO", "InÌcio da injeÁ„o (ContextKV)."
+ContextKV_LogEvent pipelineName, stepN, promptId, "INJECT_START", "", "INFO", "In√≠cio da inje√ß√£o (ContextKV)."
 
-' 5) Resolver vari·veis pedidas (dictNeeded) e fazer substituiÁıes:
+' 5) Resolver vari√°veis pedidas (dictNeeded) e fazer substitui√ß√µes:
 '    5.1) substituir placeholders no texto
-'    5.2) se vierem de VARS: sem placeholder, anexar no fim como blocos determinÌsticos
+'    5.2) se vierem de VARS: sem placeholder, anexar no fim como blocos determin√≠sticos
 '
 ' Primeiro, resolver valores (cache) para todas as keys pedidas
 For Each k In dictNeeded.keys
@@ -138,17 +138,17 @@ For Each k In dictNeeded.keys
     val = ContextKV_ResolveVarValue(pipelineName, stepN, CStr(k), outputFolderBase, srcStep, srcPrompt, srcHow, sha, errMsg)
     
     If val = "" And errMsg <> "" Then
-        ' Vari·vel pedida mas n„o encontrada
+        ' Vari√°vel pedida mas n√£o encontrada
         ContextKV_LogEvent pipelineName, stepN, promptId, "INJECT_MISS", CStr(k), IIf(strictMode, "ERRO", "ALERTA"), errMsg
         Call ContextKV_DictSet(dictInjected, CStr(k), ContextKV_JsonObj_KVError(errMsg))
         
         If strictMode Then
-            outErro = "Vari·vel exigida em falta: " & CStr(k) & " | " & errMsg
+            outErro = "Vari√°vel exigida em falta: " & CStr(k) & " | " & errMsg
             ContextKV_InjectForStep = False
             Exit Function
         End If
         
-        ' Cache com vazio (para substituiÁ„o)
+        ' Cache com vazio (para substitui√ß√£o)
         If Not dictValuesCache.exists(CStr(k)) Then dictValuesCache.Add CStr(k), ""
         
     Else
@@ -163,9 +163,9 @@ For Each k In dictNeeded.keys
     End If
 Next k
 
-' 5.1) Substituir placeholders em reverse (para n„o estragar Ìndices)
+' 5.1) Substituir placeholders em reverse (para n√£o estragar √≠ndices)
 If placeholders.Count > 0 Then
-    ' Ordenar por posiÁ„o desc (j· vÍm por ordem de varrimento; fazemos reverse)
+    ' Ordenar por posi√ß√£o desc (j√° v√™m por ordem de varrimento; fazemos reverse)
     For i = placeholders.Count To 1 Step -1
         ph = placeholders(i)
         keyName = CStr(ph(0))
@@ -180,18 +180,18 @@ If placeholders.Count > 0 Then
         End If
         
         promptText = ContextKV_ReplaceSpan(promptText, idx0, ln, rep)
-        ContextKV_LogEvent pipelineName, stepN, promptId, "PLACEHOLDER_REPLACED", keyName, "INFO", "Placeholder substituÌdo (" & CStr(Len(rep)) & " chars)."
+        ContextKV_LogEvent pipelineName, stepN, promptId, "PLACEHOLDER_REPLACED", keyName, "INFO", "Placeholder substitu√≠do (" & CStr(Len(rep)) & " chars)."
     Next i
 End If
 
-' 5.2) Injectar VARS (sem placeholder) no fim, como blocos determinÌsticos
+' 5.2) Injectar VARS (sem placeholder) no fim, como blocos determin√≠sticos
 Dim appended As String
 appended = ""
 
 For Each k In varsFromPrompt.keys
     keyName = CStr(k)
     If ContextKV_PromptHasPlaceholderForKey(placeholders, keyName) Then
-        ' j· foi injectado no lugar
+        ' j√° foi injectado no lugar
     Else
         appended = appended & ContextKV_FormatVarBlock(keyName, CStr(dictValuesCache(keyName))) & vbCrLf & vbCrLf
     End If
@@ -254,7 +254,7 @@ End If
 ' 7) Produzir injected_vars JSON (para ser registado na linha do passo actual)
 outInjectedVarsJson = ContextKV_JsonObjectFromFragments(dictInjected)
 
-ContextKV_LogEvent pipelineName, stepN, promptId, "INJECT_END", "", "INFO", "InjeÁ„o concluÌda. injected_vars chars=" & CStr(Len(outInjectedVarsJson)) & "."
+ContextKV_LogEvent pipelineName, stepN, promptId, "INJECT_END", "", "INFO", "Inje√ß√£o conclu√≠da. injected_vars chars=" & CStr(Len(outInjectedVarsJson)) & "."
 End Function
 Public Sub ContextKV_WriteInjectedVars( _
 ByVal pipelineName As String, _
@@ -277,7 +277,7 @@ If wsS Is Nothing Then Exit Sub
 Dim rowS As Long
 rowS = ContextKV_FindSeguimentoRow(wsS, pipelineName, stepN, promptId)
 If rowS = 0 Then
-    ContextKV_LogEvent pipelineName, stepN, promptId, "INJECT_ERROR", "", "ERRO", "N„o foi possÌvel localizar a linha no Seguimento para escrever injected_vars."
+    ContextKV_LogEvent pipelineName, stepN, promptId, "INJECT_ERROR", "", "ERRO", "N√£o foi poss√≠vel localizar a linha no Seguimento para escrever injected_vars."
     Exit Sub
 End If
 
@@ -322,14 +322,14 @@ If wsS Is Nothing Then Exit Sub
 Dim rowS As Long
 rowS = ContextKV_FindSeguimentoRow(wsS, pipelineName, stepN, promptId)
 If rowS = 0 Then
-    ContextKV_LogEvent pipelineName, stepN, promptId, "CAPTURE_ERROR", "", "ERRO", "N„o foi possÌvel localizar a linha no Seguimento para captura."
+    ContextKV_LogEvent pipelineName, stepN, promptId, "CAPTURE_ERROR", "", "ERRO", "N√£o foi poss√≠vel localizar a linha no Seguimento para captura."
     Exit Sub
 End If
 
 Dim colOut As Long
 colOut = ContextKV_FindColumnByHeader(wsS, "Output (texto)")
 If colOut = 0 Then
-    ContextKV_LogEvent pipelineName, stepN, promptId, "CAPTURE_ERROR", "", "ERRO", "Coluna 'Output (texto)' n„o encontrada no Seguimento."
+    ContextKV_LogEvent pipelineName, stepN, promptId, "CAPTURE_ERROR", "", "ERRO", "Coluna 'Output (texto)' n√£o encontrada no Seguimento."
     Exit Sub
 End If
 
@@ -339,7 +339,7 @@ rawOut = CStr(wsS.Cells(rowS, colOut).value)
 Dim fullOut As String
 fullOut = ContextKV_ResolveFullOutput(rawOut)
 
-ContextKV_LogEvent pipelineName, stepN, promptId, "CAPTURE_START", "", "INFO", "InÌcio da captura (ContextKV). Output chars=" & CStr(Len(fullOut)) & "."
+ContextKV_LogEvent pipelineName, stepN, promptId, "CAPTURE_START", "", "INFO", "In√≠cio da captura (ContextKV). Output chars=" & CStr(Len(fullOut)) & "."
 
 Dim reserved As Variant
 reserved = ContextKV_ReservedKeys()
@@ -361,13 +361,13 @@ For Each key In reserved
         
         Call ContextKV_DictSet(dictMeta, CStr(key), ContextKV_JsonObj_MetaOK(fmt, Len(v), sha, method))
     ElseIf labelFound Then
-        ' O rÛtulo existe mas n„o foi possÌvel extrair
+        ' O r√≥tulo existe mas n√£o foi poss√≠vel extrair
         Call ContextKV_DictSet(dictMeta, CStr(key), ContextKV_JsonObj_MetaError("parse_failed", method, errMsg))
     End If
 Next key
 
 If dictCap.Count = 0 And dictMeta.Count = 0 Then
-    ContextKV_LogEvent pipelineName, stepN, promptId, "CAPTURE_MISS", "", "INFO", "Sem vari·veis capturadas (nenhum rÛtulo encontrado)."
+    ContextKV_LogEvent pipelineName, stepN, promptId, "CAPTURE_MISS", "", "INFO", "Sem vari√°veis capturadas (nenhum r√≥tulo encontrado)."
     Exit Sub
 End If
 
@@ -403,7 +403,7 @@ End If
 wsS.Cells(rowS, colCap).value = capturedJson
 wsS.Cells(rowS, colMeta).value = metaJson
 
-ContextKV_LogEvent pipelineName, stepN, promptId, "CAPTURE_OK", "", "INFO", "Captura concluÌda. Keys=" & CStr(dictCap.Count) & " | captured_vars chars=" & CStr(Len(capturedJson)) & "."
+ContextKV_LogEvent pipelineName, stepN, promptId, "CAPTURE_OK", "", "INFO", "Captura conclu√≠da. Keys=" & CStr(dictCap.Count) & " | captured_vars chars=" & CStr(Len(capturedJson)) & "."
 Exit Sub
 EH:
 ContextKV_LogEvent pipelineName, stepN, promptId, "CAPTURE_ERROR", "", "ERRO", "Erro na captura: " & Err.Description
@@ -504,7 +504,7 @@ EH:
 ContextKV_LogEvent "SELFTEST", 0, "SELFTEST", "SELFTEST_FAIL", "OutputRefFormat", "ERRO", "Erro: " & Err.Description
 End Sub
 Public Sub SelfTest_RunAll_ContextKV()
-ContextKV_LogEvent "SELFTEST", 0, "SELFTEST", "SELFTEST_START", "", "INFO", "InÌcio SelfTest_RunAll_ContextKV"
+ContextKV_LogEvent "SELFTEST", 0, "SELFTEST", "SELFTEST_START", "", "INFO", "In√≠cio SelfTest_RunAll_ContextKV"
 SelfTest_ContextKV_Parse_RESULTS_JSON
 SelfTest_ContextKV_Placeholder_Replace
 SelfTest_ContextKV_FileFallback
@@ -512,7 +512,7 @@ SelfTest_ContextKV_OutputRef
 ContextKV_LogEvent "SELFTEST", 0, "SELFTEST", "SELFTEST_END", "", "INFO", "Fim SelfTest_RunAll_ContextKV"
 End Sub
 ' =============================================================================
-' ImplementaÁ„o interna (helpers)
+' Implementa√ß√£o interna (helpers)
 ' =============================================================================
 Private Function ContextKV_ReservedKeys() As Variant
 ContextKV_ReservedKeys = Array( _
@@ -548,7 +548,7 @@ ContextKV_EnsureHeader ws, "details"
 End Sub
 Private Sub ContextKV_EnsureHistoricoColumns()
 Dim ws As Worksheet
-Set ws = ContextKV_GetSheet("HIST”RICO")
+Set ws = ContextKV_GetSheet("HIST√ìRICO")
 If ws Is Nothing Then Exit Sub
 ContextKV_EnsureHeader ws, "captured_vars"
 ContextKV_EnsureHeader ws, "captured_vars_meta"
@@ -634,10 +634,10 @@ End Function
 
 
 Private Function ContextKV_RemoveDiacritics(ByVal s As String) As String
-' RemoÁ„o simples (PT): suficiente para headers e comparaÁıes
+' Remo√ß√£o simples (PT): suficiente para headers e compara√ß√µes
 Dim a As Variant, b As Variant, i As Long
-a = Array("·", "‡", "„", "‚", "‰", "È", "Ë", "Í", "Î", "Ì", "Ï", "Ó", "Ô", "Û", "Ú", "ı", "Ù", "ˆ", "˙", "˘", "˚", "¸", "Á", _
-"¡", "¿", "√", "¬", "ƒ", "…", "»", " ", "À", "Õ", "Ã", "Œ", "œ", "”", "“", "’", "‘", "÷", "⁄", "Ÿ", "€", "‹", "«")
+a = Array("√°", "√†", "√£", "√¢", "√§", "√©", "√®", "√™", "√´", "√≠", "√¨", "√Æ", "√Ø", "√≥", "√≤", "√µ", "√¥", "√∂", "√∫", "√π", "√ª", "√º", "√ß", _
+"√Å", "√Ä", "√É", "√Ç", "√Ñ", "√â", "√à", "√ä", "√ã", "√ç", "√å", "√é", "√è", "√ì", "√í", "√ï", "√î", "√ñ", "√ö", "√ô", "√õ", "√ú", "√á")
 b = Array("a", "a", "a", "a", "a", "e", "e", "e", "e", "i", "i", "i", "i", "o", "o", "o", "o", "o", "u", "u", "u", "u", "c", _
 "a", "a", "a", "a", "a", "e", "e", "e", "e", "i", "i", "i", "i", "o", "o", "o", "o", "o", "u", "u", "u", "u", "c")
 For i = LBound(a) To UBound(a)
@@ -729,7 +729,7 @@ For i = 0 To matches.Count - 1
 Next i
 
 If removeFromText And matches.Count > 0 Then
-    ' Remove as linhas VARS: do texto (para n„o ir para o modelo)
+    ' Remove as linhas VARS: do texto (para n√£o ir para o modelo)
     text = re.Replace(text, "")
     text = Trim$(text)
 End If
@@ -751,7 +751,7 @@ Next i
 ContextKV_PromptHasPlaceholderForKey = False
 End Function
 Private Function ContextKV_ReplaceSpan(ByVal s As String, ByVal startIndex0 As Long, ByVal lengthToReplace As Long, ByVal replacement As String) As String
-' startIndex0 È 0-based (VBScript.RegExp), VBA strings s„o 1-based
+' startIndex0 √© 0-based (VBScript.RegExp), VBA strings s√£o 1-based
 Dim leftPart As String, rightPart As String
 If startIndex0 < 0 Then startIndex0 = 0
 If lengthToReplace < 0 Then lengthToReplace = 0
@@ -762,7 +762,7 @@ rightPart = Mid$(s, startIndex0 + lengthToReplace + 1)
 ContextKV_ReplaceSpan = leftPart & replacement & rightPart
 End Function
 ' -----------------------------
-' Resolver INPUTS: da prompt (cat·logo)
+' Resolver INPUTS: da prompt (cat√°logo)
 ' -----------------------------
 Private Function ContextKV_TryReadInputsTextByPromptId(ByVal promptId As String) As String
 On Error GoTo EH
@@ -778,7 +778,7 @@ Dim cel As Range
 Set cel = ws.Columns(1).Find(What:=promptId, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
 If cel Is Nothing Then Exit Function
 
-' Layout tÌpico do cat·logo:
+' Layout t√≠pico do cat√°logo:
 ' Linha da prompt: Col A=ID
 ' Linha +2: Col C="INPUTS:" ; Col D="<lista>"
 Dim lbl As String, val As String
@@ -788,7 +788,7 @@ val = CStr(ws.Cells(cel.Row + 2, 4).value)
 If InStr(1, UCase$(ContextKV_RemoveDiacritics(lbl)), "INPUTS", vbTextCompare) > 0 Then
     ContextKV_TryReadInputsTextByPromptId = val
 Else
-    ' fallback: devolve D na mesma (È melhor do que falhar silenciosamente)
+    ' fallback: devolve D na mesma (√© melhor do que falhar silenciosamente)
     ContextKV_TryReadInputsTextByPromptId = val
 End If
 
@@ -806,7 +806,7 @@ ContextKV_ParseSheetNameFromPromptId = Left$(promptId, p - 1)
 End If
 End Function
 ' -----------------------------
-' Resolver vari·veis a partir do Seguimento
+' Resolver vari√°veis a partir do Seguimento
 ' -----------------------------
 Private Function ContextKV_ResolveVarValue( _
 ByVal pipelineName As String, _
@@ -828,14 +828,14 @@ outErr = ""
 Dim wsS As Worksheet
 Set wsS = ContextKV_GetSheet("Seguimento")
 If wsS Is Nothing Then
-    outErr = "Folha Seguimento n„o encontrada."
+    outErr = "Folha Seguimento n√£o encontrada."
     Exit Function
 End If
 
 Dim srcRow As Long
 srcRow = ContextKV_FindBestSourceRow(wsS, pipelineName, stepN, keyName)
 If srcRow = 0 Then
-    outErr = "N„o foi encontrada linha fonte (passo anterior / histÛrico)."
+    outErr = "N√£o foi encontrada linha fonte (passo anterior / hist√≥rico)."
     Exit Function
 End If
 
@@ -873,7 +873,7 @@ End If
 Dim colOut As Long
 colOut = ContextKV_FindColumnByHeader(wsS, "Output (texto)")
 If colOut = 0 Then
-    outErr = "Coluna Output (texto) n„o encontrada."
+    outErr = "Coluna Output (texto) n√£o encontrada."
     Exit Function
 End If
 
@@ -889,7 +889,7 @@ If ContextKV_ParseOutputForKey(fullOut, keyName, v, method, fmt, errMsg, labelFo
     outSha = ContextKV_TrySHA256(v)
     ContextKV_ResolveVarValue = v
     
-    ' Persistir de forma lazy no captured_vars do srcRow (para futuras injecÁıes)
+    ' Persistir de forma lazy no captured_vars do srcRow (para futuras injec√ß√µes)
     On Error Resume Next
     ContextKV_UpsertCapturedVar wsS, srcRow, keyName, v, fmt, method, outputFolderBase, "LAZY"
     On Error GoTo 0
@@ -897,13 +897,13 @@ If ContextKV_ParseOutputForKey(fullOut, keyName, v, method, fmt, errMsg, labelFo
     Exit Function
 End If
 
-outErr = "Vari·vel '" & keyName & "' n„o encontrada no passo fonte (nem em captured_vars nem no output)."
+outErr = "Vari√°vel '" & keyName & "' n√£o encontrada no passo fonte (nem em captured_vars nem no output)."
 End Function
 Private Function ContextKV_FindBestSourceRow(ByVal wsS As Worksheet, ByVal pipelineName As String, ByVal stepN As Long, ByVal keyName As String) As Long
-' PreferÍncia:
+' Prefer√™ncia:
 ' 1) passo anterior (Passo = stepN-1) no mesmo pipeline
-' 2) ˙ltimo passo anterior com captured_vars contendo a key
-' 3) ˙ltimo passo anterior do pipeline (fallback)
+' 2) √∫ltimo passo anterior com captured_vars contendo a key
+' 3) √∫ltimo passo anterior do pipeline (fallback)
 On Error GoTo EH
 Dim colPipe As Long, colPasso As Long, colCap As Long
 colPipe = ContextKV_FindColumnByHeader(wsS, "pipeline_name")
@@ -933,7 +933,7 @@ For r = lastRow To 2 Step -1
     End If
 Next r
 
-' Se n„o h· keyName (ex.: {@OUTPUT:"Prompt Anterior"}), devolve apenas o ˙ltimo passo anterior
+' Se n√£o h√° keyName (ex.: {@OUTPUT:"Prompt Anterior"}), devolve apenas o √∫ltimo passo anterior
 If Trim$(keyName) = "" Then
     For r = lastRow To 2 Step -1
         If Trim$(CStr(wsS.Cells(r, colPipe).value)) = pipelineName Then
@@ -950,7 +950,7 @@ If Trim$(keyName) = "" Then
     Exit Function
 End If
 
-' 2) procurar ˙ltimo passo anterior com captured_vars contendo a key
+' 2) procurar √∫ltimo passo anterior com captured_vars contendo a key
 If colCap > 0 Then
     For r = lastRow To 2 Step -1
         If Trim$(CStr(wsS.Cells(r, colPipe).value)) = pipelineName Then
@@ -970,7 +970,7 @@ If colCap > 0 Then
     Next r
 End If
 
-' 3) fallback: ˙ltimo passo anterior do pipeline
+' 3) fallback: √∫ltimo passo anterior do pipeline
 If bestFallback <> 0 Then
     ContextKV_FindBestSourceRow = bestFallback
 End If
@@ -980,7 +980,7 @@ EH:
 ContextKV_FindBestSourceRow = 0
 End Function
 Private Function ContextKV_FindSeguimentoRow(ByVal wsS As Worksheet, ByVal pipelineName As String, ByVal stepN As Long, ByVal promptId As String) As Long
-' Procura do fim para o inÌcio (mais robusto quando h· m˙ltiplas execuÁıes)
+' Procura do fim para o in√≠cio (mais robusto quando h√° m√∫ltiplas execu√ß√µes)
 On Error GoTo EH
 Dim colPipe As Long, colPasso As Long, colPrompt As Long
 colPipe = ContextKV_FindColumnByHeader(wsS, "pipeline_name")
@@ -1040,7 +1040,7 @@ arg = ContextKV_RemoveDiacritics(arg)
 Dim wsS As Worksheet
 Set wsS = ContextKV_GetSheet("Seguimento")
 If wsS Is Nothing Then
-    outErr = "Folha Seguimento n„o encontrada."
+    outErr = "Folha Seguimento n√£o encontrada."
     Exit Function
 End If
 
@@ -1051,7 +1051,7 @@ colPrompt = ContextKV_FindColumnByHeader(wsS, "Prompt ID")
 colOut = ContextKV_FindColumnByHeader(wsS, "Output (texto)")
 
 If colPipe = 0 Or colPasso = 0 Or colPrompt = 0 Or colOut = 0 Then
-    outErr = "CabeÁalhos necess·rios em Seguimento n„o encontrados."
+    outErr = "Cabe√ßalhos necess√°rios em Seguimento n√£o encontrados."
     Exit Function
 End If
 
@@ -1062,7 +1062,7 @@ If arg = "" Or UCase$(arg) = "PROMPT ANTERIOR" Then
     Dim rPrev As Long
     rPrev = ContextKV_FindBestSourceRow(wsS, pipelineName, stepN, "") ' "" => passo anterior
     If rPrev = 0 Then
-        outErr = "N„o foi possÌvel localizar o passo anterior."
+        outErr = "N√£o foi poss√≠vel localizar o passo anterior."
         Exit Function
     End If
     
@@ -1107,7 +1107,7 @@ If UCase$(arg) = "TODAS AS PROMPTS" Then
     Exit Function
 End If
 
-' Caso contr·rio: assume Prompt ID especÌfico
+' Caso contr√°rio: assume Prompt ID espec√≠fico
 Dim targetPromptId As String
 targetPromptId = Trim$(argRaw)
 targetPromptId = ContextKV_Unquote(targetPromptId)
@@ -1131,7 +1131,7 @@ For r2 = lastRow To 2 Step -1
 Next r2
 
 If foundRow = 0 Then
-    outErr = "N„o foi encontrada referÍncia {@OUTPUT} para Prompt ID: " & targetPromptId
+    outErr = "N√£o foi encontrada refer√™ncia {@OUTPUT} para Prompt ID: " & targetPromptId
     Exit Function
 End If
 
@@ -1260,26 +1260,26 @@ For j = lblIndex + 1 To UBound(lines)
             End If
         Next k
         
-        outErr = "Fence iniciado mas n„o foi encontrado fecho (fence de 3 backticks)."
+        outErr = "Fence iniciado mas n√£o foi encontrado fecho (fence de 3 backticks)."
         outMethod = "fenced_block_after_label"
         Exit Function
     Else
-        Exit For ' primeiro conte˙do n„o-fence
+        Exit For ' primeiro conte√∫do n√£o-fence
     End If
 Next j
 
-' P2) SecÁ„o rotulada atÈ ao prÛximo cabeÁalho (A) B) C) ... ou fim)
+' P2) Sec√ß√£o rotulada at√© ao pr√≥ximo cabe√ßalho (A) B) C) ... ou fim)
 Dim startIdx As Long
 startIdx = lblIndex + 1
 
-' avanÁar linhas vazias
+' avan√ßar linhas vazias
 Do While startIdx <= UBound(lines)
     If Trim$(lines(startIdx)) <> "" Then Exit Do
     startIdx = startIdx + 1
 Loop
 
 If startIdx > UBound(lines) Then
-    outErr = "RÛtulo encontrado mas sem conte˙do subsequente."
+    outErr = "R√≥tulo encontrado mas sem conte√∫do subsequente."
     outMethod = "section_until_next_header"
     Exit Function
 End If
@@ -1304,14 +1304,14 @@ outMethod = "section_until_next_header"
 outFmt = ContextKV_InferFmt(outValue)
 
 If outValue = "" Then
-    outErr = "Conte˙do vazio apÛs rÛtulo."
+    outErr = "Conte√∫do vazio ap√≥s r√≥tulo."
     ContextKV_ParseOutputForKey = False
 Else
     ContextKV_ParseOutputForKey = True
 End If
 End Function
 Private Function ContextKV_CleanLineForLabel(ByVal s As String) As String
-' Remove adornos tÌpicos (markdown) do inÌcio/fim para facilitar detecÁ„o de rÛtulos
+' Remove adornos t√≠picos (markdown) do in√≠cio/fim para facilitar detec√ß√£o de r√≥tulos
 Dim t As String
 t = Trim$(s)
 ' remover **...**
@@ -1356,7 +1356,7 @@ If Len(u) >= 3 Then
     End If
 End If
 
-' fallback: linha contÈm a key como palavra inteira
+' fallback: linha cont√©m a key como palavra inteira
 If ContextKV_ContainsWholeWord(u, keyU) Then
     ContextKV_LineIsLabelForKey = True
     Exit Function
@@ -1429,7 +1429,7 @@ ContextKV_InferFmt = "text"
 End If
 End Function
 ' -----------------------------
-' SerializaÁ„o JSON mÌnima (objecto)
+' Serializa√ß√£o JSON m√≠nima (objecto)
 ' -----------------------------
 Private Function ContextKV_JsonObjectFromFragments(ByVal dictFragments As Object) As String
 Dim k As Variant
@@ -1517,7 +1517,7 @@ t = Replace(t, vbTab, "\t")
 ContextKV_JsonEscape = t
 End Function
 Private Function ContextKV_JsonUnescape(ByVal s As String) As String
-' Unescape mÌnimo (para \n, \t, ", \)
+' Unescape m√≠nimo (para \n, \t, ", \)
 Dim t As String
 t = s
 t = Replace(t, "\n", vbCrLf)
@@ -1527,7 +1527,7 @@ t = Replace(t, "\", "")
 ContextKV_JsonUnescape = t
 End Function
 ' -----------------------------
-' Leitura de captured_vars (JSON mÌnimo)
+' Leitura de captured_vars (JSON m√≠nimo)
 ' -----------------------------
 Private Function ContextKV_ResolveJsonPointerIfNeeded(ByVal jsonText As String, ByVal outputFolderBase As String) As String
 Dim t As String
@@ -1571,12 +1571,12 @@ Dim p As Long
 p = InStr(1, t, needle, vbTextCompare)
 If p = 0 Then Exit Function
 
-' encontrar ':' a seguir ‡ key
+' encontrar ':' a seguir √† key
 Dim c As Long
 c = InStr(p + Len(needle), t, ":", vbTextCompare)
 If c = 0 Then Exit Function
 
-' avanÁar espaÁos
+' avan√ßar espa√ßos
 Dim i As Long
 i = c + 1
 Do While i <= Len(t) And (Mid$(t, i, 1) = " " Or Mid$(t, i, 1) = vbTab)
@@ -1699,7 +1699,7 @@ raw = Mid$(t, i + 1, endPos - (i + 1))
 ContextKV_JsonGetFilePointer = ContextKV_JsonUnescape(raw)
 End Function
 ' -----------------------------
-' PersistÍncia @file
+' Persist√™ncia @file
 ' -----------------------------
 Private Function ContextKV_SaveTextAsFileAndReturnPointer( _
 ByVal outputFolderBase As String, _
@@ -1860,7 +1860,7 @@ If p > 0 Then
         Dim inside As String
         inside = Mid$(t, p + Len(MARKER_FULL_OUTPUT_SAVED), pEnd - (p + Len(MARKER_FULL_OUTPUT_SAVED)))
         inside = Trim$(inside)
-        ' inside pode comeÁar com espaÁo
+        ' inside pode come√ßar com espa√ßo
         If Left$(inside, 1) = " " Then inside = Trim$(inside)
         
         If ContextKV_FileExists(inside) Then
@@ -1903,12 +1903,12 @@ Dim metaJson As String
 metaJson = CStr(wsS.Cells(srcRow, colMeta).value)
 metaJson = ContextKV_ResolveJsonPointerIfNeeded(metaJson, outputFolderBase)
 
-' EstratÈgia simples: se vazio, criar novo objecto; caso contr·rio, se j· tem key, n„o mexe
+' Estrat√©gia simples: se vazio, criar novo objecto; caso contr√°rio, se j√° tem key, n√£o mexe
 If InStr(1, capJson, """" & keyName & """", vbTextCompare) > 0 Then Exit Sub
 
 Dim dict As Object
 Set dict = CreateObject("Scripting.Dictionary")
-' N„o tentamos parse completo (mÌnimo): sÛ anexar no fim antes de "}"
+' N√£o tentamos parse completo (m√≠nimo): s√≥ anexar no fim antes de "}"
 
 Dim jsonVal As String
 jsonVal = """" & ContextKV_JsonEscape(value) & """"
@@ -1928,7 +1928,7 @@ ElseIf Right$(Trim$(capJson), 1) = "}" Then
     If Right$(capJson, 1) <> "{" Then capJson = capJson & ","
     capJson = capJson & """" & keyName & """:" & jsonVal & "}"
 Else
-    ' n„o È JSON esperado; aborta
+    ' n√£o √© JSON esperado; aborta
     Exit Sub
 End If
 
@@ -1987,7 +1987,7 @@ Dim t As String
 t = UCase$(Trim$(ContextKV_GetTextConfig(keyName, IIf(defaultValue, "TRUE", "FALSE"))))
 If t = "TRUE" Or t = "1" Or t = "YES" Or t = "SIM" Then
     ContextKV_GetBoolConfig = True
-ElseIf t = "FALSE" Or t = "0" Or t = "NO" Or t = "NAO" Or t = "N√O" Then
+ElseIf t = "FALSE" Or t = "0" Or t = "NO" Or t = "NAO" Or t = "N√ÉO" Then
     ContextKV_GetBoolConfig = False
 Else
     ContextKV_GetBoolConfig = defaultValue
@@ -2003,12 +2003,12 @@ ContextKV_GetLongConfig = defaultValue
 End If
 End Function
 ' -----------------------------
-' Hash (opcional; usa funÁ„o existente em M09 se existir)
+' Hash (opcional; usa fun√ß√£o existente em M09 se existir)
 ' -----------------------------
 Private Function ContextKV_TrySHA256(ByVal text As String) As String
 On Error GoTo EH
-' PreferÍncia: funÁ„o j· existente no PIPELINER (M09_FilesManagement)
-' Se n„o existir, devolve vazio (n„o falha).
+' Prefer√™ncia: fun√ß√£o j√° existente no PIPELINER (M09_FilesManagement)
+' Se n√£o existir, devolve vazio (n√£o falha).
 ContextKV_TrySHA256 = Files_SHA256_Text(text)
 Exit Function
 EH:
@@ -2040,9 +2040,9 @@ If map.exists(ContextKV_NormalizeHeader("Prompt ID")) Then ws.Cells(newRow, map(
 If map.exists(ContextKV_NormalizeHeader("Severidade")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("Severidade"))).value = result
 
 ' usar campos existentes para manter auditabilidade em templates antigos
-If map.exists(ContextKV_NormalizeHeader("Par‚metro")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("Par‚metro"))).value = action & IIf(varName <> "", "|" & varName, "")
+If map.exists(ContextKV_NormalizeHeader("Par√¢metro")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("Par√¢metro"))).value = action & IIf(varName <> "", "|" & varName, "")
 If map.exists(ContextKV_NormalizeHeader("Problema")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("Problema"))).value = details
-If map.exists(ContextKV_NormalizeHeader("Sugest„o")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("Sugest„o"))).value = ""
+If map.exists(ContextKV_NormalizeHeader("Sugest√£o")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("Sugest√£o"))).value = ""
 
 ' novas colunas estruturadas (se existirem)
 If map.exists(ContextKV_NormalizeHeader("pipeline_name")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("pipeline_name"))).value = pipelineName
