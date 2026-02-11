@@ -548,8 +548,14 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         "Inicio pipeline. startId=[" & startId & "] maxSteps=" & CStr(maxSteps) & " maxRep=" & CStr(maxRep) & " inputFolder=[" & inputFolder & "]", _
         "OK")
 
+    Dim runToken As String
+    runToken = "RUN|" & pipelineNome & "|" & Format$(Now, "yyyymmdd_hhnnss") & "|P" & Format$(pipelineIndex, "00")
+
     ' Definir token de run (PAINEL) para separador visual na folha FILES_MANAGEMENT (M09)
-    Call Files_SetRunToken("RUN|" & pipelineNome & "|" & Format$(Now, "yyyymmdd_hhnnss") & "|P" & Format$(pipelineIndex, "00"))
+    Call Files_SetRunToken(runToken)
+
+    ' Garantir colunas/headers de ContextKV (idempotente)
+    Call ContextKV_EnsureLayout
     ' Estruturas de controlo
     Dim visitas As Object
     Set visitas = CreateObject("Scripting.Dictionary")
@@ -610,6 +616,20 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Dim modeloUsado As String
         modeloUsado = Trim$(prompt.modelo)
         If modeloUsado = "" Then modeloUsado = modeloDefault
+
+        Dim injectedVarsJson As String
+        Dim injectErro As String
+        injectedVarsJson = ""
+        injectErro = ""
+
+        If Not ContextKV_InjectForStep(pipelineNome, passo, prompt.Id, outputFolderBase, runToken, prompt.textoPrompt, injectedVarsJson, injectErro) Then
+            Call Debug_Registar(passo, prompt.Id, "ERRO", "", "ContextKV", _
+                "Falha na injecao de variaveis: " & injectErro, _
+                "Sugestao: valide placeholders {{VAR:...}}, directiva VARS e chaves capturadas em passos anteriores.")
+            Call Seguimento_Registar(passo, prompt, modeloUsado, "{}", 0, "", "[ERRO CONTEXT_KV] " & injectErro, pipelineNome)
+            wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+            GoTo SaidaLimpa
+        End If
 
         ' Converter Config extra (amigavel) -> JSON (audit) / input override / extra fragment
         Dim auditJson As String, inputJsonLiteral As String, extraFragment As String
@@ -766,6 +786,12 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, resultado.httpStatus, resultado.responseId, _
             textoSeguimento, pipelineNome, "", filesUsedResumo, filesOpsResumo, fileIds)
+
+        If Len(Trim$(injectedVarsJson)) > 0 Then
+            Call ContextKV_WriteInjectedVars(pipelineNome, passo, prompt.Id, injectedVarsJson, outputFolderBase, runToken)
+        End If
+
+        Call ContextKV_CaptureRow(pipelineNome, passo, prompt.Id, outputFolderBase, runToken)
 
 
         If Trim$(resultado.Erro) <> "" Then
@@ -1642,4 +1668,3 @@ End Function
 Private Function JsonEscaparSimples(ByVal s As String) As String
     JsonEscaparSimples = Json_EscapeString(CStr(s))
 End Function
-
