@@ -791,7 +791,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             Call ContextKV_WriteInjectedVars(pipelineNome, passo, prompt.Id, injectedVarsJson, outputFolderBase, runToken)
         End If
 
-        Call ContextKV_CaptureRow(pipelineNome, passo, prompt.Id, outputFolderBase, runToken)
+        Call ContextKV_CaptureRow(pipelineNome, passo, prompt.Id, outputFolderBase, runToken, resultado.outputText)
 
 
         If Trim$(resultado.Erro) <> "" Then
