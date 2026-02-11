@@ -266,7 +266,7 @@ Public Function FileOutput_ProcessAfterResponse( _
     End If
     Dim aAuto As String
     aAuto = LCase$(Trim$(autoSave))
-    If aAuto = "não" Or aAuto = "nao" Or aAuto = "não" Then
+    If aAuto = "no" Or aAuto = "nao" Or aAuto = "não" Then
         FileOutput_ProcessAfterResponse = "[FILE OUTPUT] auto_save=Não (config) - raw guardado: " & rawPath
         Exit Function
     End If
@@ -2152,4 +2152,5 @@ End Sub
 
 
     
+
 
