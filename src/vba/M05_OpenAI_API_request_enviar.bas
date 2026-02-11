@@ -461,8 +461,10 @@ On Error Resume Next
     Dim httpStatus As Long
     Dim resposta As String
     Dim reqId As String
+    Dim idempotencyKey As String
 
     attempt = 0
+    idempotencyKey = M05_GerarIdempotencyKey()
 
     Do
         attempt = attempt + 1
@@ -478,6 +480,9 @@ On Error Resume Next
         http.SetRequestHeader "Authorization", "Bearer " & apiKey
         http.SetRequestHeader "Content-Type", "application/json; charset=utf-8"
         http.SetRequestHeader "Accept", "application/json"
+        If idempotencyKey <> "" Then
+            http.SetRequestHeader "Idempotency-Key", idempotencyKey
+        End If
 
         http.Send json
 
@@ -547,6 +552,28 @@ Private Sub M05_SleepSeconds(ByVal seconds As Long)
 EH:
     ' Falha silenciosa: não bloquear o pipeline por causa do wait
 End Sub
+
+Private Function M05_GerarIdempotencyKey() As String
+    On Error GoTo Fallback
+
+    ' Scriptlet.TypeLib existe na maioria dos ambientes Windows + Office.
+    Dim guidRaw As String
+    guidRaw = CStr(CreateObject("Scriptlet.TypeLib").GUID)
+    guidRaw = Replace$(guidRaw, "{", "")
+    guidRaw = Replace$(guidRaw, "}", "")
+
+    If Len(guidRaw) > 0 Then
+        M05_GerarIdempotencyKey = "pipeliner-" & LCase$(guidRaw)
+        Exit Function
+    End If
+
+Fallback:
+    On Error Resume Next
+    Randomize Timer
+    M05_GerarIdempotencyKey = "pipeliner-" & _
+        Format$(Now, "yyyymmddhhnnss") & "-" & _
+        Right$("000000" & CStr(Int((Rnd * 1000000#))), 6)
+End Function
 
 Private Function M05_ExtrairReqIdDeTexto(ByVal s As String) As String
     On Error GoTo EH
