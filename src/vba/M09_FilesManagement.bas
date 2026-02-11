@@ -151,683 +151,784 @@ End Sub
 '   (Esta é a versão que cumpre D4: call EnsureConfig + allowReuse/reuseTag + passagem de parâmetros)
 ' ============================================================
 Public Function Files_PrepararContextoDaPrompt( _
-    ByVal apiKey As String, _
-    ByVal pipelineNome As String, _
-    ByVal inputFolder As String, _
-    ByVal promptId As String, _
-    ByVal promptText As String, _
-    ByVal inputJsonLiteralBase As String, _
-    ByRef outInputJsonLiteralFinal As String, _
-    ByRef outFilesUsedResumo As String, _
-    ByRef outFilesOpsResumo As String, _
-    ByRef outFileIdsUsed As String, _
-    ByRef outFalhaCritica As Boolean, _
-    ByRef outErroMsg As String, _
-    Optional ByVal forceAsIsToTextEmbed As Boolean = False _
+ByVal apiKey As String, _
+ByVal pipelineNome As String, _
+ByVal inputFolder As String, _
+ByVal promptId As String, _
+ByVal promptText As String, _
+ByVal inputJsonLiteralBase As String, _
+ByRef outInputJsonLiteralFinal As String, _
+ByRef outFilesUsedResumo As String, _
+ByRef outFilesOpsResumo As String, _
+ByRef outFileIdsUsed As String, _
+ByRef outFalhaCritica As Boolean, _
+ByRef outErroMsg As String, _
+Optional ByVal forceAsIsToTextEmbed As Boolean = False _
 ) As Boolean
+' ============================================================
+' Versão com:
+' - effective_mode (override quando /v1/responses não aceita as_is para DOCX/PPTX)
+' - Política DOCX/PPTX: AUTO_AS_PDF / AUTO_TEXT_EMBED / ERROR
+' - Fallback conversão PDF: TEXT_EMBED ou ERROR
+' - Limite e ação para text_embed grande
+' - PDF cache (evita reconversão -> evita hash diferente -> permite reutilização de file_id)
+' - Label: ProcessarComoInputFile:
+' ============================================================
 
-    ' ============================================================
-    ' Versão com:
-    ' - effective_mode (override quando /v1/responses não aceita as_is para DOCX/PPTX)
-    ' - Política DOCX/PPTX: AUTO_AS_PDF / AUTO_TEXT_EMBED / ERROR
-    ' - Fallback conversão PDF: TEXT_EMBED ou ERROR
-    ' - Limite e ação para text_embed grande
-    ' - PDF cache (evita reconversão -> evita hash diferente -> permite reutilização de file_id)
-    ' - Label: ProcessarComoInputFile:
-    ' ============================================================
+On Error GoTo TrataErro
 
-    On Error GoTo TrataErro
+Dim dbgStep As String: dbgStep = "inicio"
+Dim dbgReq As String: dbgReq = ""
+Dim dbgFile As String: dbgFile = ""
+Dim dbgPath As String: dbgPath = ""
+Dim dbgUsoFinal As String: dbgUsoFinal = ""
 
-    Dim dbgStep As String: dbgStep = "inicio"
-    Dim dbgReq As String: dbgReq = ""
-    Dim dbgFile As String: dbgFile = ""
-    Dim dbgPath As String: dbgPath = ""
-    Dim dbgUsoFinal As String: dbgUsoFinal = ""
+Files_PrepararContextoDaPrompt = True
+outFalhaCritica = False
+outErroMsg = ""
 
-    Files_PrepararContextoDaPrompt = True
-    outFalhaCritica = False
-    outErroMsg = ""
+outFilesUsedResumo = ""
+outFilesOpsResumo = ""
+outFileIdsUsed = ""
+outInputJsonLiteralFinal = inputJsonLiteralBase
 
-    outFilesUsedResumo = ""
-    outFilesOpsResumo = ""
-    outFileIdsUsed = ""
+inputFolder = Trim$(CStr(inputFolder))
+
+Dim transportMode As String
+transportMode = Files_Config_TransportMode()
+
+Dim enableIAFallback As Boolean
+enableIAFallback = Files_Config_EnableIAFallback()
+
+Dim inlineMaxBytes As Double
+inlineMaxBytes = Files_Config_InlineMaxBytes()
+
+' --- políticas de contexto para Office + limites text_embed ---
+Dim docxContextMode As String
+Dim docxAsPdfFallback As String
+Dim textEmbedMaxChars As Long
+Dim textEmbedOverflowAction As String
+
+docxContextMode = Files_Config_DocxContextMode()
+docxAsPdfFallback = Files_Config_DocxAsPdfFallback()
+textEmbedMaxChars = Files_Config_TextEmbedMaxChars()
+textEmbedOverflowAction = Files_Config_TextEmbedOverflowAction()
+
+Call Files_EnsureSheetExists
+
+Dim celInputsValor As Range, celOps As Range
+Call Files_EncontrarCelulasInputs(promptId, celInputsValor, celOps)
+
+If celInputsValor Is Nothing Then
     outInputJsonLiteralFinal = inputJsonLiteralBase
+    Exit Function
+End If
 
-    inputFolder = Trim$(CStr(inputFolder))
+Dim textoInputs As String
+textoInputs = CStr(celInputsValor.value)
 
-    Dim transportMode As String
-    transportMode = Files_Config_TransportMode()
+' garantir que existe a opção de config para reutilização
+Call Files_EnsureConfig_ReutilizacaoUpload
 
-    Dim enableIAFallback As Boolean
-    enableIAFallback = Files_Config_EnableIAFallback()
+Dim diretivas As Collection
+Set diretivas = Files_ExtrairDiretivasDeFicheiros(textoInputs)
 
-    Dim inlineMaxBytes As Double
-    inlineMaxBytes = Files_Config_InlineMaxBytes()
+If diretivas.Count = 0 Then
+    If Not celOps Is Nothing Then celOps.value = ""
+    outInputJsonLiteralFinal = inputJsonLiteralBase
+    Exit Function
+End If
 
-    ' --- políticas de contexto para Office + limites text_embed ---
-    Dim docxContextMode As String
-    Dim docxAsPdfFallback As String
-    Dim textEmbedMaxChars As Long
-    Dim textEmbedOverflowAction As String
+Dim haRequired As Boolean
+haRequired = Files_TemRequiredDiretivas(diretivas)
 
-    docxContextMode = Files_Config_DocxContextMode()
-    docxAsPdfFallback = Files_Config_DocxAsPdfFallback()
-    textEmbedMaxChars = Files_Config_TextEmbedMaxChars()
-    textEmbedOverflowAction = Files_Config_TextEmbedOverflowAction()
+If inputFolder = "" Or Dir$(inputFolder, vbDirectory) = "" Then
+    Call Files_EscreverOperacoes(celOps, diretivas, "ERRO: INPUT Folder nao existe ou esta vazio.", True)
 
-    Call Files_EnsureSheetExists
-
-    Dim celInputsValor As Range, celOps As Range
-    Call Files_EncontrarCelulasInputs(promptId, celInputsValor, celOps)
-
-    If celInputsValor Is Nothing Then
-        outInputJsonLiteralFinal = inputJsonLiteralBase
-        Exit Function
+    If haRequired Then
+        outFalhaCritica = True
+        outErroMsg = "INPUT Folder invalido e existem ficheiros (required). inputFolder=" & inputFolder
+        Call Debug_Registar(0, promptId, "ERRO", "", "FILES", outErroMsg, "Sugestao: preencha o INPUT Folder no PAINEL.")
+        Files_PrepararContextoDaPrompt = False
+    Else
+        Call Debug_Registar(0, promptId, "ALERTA", "", "FILES", _
+            "INPUT Folder invalido; ficheiros opcionais foram ignorados. inputFolder=" & inputFolder, _
+            "Sugestao: preencha o INPUT Folder no PAINEL.")
     End If
 
-    Dim textoInputs As String
-    textoInputs = CStr(celInputsValor.value)
+    outInputJsonLiteralFinal = inputJsonLiteralBase
+    Exit Function
+End If
 
-    ' garantir que existe a opção de config para reutilização
-    Call Files_EnsureConfig_ReutilizacaoUpload
+Dim pdfCacheFolder As String
+pdfCacheFolder = Files_ComporPdfCacheFolder(inputFolder)
+Call Files_CriarPastaSeNaoExiste(pdfCacheFolder)
 
-    Dim diretivas As Collection
-    Set diretivas = Files_ExtrairDiretivasDeFicheiros(textoInputs)
+Dim wsFiles As Worksheet
+Set wsFiles = ThisWorkbook.Worksheets(SHEET_FILES)
 
-    If diretivas.Count = 0 Then
-        If Not celOps Is Nothing Then celOps.value = ""
-        outInputJsonLiteralFinal = inputJsonLiteralBase
-        Exit Function
-    End If
+Dim mapaCab As Object
+Set mapaCab = Files_MapaCabecalhos(wsFiles)
 
-    Dim haRequired As Boolean
-    haRequired = Files_TemRequiredDiretivas(diretivas)
+Dim filePartsJson As String: filePartsJson = ""
+Dim textoEmbedTotal As String: textoEmbedTotal = ""
+Dim filesUsedLista As String: filesUsedLista = ""
+Dim filesOpsCurto As String: filesOpsCurto = ""
+Dim fileIdsLista As String: fileIdsLista = ""
 
-    If inputFolder = "" Or Dir(inputFolder, vbDirectory) = "" Then
-        Call Files_EscreverOperacoes(celOps, diretivas, "ERRO: INPUT Folder nao existe ou esta vazio.", True)
+Dim houveOverride As Boolean: houveOverride = False
+Dim houveAmbiguidade As Boolean: houveAmbiguidade = False
 
-        If haRequired Then
+Dim i As Long
+For i = 1 To diretivas.Count
+
+    Dim d As Object
+    Set d = diretivas(i)
+
+    Dim reqNome As String
+    reqNome = CStr(d("requested_name"))
+
+    Dim required As Boolean
+    required = CBool(d("required"))
+
+    Dim wantAsIs As Boolean, wantAsPdf As Boolean, wantText As Boolean, wantLatest As Boolean
+    wantAsIs = CBool(d("as_is"))
+    wantAsPdf = CBool(d("as_pdf"))
+    wantText = CBool(d("text_embed"))
+    wantLatest = CBool(d("latest"))
+
+    Dim resolvedPath As String, resolvedName As String
+    Dim status As String, candidatosLog As String, overrideUsado As Boolean
+
+    resolvedPath = ""
+    resolvedName = ""
+    status = ""
+    candidatosLog = ""
+    overrideUsado = False
+
+    dbgStep = "ResolverFicheiro"
+    dbgReq = reqNome
+    dbgFile = ""
+    dbgPath = ""
+    dbgUsoFinal = ""
+
+    Call Files_ResolverFicheiro( _
+        apiKey, promptId, inputFolder, reqNome, wantLatest, enableIAFallback, _
+        resolvedPath, resolvedName, status, candidatosLog, overrideUsado, houveAmbiguidade)
+
+    dbgFile = resolvedName
+    dbgPath = resolvedPath
+
+    If overrideUsado Then houveOverride = True
+
+    If status = "NOT_FOUND" Then
+        filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " nao encontrado: " & reqNome & vbCrLf
+
+        If required Then
             outFalhaCritica = True
-            outErroMsg = "INPUT Folder invalido e existem ficheiros (required). inputFolder=" & inputFolder
-            Call Debug_Registar(0, promptId, "ERRO", "", "FILES", outErroMsg, "Sugestao: preencha o INPUT Folder no PAINEL.")
-            Files_PrepararContextoDaPrompt = False
+            outErroMsg = "Ficheiro obrigatorio nao encontrado: " & reqNome & " | inputFolder=" & inputFolder
+            Call Debug_Registar(0, promptId, "ERRO", "", "FILES", outErroMsg, "Sugestao: confirme nome e existencia no INPUT Folder.")
         Else
             Call Debug_Registar(0, promptId, "ALERTA", "", "FILES", _
-                "INPUT Folder invalido; ficheiros opcionais foram ignorados. inputFolder=" & inputFolder, _
-                "Sugestao: preencha o INPUT Folder no PAINEL.")
+                "Ficheiro nao encontrado: " & reqNome & " | inputFolder=" & inputFolder, _
+                "Sugestao: confirme nome e existencia no INPUT Folder, ou use (required) apenas quando necessario.")
         End If
 
-        outInputJsonLiteralFinal = inputJsonLiteralBase
-        Exit Function
+        Call Files_OperacoesAdicionarResultado(d, "NOT_FOUND", "", "", "", False, False, False)
+        GoTo ProximoItem
     End If
 
-    Dim pdfCacheFolder As String
-    pdfCacheFolder = Files_ComporPdfCacheFolder(inputFolder)
-    Call Files_CriarPastaSeNaoExiste(pdfCacheFolder)
+    If status = "AMBIGUOUS" Then
+        filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " ambiguidade: " & reqNome & vbCrLf
 
-    Dim wsFiles As Worksheet
-    Set wsFiles = ThisWorkbook.Worksheets(SHEET_FILES)
+        Call Debug_Registar(0, promptId, "ALERTA", "", "FILES", _
+            "Ambiguidade ao resolver ficheiro: " & reqNome & " | candidatos: " & candidatosLog, _
+            "Sugestao: use nome mais especifico, (latest), ou indique extensao. Se quiser, ative IA fallback em Config!B6.")
 
-    Dim mapaCab As Object
-    Set mapaCab = Files_MapaCabecalhos(wsFiles)
-
-    Dim filePartsJson As String: filePartsJson = ""
-    Dim textoEmbedTotal As String: textoEmbedTotal = ""
-    Dim filesUsedLista As String: filesUsedLista = ""
-    Dim filesOpsCurto As String: filesOpsCurto = ""
-    Dim fileIdsLista As String: fileIdsLista = ""
-
-    Dim houveOverride As Boolean: houveOverride = False
-    Dim houveAmbiguidade As Boolean: houveAmbiguidade = False
-
-    Dim i As Long
-    For i = 1 To diretivas.Count
-
-        Dim d As Object
-        Set d = diretivas(i)
-
-        Dim reqNome As String
-        reqNome = CStr(d("requested_name"))
-
-        Dim required As Boolean
-        required = CBool(d("required"))
-
-        Dim wantAsIs As Boolean, wantAsPdf As Boolean, wantText As Boolean, wantLatest As Boolean
-        wantAsIs = CBool(d("as_is"))
-        wantAsPdf = CBool(d("as_pdf"))
-        wantText = CBool(d("text_embed"))
-        wantLatest = CBool(d("latest"))
-
-        Dim resolvedPath As String, resolvedName As String
-        Dim status As String, candidatosLog As String, overrideUsado As Boolean
-
-        resolvedPath = ""
-        resolvedName = ""
-        status = ""
-        candidatosLog = ""
-        overrideUsado = False
-
-        dbgStep = "ResolverFicheiro"
-        dbgReq = reqNome
-        dbgFile = ""
-        dbgPath = ""
-        dbgUsoFinal = ""
-
-        Call Files_ResolverFicheiro( _
-            apiKey, promptId, inputFolder, reqNome, wantLatest, enableIAFallback, _
-            resolvedPath, resolvedName, status, candidatosLog, overrideUsado, houveAmbiguidade)
-
-        dbgFile = resolvedName
-        dbgPath = resolvedPath
-
-        If overrideUsado Then houveOverride = True
-
-        If status = "NOT_FOUND" Then
-            filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " nao encontrado: " & reqNome & vbCrLf
-
-            If required Then
-                outFalhaCritica = True
-                outErroMsg = "Ficheiro obrigatorio nao encontrado: " & reqNome & " | inputFolder=" & inputFolder
-                Call Debug_Registar(0, promptId, "ERRO", "", "FILES", outErroMsg, "Sugestao: confirme nome e existencia no INPUT Folder.")
-            Else
-                Call Debug_Registar(0, promptId, "ALERTA", "", "FILES", _
-                    "Ficheiro nao encontrado: " & reqNome & " | inputFolder=" & inputFolder, _
-                    "Sugestao: confirme nome e existencia no INPUT Folder, ou use (required) apenas quando necessario.")
-            End If
-
-            Call Files_OperacoesAdicionarResultado(d, "NOT_FOUND", "", "", "", False, False, False)
-            GoTo ProximoItem
+        If required Then
+            outFalhaCritica = True
+            outErroMsg = "Ficheiro obrigatorio com ambiguidade: " & reqNome
         End If
 
-        If status = "AMBIGUOUS" Then
-            filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " ambiguidade: " & reqNome & vbCrLf
+        Call Files_OperacoesAdicionarResultado(d, "AMBIGUOUS", "", "", "", False, False, True)
+        GoTo ProximoItem
+    End If
 
-            Call Debug_Registar(0, promptId, "ALERTA", "", "FILES", _
-                "Ambiguidade ao resolver ficheiro: " & reqNome & " | candidatos: " & candidatosLog, _
-                "Sugestao: use nome mais especifico, (latest), ou indique extensao. Se quiser, ative IA fallback em Config!B6.")
+    Dim ext As String
+    ext = Files_ObterExtensao(resolvedName)
 
-            If required Then
-                outFalhaCritica = True
-                outErroMsg = "Ficheiro obrigatorio com ambiguidade: " & reqNome
-            End If
+    Dim usoFinal As String
+    usoFinal = Files_DeterminarUsageMode(ext, wantAsIs, wantAsPdf, wantText)
 
-            Call Files_OperacoesAdicionarResultado(d, "AMBIGUOUS", "", "", "", False, False, True)
-            GoTo ProximoItem
+    dbgUsoFinal = usoFinal
+
+    Dim overrideModo As Boolean
+    overrideModo = False
+
+    If forceAsIsToTextEmbed And wantAsIs Then
+        If LCase$(ext) <> EXT_PDF And Not Files_EhImagem(ext) Then
+            usoFinal = "text_embed"
+            overrideModo = True
         End If
+    End If
 
-        Dim ext As String
-        ext = Files_ObterExtensao(resolvedName)
+    If overrideUsado Or overrideModo Then houveOverride = True
 
-        Dim usoFinal As String
-        usoFinal = Files_DeterminarUsageMode(ext, wantAsIs, wantAsPdf, wantText)
+    ' =========================
+    ' effective_mode para /v1/responses (DOCX/PPTX etc)
+    ' =========================
+    Dim modoPedido As String, modoEfetivo As String, overrideReason As String
+    modoPedido = usoFinal
+    modoEfetivo = usoFinal
+    overrideReason = ""
 
-        dbgUsoFinal = usoFinal
+    If modoEfetivo = "as_is" Then
+        Dim extLower As String
+        extLower = LCase$(Trim$(ext))
 
-        Dim overrideModo As Boolean
-        overrideModo = False
+        If extLower <> "" And (Not Files_IsExtSuportadaComoInputFileResponses(extLower)) Then
+            Dim policy As String
+            Dim fallbackPolicy As String
 
-        If forceAsIsToTextEmbed And wantAsIs Then
-            If LCase$(ext) <> EXT_PDF And Not Files_EhImagem(ext) Then
-                usoFinal = "text_embed"
-                overrideModo = True
-            End If
-        End If
+            policy = UCase$(Trim$(docxContextMode))
+            fallbackPolicy = UCase$(Trim$(docxAsPdfFallback))
 
-        If overrideUsado Or overrideModo Then houveOverride = True
+            overrideReason = "Extensão ." & extLower & " não suportada como input_file em /v1/responses."
 
-        ' ============ effective_mode ============
-        Dim modoPedido As String, modoEfetivo As String, overrideReason As String
-        modoPedido = usoFinal
-        modoEfetivo = usoFinal
-        overrideReason = ""
-
-        If modoEfetivo = "as_is" Then
-            Dim extLower As String
-            extLower = LCase$(Trim$(ext))
-
-            If extLower <> "" And (Not Files_IsExtSuportadaComoInputFileResponses(extLower)) Then
-                Dim policy As String
-                Dim fallbackPolicy As String
-
-                policy = UCase$(Trim$(docxContextMode))
-                fallbackPolicy = UCase$(Trim$(docxAsPdfFallback))
-
-                overrideReason = "Extensão ." & extLower & " não suportada como input_file em /v1/responses."
-
-                Select Case policy
-                    Case "ERROR"
-                        status = "UNSUPPORTED_EXT_AS_INPUT_FILE"
-                        Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_INPUTFILE_OVERRIDDEN", _
-                            "Pedido '" & modoPedido & "' para ." & extLower & " é incompatível (policy=ERROR).", _
-                            "Use (as pdf) ou (text) no anexo; ou configure FILES_DOCX_CONTEXT_MODE=AUTO_AS_PDF/AUTO_TEXT_EMBED.")
-                        Call Files_OperacoesAdicionarResultado(d, status, resolvedName, modoPedido, overrideReason, False, True, required)
-                        If required Then
-                            outFalhaCritica = True
-                            outErroMsg = "Ficheiro obrigatório não suportado como input_file em /v1/responses: " & resolvedName & " (." & extLower & ")."
-                        End If
-                        GoTo ProximoItem
-
-                    Case "AUTO_TEXT_EMBED"
-                        If Files_PodeExtrairTexto(extLower) Then
-                            modoEfetivo = "text_embed"
-                        ElseIf Files_PodeConverterParaPDF(extLower) Then
-                            modoEfetivo = "pdf_upload"
-                        Else
-                            status = "UNSUPPORTED_EXT_NO_FALLBACK"
-                            Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_INPUTFILE_OVERRIDDEN", _
-                                "Não há alternativa para tratar ." & extLower & " (sem conversão PDF e sem extração de texto).", _
-                                "Use (text) ou forneça PDF; ou configure FILES_DOCX_CONTEXT_MODE=AUTO_AS_PDF com fallback TEXT_EMBED.")
-                            Call Files_OperacoesAdicionarResultado(d, status, resolvedName, modoPedido, overrideReason, False, True, required)
-                            If required Then
-                                outFalhaCritica = True
-                                outErroMsg = "Ficheiro obrigatório não suportado e sem fallback: " & resolvedName & " (." & extLower & ")."
-                            End If
-                            GoTo ProximoItem
-                        End If
-
-                    Case Else ' AUTO_AS_PDF
-                        If Files_PodeConverterParaPDF(extLower) Then
-                            modoEfetivo = "pdf_upload"
-                        ElseIf fallbackPolicy = "TEXT_EMBED" And Files_PodeExtrairTexto(extLower) Then
-                            modoEfetivo = "text_embed"
-                        Else
-                            status = "UNSUPPORTED_EXT_PDF_CONVERSION_NOT_AVAILABLE"
-                            Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_INPUTFILE_OVERRIDDEN", _
-                                "Conversão para PDF não disponível para ." & extLower & " e fallback=ERROR.", _
-                                "Use (text) ou forneça PDF; ou configure FILES_DOCX_AS_PDF_FALLBACK=TEXT_EMBED.")
-                            Call Files_OperacoesAdicionarResultado(d, status, resolvedName, modoPedido, overrideReason, False, True, required)
-                            If required Then
-                                outFalhaCritica = True
-                                outErroMsg = "Conversão para PDF não disponível e fallback=ERROR para: " & resolvedName & " (." & extLower & ")."
-                            End If
-                            GoTo ProximoItem
-                        End If
-                End Select
-
-                If modoEfetivo <> modoPedido Then
-                    overrideModo = True
-                    overrideUsado = True
-                    houveOverride = True
+            Select Case policy
+                Case "ERROR"
+                    status = "UNSUPPORTED_EXT_AS_INPUT_FILE"
                     Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_INPUTFILE_OVERRIDDEN", _
-                        "Override automático: raw_mode=" & modoPedido & " => effective_mode=" & modoEfetivo & " (" & overrideReason & ")", _
-                        "Recomendação: para DOCX/PPTX, use (as pdf) por defeito; alternativa: (text).")
-                End If
-            End If
-        End If
-
-        usoFinal = modoEfetivo
-        dbgUsoFinal = usoFinal
-
-        Dim lastMod As Date
-        lastMod = Files_DataModificacao(resolvedPath)
-
-        Dim convertido As Boolean
-        convertido = False
-
-        Dim sourceHash As String
-        sourceHash = ""
-
-        Dim hashUsado As String
-        hashUsado = ""
-
-        Dim fileId As String
-        fileId = ""
-
-        Dim erroLocal As String
-        erroLocal = ""
-
-        Dim caminhoUsado As String
-        caminhoUsado = resolvedPath
-
-        ' ======= BLOCO PDF (corrigido) =======
-        If usoFinal = "pdf_upload" And LCase$(ext) <> EXT_PDF Then
-
-            If Files_PodeConverterParaPDF(LCase$(ext)) Then
-                sourceHash = Files_SHA256_File(resolvedPath)
-
-                Dim pdfPath As String
-                pdfPath = Files_ComporCaminhoPdfConvertido(pdfCacheFolder, resolvedName)
-
-                Dim okConv As Boolean
-                Dim usedCache As Boolean
-                Dim convertedNow As Boolean
-
-                usedCache = False
-                convertedNow = False
-                erroLocal = ""
-
-                okConv = Files_PdfCache_GetOrConvertPdf( _
-                            promptId, _
-                            resolvedName, _
-                            resolvedPath, _
-                            pdfPath, _
-                            sourceHash, _
-                            usedCache, _
-                            convertedNow, _
-                            erroLocal _
-                        )
-
-                If okConv Then
-                    caminhoUsado = pdfPath
-                    convertido = True
-
-                    If convertedNow Then
-                        filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " convertido para PDF: " & resolvedName & vbCrLf
-                    ElseIf usedCache Then
-                        filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " PDF em cache: " & resolvedName & vbCrLf
-                    Else
-                        filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " PDF OK (estado cache indeterminado): " & resolvedName & vbCrLf
+                        "Pedido '" & modoPedido & "' para ." & extLower & " é incompatível (policy=ERROR).", _
+                        "Use (as pdf) ou (text) no anexo; ou configure FILES_DOCX_CONTEXT_MODE=AUTO_AS_PDF/AUTO_TEXT_EMBED.")
+                    Call Files_OperacoesAdicionarResultado(d, status, resolvedName, modoPedido, "", False, True, False)
+                    If required Then
+                        outFalhaCritica = True
+                        outErroMsg = "Ficheiro obrigatório não suportado como input_file em /v1/responses: " & resolvedName & " (." & extLower & ")."
                     End If
+                    GoTo ProximoItem
 
-                Else
-                    filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " falha conversao PDF: " & resolvedName & " | " & erroLocal & vbCrLf
-
-                    Call Debug_Registar(0, promptId, "ALERTA", "", "as_pdf", _
-                        "Falha ao converter para PDF: " & resolvedName & " | " & erroLocal, _
-                        "Sugestao: verifique se Word/PowerPoint estao instalados e se o ficheiro abre sem erros.")
-
-                    If UCase$(Trim$(docxAsPdfFallback)) = "ERROR" Then
+                Case "AUTO_TEXT_EMBED"
+                    If Files_PodeExtrairTexto(extLower) Then
+                        modoEfetivo = "text_embed"
+                    ElseIf Files_PodeConverterParaPDF(extLower) Then
+                        modoEfetivo = "pdf_upload"
+                    Else
+                        status = "UNSUPPORTED_EXT_NO_FALLBACK"
+                        Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_INPUTFILE_OVERRIDDEN", _
+                            "Não há alternativa para tratar ." & extLower & " (sem conversão PDF e sem extração de texto).", _
+                            "Use (text) ou forneça PDF; ou configure FILES_DOCX_CONTEXT_MODE=AUTO_AS_PDF com fallback TEXT_EMBED.")
+                        Call Files_OperacoesAdicionarResultado(d, status, resolvedName, modoPedido, "", False, True, False)
                         If required Then
                             outFalhaCritica = True
-                            outErroMsg = "Falha conversão PDF para ficheiro obrigatório: " & resolvedName & " | " & erroLocal
+                            outErroMsg = "Ficheiro obrigatório não suportado e sem fallback: " & resolvedName & " (." & extLower & ")."
                         End If
-                        Call Files_OperacoesAdicionarResultado(d, "PDF_CONVERSION_FAIL", resolvedName, "pdf_upload", erroLocal, False, True, required)
                         GoTo ProximoItem
-                    Else
-                        usoFinal = "text_embed"
-                        dbgUsoFinal = usoFinal
-                        convertido = False
                     End If
+
+                Case Else ' AUTO_AS_PDF (default)
+                    If Files_PodeConverterParaPDF(extLower) Then
+                        modoEfetivo = "pdf_upload"
+                    ElseIf fallbackPolicy = "TEXT_EMBED" And Files_PodeExtrairTexto(extLower) Then
+                        modoEfetivo = "text_embed"
+                    Else
+                        status = "UNSUPPORTED_EXT_PDF_CONVERSION_NOT_AVAILABLE"
+                        Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_INPUTFILE_OVERRIDDEN", _
+                            "Conversão para PDF não disponível para ." & extLower & " e fallback=ERROR.", _
+                            "Use (text) ou forneça PDF; ou configure FILES_DOCX_AS_PDF_FALLBACK=TEXT_EMBED.")
+                        Call Files_OperacoesAdicionarResultado(d, status, resolvedName, modoPedido, "", False, True, False)
+                        If required Then
+                            outFalhaCritica = True
+                            outErroMsg = "Conversão para PDF não disponível e fallback=ERROR para: " & resolvedName & " (." & extLower & ")."
+                        End If
+                        GoTo ProximoItem
+                    End If
+            End Select
+
+            If modoEfetivo <> modoPedido Then
+                overrideModo = True
+                overrideUsado = True
+                houveOverride = True
+                Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_INPUTFILE_OVERRIDDEN", _
+                    "Override automático: raw_mode=" & modoPedido & " => effective_mode=" & modoEfetivo & " (" & overrideReason & ")", _
+                    "Recomendação: para DOCX/PPTX, use (as pdf) por defeito; alternativa: (text).")
+            End If
+        End If
+    End If
+
+    usoFinal = modoEfetivo
+    dbgUsoFinal = usoFinal
+
+    Dim lastMod As Date
+    lastMod = Files_DataModificacao(resolvedPath)
+
+    Dim sizeBytesOrig As Double
+    sizeBytesOrig = Files_TamanhoBytes(resolvedPath)
+
+    Dim convertido As Boolean
+    convertido = False
+
+    Dim sourceHash As String
+    sourceHash = ""
+
+    Dim hashUsado As String
+    hashUsado = ""
+
+    Dim fileId As String
+    fileId = ""
+
+    Dim erroLocal As String
+    erroLocal = ""
+
+    Dim caminhoUsado As String
+    caminhoUsado = resolvedPath
+
+    Dim usedCache As Boolean
+    Dim convertedNow As Boolean
+    usedCache = False
+    convertedNow = False
+
+    ' ============================================================
+    ' PDF upload (inclui pedidos explícitos (as_pdf) e overrides)
+    ' - usa PDF cache para evitar reconversão
+    ' ============================================================
+    If usoFinal = "pdf_upload" And LCase$(ext) <> EXT_PDF Then
+
+        If Files_PodeConverterParaPDF(LCase$(ext)) Then
+            sourceHash = Files_SHA256_File(resolvedPath)
+
+            Dim pdfPath As String
+            pdfPath = Files_ComporCaminhoPdfConvertido(pdfCacheFolder, resolvedName)
+
+            Dim okConv As Boolean
+            okConv = Files_PdfCache_GetOrConvertPdf( _
+                promptId, _
+                resolvedName, _
+                resolvedPath, _
+                pdfPath, _
+                sourceHash, _
+                usedCache, _
+                convertedNow, _
+                erroLocal _
+            )
+
+            If okConv Then
+                caminhoUsado = pdfPath
+                convertido = True
+
+                If convertedNow Then
+                    filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " convertido para PDF: " & resolvedName & vbCrLf
+                ElseIf usedCache Then
+                    filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " PDF em cache: " & resolvedName & vbCrLf
+                Else
+                    filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " PDF OK (cache indeterminado): " & resolvedName & vbCrLf
                 End If
 
             Else
+                filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " falha conversao PDF: " & resolvedName & " | " & erroLocal & vbCrLf
+
                 Call Debug_Registar(0, promptId, "ALERTA", "", "as_pdf", _
-                    "Conversão para PDF não suportada para extensão ." & ext & " | ficheiro=" & resolvedName, _
-                    "Use (text) ou forneça PDF; ou configure FILES_DOCX_CONTEXT_MODE=AUTO_TEXT_EMBED.")
+                    "Falha ao converter para PDF: " & resolvedName & " | " & erroLocal, _
+                    "Sugestao: verifique se Word/PowerPoint estao instalados e se o ficheiro abre sem erros.")
 
                 If UCase$(Trim$(docxAsPdfFallback)) = "ERROR" Then
                     If required Then
                         outFalhaCritica = True
-                        outErroMsg = "Conversão para PDF não suportada (obrigatório): " & resolvedName & " (." & ext & ")."
+                        outErroMsg = "Falha conversão PDF para ficheiro obrigatório: " & resolvedName & " | " & erroLocal
                     End If
-                    Call Files_OperacoesAdicionarResultado(d, "PDF_CONVERSION_NOT_SUPPORTED", resolvedName, "pdf_upload", "Sem conversão PDF", False, True, required)
+                    Call Files_OperacoesAdicionarResultado(d, "PDF_CONVERSION_FAIL", resolvedName, "pdf_upload", "", False, True, False)
                     GoTo ProximoItem
                 Else
                     usoFinal = "text_embed"
                     dbgUsoFinal = usoFinal
                     convertido = False
+                    usedCache = False
+                    convertedNow = False
+                    caminhoUsado = resolvedPath
+                    erroLocal = ""
                 End If
             End If
-        End If
-
-        Dim sizeBytesUsado As Double
-        sizeBytesUsado = Files_TamanhoBytes(caminhoUsado)
-
-        Dim textoExtraDeste As String
-        textoExtraDeste = ""
-
-        ' calcular allowReuse/reuseTag por ficheiro (precedência: prompt > Config)
-        Dim allowReuse As Boolean
-        Dim reuseTag As String
-
-        allowReuse = Files_Config_ReutilizacaoUpload()
-        reuseTag = "reuse=" & IIf(allowReuse, "TRUE", "FALSE") & " (config)"
-
-        If d.exists("reuse_override_found") Then
-            If CBool(d("reuse_override_found")) Then
-                allowReuse = CBool(d("reuse_override_value"))
-                reuseTag = "reuse=" & IIf(allowReuse, "TRUE", "FALSE") & " (prompt)"
-            End If
-        End If
-
-        If usoFinal = "text_embed" Then
-
-            textoExtraDeste = Files_ExtrairTextoDoFicheiro(caminhoUsado, erroLocal)
-
-            If erroLocal <> "" Then
-                Call Debug_Registar(0, promptId, "ALERTA", "", "text_embed", _
-                    "Falha ao extrair texto: " & resolvedName & " | " & erroLocal, _
-                    "Sugestao: confirme extensao e permissao. Se for binario, use (as_pdf) ou (as_is).")
-            End If
-
-            If textoExtraDeste <> "" Then
-                Dim charsExtra As Long
-                charsExtra = Len(textoExtraDeste)
-
-                If textEmbedMaxChars > 0 And charsExtra > textEmbedMaxChars Then
-                    Dim overflowAction As String
-                    overflowAction = UCase$(Trim$(textEmbedOverflowAction))
-
-                    Call Debug_Registar(0, promptId, "ALERTA", "", "TEXT_EMBED_TOO_LARGE", _
-                        "text_embed grande: " & resolvedName & " | chars=" & charsExtra & " | max=" & textEmbedMaxChars & " | action=" & overflowAction, _
-                        "Sugestao: use (as pdf); ou aumente FILES_TEXT_EMBED_MAX_CHARS; ou mude FILES_TEXT_EMBED_OVERFLOW_ACTION.")
-
-                    Select Case overflowAction
-                        Case "ALERT_ONLY"
-                            ' Só alerta
-
-                        Case "TRUNCATE"
-                            textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: excedeu FILES_TEXT_EMBED_MAX_CHARS]"
-
-                        Case "STOP"
-                            Call Files_OperacoesAdicionarResultado(d, "TEXT_EMBED_TOO_LARGE_STOP", resolvedName, "text_embed", _
-                                "text_embed excede máximo (" & charsExtra & " > " & textEmbedMaxChars & ")", False, True, required)
-
-                            If required Then
-                                outFalhaCritica = True
-                                outErroMsg = "text_embed demasiado grande para ficheiro obrigatório: " & resolvedName & " (chars=" & charsExtra & ")."
-                            End If
-                            GoTo ProximoItem
-
-                        Case Else ' RETRY_AS_PDF
-                            filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload: " & resolvedName & vbCrLf
-
-                            usoFinal = "pdf_upload"
-                            dbgUsoFinal = usoFinal
-
-                            If LCase$(Files_ObterExtensao(caminhoUsado)) <> EXT_PDF Then
-                                If Files_PodeConverterParaPDF(LCase$(ext)) Then
-                                    sourceHash = Files_SHA256_File(resolvedPath)
-
-                                    Dim pdfPath2 As String
-                                    pdfPath2 = Files_ComporCaminhoPdfConvertido(pdfCacheFolder, resolvedName)
-
-                                    Dim okConv2 As Boolean
-                                    Dim usedCache2 As Boolean
-                                    Dim convertedNow2 As Boolean
-                                    Dim erroConv2 As String
-
-                                    usedCache2 = False
-                                    convertedNow2 = False
-                                    erroConv2 = ""
-
-                                    okConv2 = Files_PdfCache_GetOrConvertPdf( _
-                                                promptId, _
-                                                resolvedName, _
-                                                resolvedPath, _
-                                                pdfPath2, _
-                                                sourceHash, _
-                                                usedCache2, _
-                                                convertedNow2, _
-                                                erroConv2 _
-                                            )
-
-                                    If okConv2 Then
-                                        caminhoUsado = pdfPath2
-                                        convertido = True
-
-                                        If convertedNow2 Then
-                                            filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload (PDF gerado): " & resolvedName & vbCrLf
-                                        ElseIf usedCache2 Then
-                                            filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload (PDF em cache): " & resolvedName & vbCrLf
-                                        Else
-                                            filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload (estado indeterminado): " & resolvedName & vbCrLf
-                                        End If
-
-                                    Else
-                                        If UCase$(Trim$(docxAsPdfFallback)) = "ERROR" Then
-                                            Call Files_OperacoesAdicionarResultado(d, "PDF_CONVERSION_FAIL", resolvedName, "pdf_upload", _
-                                                "Falha conversão PDF: " & erroConv2, False, True, required)
-
-                                            If required Then
-                                                outFalhaCritica = True
-                                                outErroMsg = "Falha conversão PDF (overflow) para ficheiro obrigatório: " & resolvedName & " | " & erroConv2
-                                            End If
-                                            GoTo ProximoItem
-                                        Else
-                                            textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: conversão PDF falhou]"
-                                            usoFinal = "text_embed"
-                                            dbgUsoFinal = usoFinal
-                                            convertido = False
-                                        End If
-                                    End If
-                                Else
-                                    textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: não é possível converter para PDF]"
-                                    usoFinal = "text_embed"
-                                    dbgUsoFinal = usoFinal
-                                    convertido = False
-                                End If
-                            End If
-
-                            If usoFinal = "pdf_upload" Then
-                                GoTo ProcessarComoInputFile
-                            End If
-                    End Select
-                End If
-            End If
-
-            If textoExtraDeste <> "" Then
-                textoEmbedTotal = textoEmbedTotal & vbCrLf & vbCrLf & _
-                    "----- BEGIN FILE: " & resolvedName & " -----" & vbCrLf & _
-                    textoExtraDeste & vbCrLf & _
-                    "----- END FILE: " & resolvedName & " -----" & vbCrLf
-
-                hashUsado = Files_SHA256_Text(textoExtraDeste)
-            Else
-                hashUsado = Files_SHA256_File(caminhoUsado)
-            End If
-
-            Call Files_UpsertFilesManagement(wsFiles, mapaCab, pipelineNome, promptId, resolvedName, _
-                inputFolder, caminhoUsado, "", "text_embed", False, sourceHash, lastMod, sizeBytesUsado, hashUsado, _
-                "text_embed; origem=" & IIf(convertido, "pdf_convertido", "original"))
-
-            filesUsedLista = Files_AppendLista(filesUsedLista, resolvedName & " (text)")
-            Call Files_OperacoesAdicionarResultado(d, "OK", resolvedName, "text_embed", "", convertido, (overrideUsado Or overrideModo), False)
-
-        ElseIf usoFinal = "image_upload" Then
-            ' (mantém o teu bloco existente de imagem — não alterado aqui)
-            ' ... (deixa como estava no teu módulo)
-            ' Para não perder funcionalidades, não mexo neste ramo aqui.
-
-        ElseIf usoFinal = "pdf_upload" Or usoFinal = "as_is" Then
-
-ProcessarComoInputFile:
-            hashUsado = Files_SHA256_File(caminhoUsado)
-
-            Dim modoCache As String
-            modoCache = IIf(usoFinal = "as_is", "as_is", "pdf_upload")
-
-            If transportMode = TRANSPORT_INLINE Then
-                ' (mantém o teu bloco existente INLINE — não alterado aqui)
-                ' ...
-            Else
-                fileId = Files_ObterOuCriarFileId(wsFiles, mapaCab, apiKey, promptId, pipelineNome, _
-                    resolvedName, inputFolder, caminhoUsado, modoCache, convertido, sourceHash, lastMod, sizeBytesUsado, hashUsado, _
-                    allowReuse, reuseTag, erroLocal)
-
-                If fileId <> "" Then
-                    filePartsJson = Files_AppendJsonPart(filePartsJson, _
-                        "{""type"":""input_file"",""file_id"":""" & Files_JsonEscape(fileId) & """}")
-
-                    fileIdsLista = Files_AppendLista(fileIdsLista, fileId)
-
-                    If convertido Then
-                        filesUsedLista = Files_AppendLista(filesUsedLista, resolvedName & " (as_pdf)")
-                    ElseIf usoFinal = "as_is" Then
-                        filesUsedLista = Files_AppendLista(filesUsedLista, resolvedName & " (as_is)")
-                    Else
-                        filesUsedLista = Files_AppendLista(filesUsedLista, resolvedName & " (pdf)")
-                    End If
-
-                    Call Files_OperacoesAdicionarResultado(d, "OK", resolvedName, modoCache, fileId, convertido, (overrideUsado Or overrideModo), False)
-                Else
-                    GoTo FicheiroFalhou
-                End If
-            End If
-
-            GoTo ProximoItem
-
-FicheiroFalhou:
-            filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " ficheiro falhou: " & resolvedName & " | " & erroLocal & vbCrLf
-
-            If required Then
-                outFalhaCritica = True
-                outErroMsg = "Falha ao anexar ficheiro obrigatorio: " & resolvedName & " | " & erroLocal
-                Call Debug_Registar(0, promptId, "ERRO", "", "FILES", outErroMsg, "Sugestao: verifique tamanho, permissao e configuracao de transporte.")
-            Else
-                Call Debug_Registar(0, promptId, "ALERTA", "", "FILES", _
-                    "Falha ao anexar ficheiro: " & resolvedName & " | " & erroLocal, _
-                    "Sugestao: verifique tamanho, permissao e configuracao de transporte.")
-            End If
-
-            Call Files_OperacoesAdicionarResultado(d, "UPLOAD_FAIL", resolvedName, modoCache, "", convertido, (overrideUsado Or overrideModo), False)
 
         Else
-            filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " modo desconhecido: " & resolvedName & " | " & usoFinal & vbCrLf
-            Call Debug_Registar(0, promptId, "ALERTA", "", "FILES", _
-                "Modo desconhecido ao preparar ficheiro: " & resolvedName & " | usoFinal=" & usoFinal, _
-                "Sugestao: verifique regras de usage_mode.")
-            Call Files_OperacoesAdicionarResultado(d, "UPLOAD_FAIL", resolvedName, usoFinal, "", convertido, (overrideUsado Or overrideModo), False)
+            Call Debug_Registar(0, promptId, "ALERTA", "", "as_pdf", _
+                "Conversão para PDF não suportada para extensão ." & ext & " | ficheiro=" & resolvedName, _
+                "Use (text) ou forneça PDF; ou configure FILES_DOCX_CONTEXT_MODE=AUTO_TEXT_EMBED.")
+
+            If UCase$(Trim$(docxAsPdfFallback)) = "ERROR" Then
+                If required Then
+                    outFalhaCritica = True
+                    outErroMsg = "Conversão para PDF não suportada (obrigatório): " & resolvedName & " (." & ext & ")."
+                End If
+                Call Files_OperacoesAdicionarResultado(d, "PDF_CONVERSION_NOT_SUPPORTED", resolvedName, "pdf_upload", "", False, True, False)
+                GoTo ProximoItem
+            Else
+                usoFinal = "text_embed"
+                dbgUsoFinal = usoFinal
+                convertido = False
+                usedCache = False
+                convertedNow = False
+                caminhoUsado = resolvedPath
+            End If
         End If
 
+    End If
+
+    Dim sizeBytesUsado As Double
+    sizeBytesUsado = Files_TamanhoBytes(caminhoUsado)
+
+    Dim textoExtraDeste As String
+    textoExtraDeste = ""
+
+    ' calcular allowReuse/reuseTag por ficheiro (precedência: prompt > Config)
+    Dim allowReuse As Boolean
+    Dim reuseTag As String
+
+    allowReuse = Files_Config_ReutilizacaoUpload()
+    reuseTag = "reuse=" & IIf(allowReuse, "TRUE", "FALSE") & " (config)"
+
+    If d.exists("reuse_override_found") Then
+        If CBool(d("reuse_override_found")) Then
+            allowReuse = CBool(d("reuse_override_value"))
+            reuseTag = "reuse=" & IIf(allowReuse, "TRUE", "FALSE") & " (prompt)"
+        End If
+    End If
+
+    ' Nome a enviar no envelope JSON INLINE (importante quando há conversão para PDF)
+    Dim nomeEnvio As String
+    nomeEnvio = resolvedName
+    If LCase$(Files_ObterExtensao(caminhoUsado)) = EXT_PDF And LCase$(Files_ObterExtensao(resolvedName)) <> EXT_PDF Then
+        nomeEnvio = Files_SemExtensao(resolvedName) & "." & EXT_PDF
+    End If
+
+    If usoFinal = "text_embed" Then
+
+        erroLocal = ""
+        textoExtraDeste = Files_ExtrairTextoDoFicheiro(caminhoUsado, erroLocal)
+
+        If erroLocal <> "" Then
+            Call Debug_Registar(0, promptId, "ALERTA", "", "text_embed", _
+                "Falha ao extrair texto: " & resolvedName & " | " & erroLocal, _
+                "Sugestao: confirme extensao e permissao. Se for binario, use (as_pdf) ou (as_is).")
+        End If
+
+        If textoExtraDeste <> "" Then
+            Dim charsExtra As Long
+            charsExtra = Len(textoExtraDeste)
+
+            If textEmbedMaxChars > 0 And charsExtra > textEmbedMaxChars Then
+                Dim overflowAction As String
+                overflowAction = UCase$(Trim$(textEmbedOverflowAction))
+
+                Call Debug_Registar(0, promptId, "ALERTA", "", "TEXT_EMBED_TOO_LARGE", _
+                    "text_embed grande: " & resolvedName & " | chars=" & charsExtra & " | max=" & textEmbedMaxChars & " | action=" & overflowAction, _
+                    "Sugestao: use (as pdf); ou aumente FILES_TEXT_EMBED_MAX_CHARS; ou mude FILES_TEXT_EMBED_OVERFLOW_ACTION.")
+
+                Select Case overflowAction
+                    Case "ALERT_ONLY"
+
+                    Case "TRUNCATE"
+                        textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: excedeu FILES_TEXT_EMBED_MAX_CHARS]"
+
+                    Case "STOP"
+                        Call Files_OperacoesAdicionarResultado(d, "TEXT_EMBED_TOO_LARGE_STOP", resolvedName, "text_embed", "", False, True, False)
+
+                        If required Then
+                            outFalhaCritica = True
+                            outErroMsg = "text_embed demasiado grande para ficheiro obrigatório: " & resolvedName & " (chars=" & charsExtra & ")."
+                        End If
+                        GoTo ProximoItem
+
+                    Case Else ' RETRY_AS_PDF
+                        filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload: " & resolvedName & vbCrLf
+
+                        usoFinal = "pdf_upload"
+                        dbgUsoFinal = usoFinal
+                        overrideModo = True
+                        houveOverride = True
+
+                        If LCase$(Files_ObterExtensao(caminhoUsado)) <> EXT_PDF Then
+                            If Files_PodeConverterParaPDF(LCase$(ext)) Then
+                                sourceHash = Files_SHA256_File(resolvedPath)
+
+                                Dim pdfPath2 As String
+                                pdfPath2 = Files_ComporCaminhoPdfConvertido(pdfCacheFolder, resolvedName)
+
+                                Dim usedCache2 As Boolean
+                                Dim convertedNow2 As Boolean
+                                Dim erroConv2 As String
+                                usedCache2 = False
+                                convertedNow2 = False
+                                erroConv2 = ""
+
+                                Dim okConv2 As Boolean
+                                okConv2 = Files_PdfCache_GetOrConvertPdf( _
+                                    promptId, _
+                                    resolvedName, _
+                                    resolvedPath, _
+                                    pdfPath2, _
+                                    sourceHash, _
+                                    usedCache2, _
+                                    convertedNow2, _
+                                    erroConv2 _
+                                )
+
+                                If okConv2 Then
+                                    caminhoUsado = pdfPath2
+                                    convertido = True
+                                    usedCache = usedCache2
+                                    convertedNow = convertedNow2
+                                    erroLocal = ""
+                                    nomeEnvio = Files_SemExtensao(resolvedName) & "." & EXT_PDF
+
+                                    If convertedNow2 Then
+                                        filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload (PDF gerado): " & resolvedName & vbCrLf
+                                    ElseIf usedCache2 Then
+                                        filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload (PDF em cache): " & resolvedName & vbCrLf
+                                    Else
+                                        filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload (PDF OK): " & resolvedName & vbCrLf
+                                    End If
+
+                                    sizeBytesUsado = Files_TamanhoBytes(caminhoUsado)
+
+                                    GoTo ProcessarComoInputFile
+                                Else
+                                    Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_ASPDF_CONVERSION_FAIL", _
+                                        "Falha a converter para PDF (overflow RETRY_AS_PDF): " & resolvedName & " | " & erroConv2, _
+                                        "Fallback: FILES_DOCX_AS_PDF_FALLBACK=TEXT_EMBED (default) ou ERROR.")
+
+                                    If UCase$(Trim$(docxAsPdfFallback)) = "ERROR" Then
+                                        Call Files_OperacoesAdicionarResultado(d, "PDF_CONVERSION_FAIL", resolvedName, "pdf_upload", "", False, True, False)
+
+                                        If required Then
+                                            outFalhaCritica = True
+                                            outErroMsg = "Falha conversão PDF (overflow) para ficheiro obrigatório: " & resolvedName & " | " & erroConv2
+                                        End If
+                                        GoTo ProximoItem
+                                    Else
+                                        textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: conversão PDF falhou]"
+                                        usoFinal = "text_embed"
+                                        dbgUsoFinal = usoFinal
+                                        convertido = False
+                                    End If
+                                End If
+                            Else
+                                textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: não é possível converter para PDF]"
+                                usoFinal = "text_embed"
+                                dbgUsoFinal = usoFinal
+                                convertido = False
+                            End If
+                        Else
+                            sizeBytesUsado = Files_TamanhoBytes(caminhoUsado)
+                            GoTo ProcessarComoInputFile
+                        End If
+                End Select
+            End If
+        End If
+
+        If textoExtraDeste <> "" Then
+            textoEmbedTotal = textoEmbedTotal & vbCrLf & vbCrLf & _
+                "----- BEGIN FILE: " & resolvedName & " -----" & vbCrLf & _
+                textoExtraDeste & vbCrLf & _
+                "----- END FILE: " & resolvedName & " -----" & vbCrLf
+
+            hashUsado = Files_SHA256_Text(textoExtraDeste)
+        Else
+            hashUsado = Files_SHA256_File(caminhoUsado)
+        End If
+
+        Call Files_UpsertFilesManagement(wsFiles, mapaCab, pipelineNome, promptId, resolvedName, _
+            inputFolder, caminhoUsado, "", "text_embed", False, sourceHash, lastMod, sizeBytesUsado, hashUsado, _
+            "text_embed; origem=" & IIf(convertido, "pdf_convertido", "original"))
+
+        filesUsedLista = Files_AppendLista(filesUsedLista, resolvedName & " (text)")
+        Call Files_OperacoesAdicionarResultado(d, "OK", resolvedName, "text_embed", "", convertido, (overrideUsado Or overrideModo), False)
+
+    ElseIf usoFinal = "image_upload" Then
+
+        erroLocal = ""
+        hashUsado = Files_SHA256_File(caminhoUsado)
+
+        If transportMode = TRANSPORT_INLINE Then
+            If inlineMaxBytes > 0 And sizeBytesUsado > inlineMaxBytes Then
+                erroLocal = "INLINE_BASE64 excede limite (" & Files_FormatBytes(inlineMaxBytes) & "). size=" & Files_FormatBytes(sizeBytesUsado)
+                GoTo ImagemFalhou
+            End If
+
+            Dim dataUrlImg As String
+            dataUrlImg = Files_BuildDataUrlFromFile(caminhoUsado, Files_ContentTypePorExtensao(ext), erroLocal)
+            If dataUrlImg = "" Then GoTo ImagemFalhou
+
+            filePartsJson = Files_AppendJsonPart(filePartsJson, _
+                "{""type"":""input_image"",""image_url"":""" & Files_JsonEscape(dataUrlImg) & """}")
+
+            filesUsedLista = Files_AppendLista(filesUsedLista, resolvedName & " (image_inline)")
+            filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " inline image: " & resolvedName & vbCrLf
+
+            Call Files_UpsertFilesManagement(wsFiles, mapaCab, pipelineNome, promptId, resolvedName, _
+                inputFolder, caminhoUsado, "", "image_upload", False, sourceHash, lastMod, sizeBytesUsado, hashUsado, _
+                "inline_base64")
+
+            Call Files_OperacoesAdicionarResultado(d, "OK", resolvedName, "image_inline", "", False, (overrideUsado Or overrideModo), False)
+
+        Else
+            fileId = Files_ObterOuCriarFileId(wsFiles, mapaCab, apiKey, promptId, pipelineNome, _
+                resolvedName, inputFolder, caminhoUsado, "image_upload", False, sourceHash, lastMod, sizeBytesUsado, hashUsado, _
+                allowReuse, reuseTag, erroLocal)
+
+            If fileId <> "" Then
+                filePartsJson = Files_AppendJsonPart(filePartsJson, _
+                    "{""type"":""input_image"",""file_id"":""" & Files_JsonEscape(fileId) & """}")
+
+                fileIdsLista = Files_AppendLista(fileIdsLista, fileId)
+                filesUsedLista = Files_AppendLista(filesUsedLista, resolvedName & " (image)")
+                Call Files_OperacoesAdicionarResultado(d, "OK", resolvedName, "image_upload", fileId, False, (overrideUsado Or overrideModo), False)
+            Else
+                GoTo ImagemFalhou
+            End If
+        End If
+
+        GoTo ProximoItem
+ImagemFalhou:
+filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " imagem falhou: " & resolvedName & " | " & erroLocal & vbCrLf
+        If required Then
+            outFalhaCritica = True
+            outErroMsg = "Falha ao anexar imagem obrigatoria: " & resolvedName & " | " & erroLocal
+            Call Debug_Registar(0, promptId, "ERRO", "", "FILES", outErroMsg, "Sugestao: verifique tamanho, permissao e configuracao de transporte.")
+        Else
+            Call Debug_Registar(0, promptId, "ALERTA", "", "FILES", _
+                "Falha ao anexar imagem: " & resolvedName & " | " & erroLocal, _
+                "Sugestao: verifique tamanho, permissao e configuracao de transporte.")
+        End If
+
+        Call Files_OperacoesAdicionarResultado(d, "UPLOAD_FAIL", resolvedName, "image_upload", "", False, (overrideUsado Or overrideModo), False)
+        GoTo ProximoItem
+
+    ElseIf usoFinal = "pdf_upload" Or usoFinal = "as_is" Then
+ProcessarComoInputFile:
+erroLocal = ""
+hashUsado = Files_SHA256_File(caminhoUsado)
+        Dim modoCache As String
+        modoCache = IIf(usoFinal = "as_is", "as_is", "pdf_upload")
+
+        If transportMode = TRANSPORT_INLINE Then
+            If inlineMaxBytes > 0 And sizeBytesUsado > inlineMaxBytes Then
+                erroLocal = "INLINE_BASE64 excede limite (" & Files_FormatBytes(inlineMaxBytes) & "). size=" & Files_FormatBytes(sizeBytesUsado)
+                GoTo FicheiroFalhou
+            End If
+
+            Dim mime As String
+            mime = Files_ContentTypePorExtensao(Files_ObterExtensao(caminhoUsado))
+            If mime = "" Then mime = "application/octet-stream"
+
+            Dim dataUrlFile As String
+            dataUrlFile = Files_BuildDataUrlFromFile(caminhoUsado, mime, erroLocal)
+            If dataUrlFile = "" Then GoTo FicheiroFalhou
+
+            filePartsJson = Files_AppendJsonPart(filePartsJson, _
+                "{""type"":""input_file"",""filename"":""" & Files_JsonEscape(nomeEnvio) & """,""file_data"":""" & Files_JsonEscape(dataUrlFile) & """}")
+
+            filesUsedLista = Files_AppendLista(filesUsedLista, nomeEnvio & " (file_inline)")
+            filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " inline file: " & nomeEnvio & vbCrLf
+
+            Call Files_UpsertFilesManagement(wsFiles, mapaCab, pipelineNome, promptId, resolvedName, _
+                inputFolder, caminhoUsado, "", modoCache, convertido, sourceHash, lastMod, sizeBytesUsado, hashUsado, _
+                "inline_base64")
+
+            Call Files_OperacoesAdicionarResultado(d, "OK", resolvedName, modoCache & "_inline", "", convertido, (overrideUsado Or overrideModo), False)
+
+        Else
+            fileId = Files_ObterOuCriarFileId(wsFiles, mapaCab, apiKey, promptId, pipelineNome, _
+                resolvedName, inputFolder, caminhoUsado, modoCache, convertido, sourceHash, lastMod, sizeBytesUsado, hashUsado, _
+                allowReuse, reuseTag, erroLocal)
+
+            If fileId <> "" Then
+                filePartsJson = Files_AppendJsonPart(filePartsJson, _
+                    "{""type"":""input_file"",""file_id"":""" & Files_JsonEscape(fileId) & """}")
+
+                fileIdsLista = Files_AppendLista(fileIdsLista, fileId)
+
+                If convertido Then
+                    filesUsedLista = Files_AppendLista(filesUsedLista, resolvedName & " (as_pdf)")
+                ElseIf usoFinal = "as_is" Then
+                    filesUsedLista = Files_AppendLista(filesUsedLista, resolvedName & " (as_is)")
+                Else
+                    filesUsedLista = Files_AppendLista(filesUsedLista, resolvedName & " (pdf)")
+                End If
+
+                Call Files_OperacoesAdicionarResultado(d, "OK", resolvedName, modoCache, fileId, convertido, (overrideUsado Or overrideModo), False)
+            Else
+                GoTo FicheiroFalhou
+            End If
+        End If
+
+        GoTo ProximoItem
+FicheiroFalhou:
+filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " ficheiro falhou: " & resolvedName & " | " & erroLocal & vbCrLf
+        If required Then
+            outFalhaCritica = True
+            outErroMsg = "Falha ao anexar ficheiro obrigatorio: " & resolvedName & " | " & erroLocal
+            Call Debug_Registar(0, promptId, "ERRO", "", "FILES", outErroMsg, "Sugestao: verifique tamanho, permissao e configuracao de transporte.")
+        Else
+            Call Debug_Registar(0, promptId, "ALERTA", "", "FILES", _
+                "Falha ao anexar ficheiro: " & resolvedName & " | " & erroLocal, _
+                "Sugestao: verifique tamanho, permissao e configuracao de transporte.")
+        End If
+
+        Call Files_OperacoesAdicionarResultado(d, "UPLOAD_FAIL", resolvedName, modoCache, "", convertido, (overrideUsado Or overrideModo), False)
+
+    Else
+        filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " modo desconhecido: " & resolvedName & " | " & usoFinal & vbCrLf
+        Call Debug_Registar(0, promptId, "ALERTA", "", "FILES", _
+            "Modo desconhecido ao preparar ficheiro: " & resolvedName & " | usoFinal=" & usoFinal, _
+            "Sugestao: verifique regras de usage_mode.")
+        Call Files_OperacoesAdicionarResultado(d, "UPLOAD_FAIL", resolvedName, usoFinal, "", convertido, (overrideUsado Or overrideModo), False)
+    End If
 ProximoItem:
-    Next i
+Next i
+outFilesUsedResumo = filesUsedLista
+outFilesOpsResumo = Files_NormalizarQuebrasLinha(filesOpsCurto)
+outFileIdsUsed = fileIdsLista
 
-    outFilesUsedResumo = filesUsedLista
-    outFilesOpsResumo = Files_NormalizarQuebrasLinha(filesOpsCurto)
-    outFileIdsUsed = fileIdsLista
+Call Files_EscreverOperacoes(celOps, diretivas, "", False)
 
-    Call Files_EscreverOperacoes(celOps, diretivas, "", False)
-
-    If outFalhaCritica Then
-        outInputJsonLiteralFinal = inputJsonLiteralBase
-        Files_PrepararContextoDaPrompt = False
-        Exit Function
-    End If
-
-    Dim textoFinal As String
-    textoFinal = promptText
-    If textoEmbedTotal <> "" Then
-        textoFinal = textoFinal & vbCrLf & vbCrLf & textoEmbedTotal
-    End If
-
-    If houveAmbiguidade Or houveOverride Then
-        textoFinal = textoFinal & vbCrLf & vbCrLf & "FILES CONTEXT:" & vbCrLf & _
-            Files_BuildFilesContextResumo(diretivas)
-    End If
-
-    outInputJsonLiteralFinal = Files_MontarInputJson( _
-        inputJsonLiteralBase, _
-        filePartsJson, _
-        textoFinal, _
-        (houveAmbiguidade Or houveOverride), _
-        promptId)
-
-    Exit Function
-
-TrataErro:
-    Files_PrepararContextoDaPrompt = False
-    outFalhaCritica = False
-
-    outErroMsg = Files_FormatErroDetalhado( _
-        "Files_PrepararContextoDaPrompt", _
-        dbgStep, dbgReq, dbgFile, dbgPath, dbgUsoFinal)
-
-    Call Debug_Registar(0, promptId, "ERRO", "", "FILES", outErroMsg, _
-        "Sugestao: ative Break on All Errors no VBE para ver a linha exacta; verifique hashing/base64 e ficheiros grandes.")
-
+If outFalhaCritica Then
     outInputJsonLiteralFinal = inputJsonLiteralBase
+    Files_PrepararContextoDaPrompt = False
+    Exit Function
+End If
+
+Dim textoFinal As String
+textoFinal = promptText
+If textoEmbedTotal <> "" Then
+    textoFinal = textoFinal & vbCrLf & vbCrLf & textoEmbedTotal
+End If
+
+If houveAmbiguidade Or houveOverride Then
+    textoFinal = textoFinal & vbCrLf & vbCrLf & "FILES CONTEXT:" & vbCrLf & _
+        Files_BuildFilesContextResumo(diretivas)
+End If
+
+outInputJsonLiteralFinal = Files_MontarInputJson( _
+    inputJsonLiteralBase, _
+    filePartsJson, _
+    textoFinal, _
+    (houveAmbiguidade Or houveOverride), _
+    promptId)
+
+Exit Function
+TrataErro:
+Files_PrepararContextoDaPrompt = False
+outFalhaCritica = False
+outErroMsg = Files_FormatErroDetalhado( _
+    "Files_PrepararContextoDaPrompt", _
+    dbgStep, dbgReq, dbgFile, dbgPath, dbgUsoFinal)
+
+Call Debug_Registar(0, promptId, "ERRO", "", "FILES", outErroMsg, _
+    "Sugestao: ative Break on All Errors no VBE para ver a linha exacta; verifique hashing/base64 e ficheiros grandes.")
+
+outInputJsonLiteralFinal = inputJsonLiteralBase
 End Function
+
 
 ' ============================================================
 ' CONFIG (folha Config)
