@@ -425,7 +425,7 @@ Private Function Process_Metadata( _
             Call WriteMetaJson(fullPath, pipelineNome, promptId, resultado.responseId, "metadata", overwriteMode, runFolder, runId, passo, "")
 
             ' FILES_MANAGEMENT (wrapper em M09; chamada best-effort via Application.Run)
-            Call Try_Files_LogEventOutput(pipelineNome, promptId, runFolder, fullPath, "output(metadata)", "", "process=metadata", resultado.responseId)
+            Call Try_Files_LogEventOutput(pipelineNome, promptId, runFolder, fullPath, "output(metadata)", "", "process=metadata", resultado.responseId, runId, passo, i - 1, "OUTPUT")
 
             ' outputs para Seguimento
             Call AppendList(outFilesUsed, "OUT:" & Replace(fullPath, runFolder & "\", ""))
@@ -599,7 +599,7 @@ Private Function Process_CodeInterpreter( _
         Dim notes As String
         notes = "process=code_interpreter"
         If usedFallback Then notes = notes & ";fallback=container_list"
-        Call Try_Files_LogEventOutput(pipelineNome, promptId, runFolder, fullPath, "output(code_interpreter)", "DL", notes, resultado.responseId)
+        Call Try_Files_LogEventOutput(pipelineNome, promptId, runFolder, fullPath, "output(code_interpreter)", "DL", notes, resultado.responseId, runId, passo, i - 1, "OUTPUT")
         Call AppendList(outFilesUsed, "OUT:" & Replace(fullPath, runFolder & "\", ""))
         Call AppendList(outFilesOps, "DL:" & Replace(fullPath, runFolder & "\", ""))
 ProximoFicheiro:
@@ -1024,7 +1024,7 @@ Private Function FO_IsFileOutputKey(ByVal k As String) As Boolean
 
 
     FO_IsFileOutputKey = (kk = "output_kind" Or kk = "process_mode" Or kk = "auto_save" Or kk = "overwrite_mode" Or kk = "file_name_prefix_template" Or kk = "pptx_mode" Or kk = "xlsx_mode" Or kk = "pdf_mode" Or kk = "image_mode" Or kk = "structured_outputs_mode")
-    
+
 
 End Function
 
@@ -1158,7 +1158,7 @@ Private Function FileOutput_BuildRunFolder(ByVal outputFolderBase As String, ByV
     Else
         FileOutput_BuildRunFolder = baseOut & "\" & pipelineNome
     End If
-    
+
 End Function
 
 Private Function FileOutput_ResolvePrefix(ByVal pipelineNome As String, ByVal promptId As String, ByVal passo As Long, ByVal runId As String, ByVal tpl As String) As String
@@ -1766,11 +1766,15 @@ Private Sub Try_Files_LogEventOutput( _
     ByVal usageMode As String, _
     ByVal op As String, _
     ByVal notes As String, _
-    ByVal responseId As String _
+    ByVal responseId As String, _
+    Optional ByVal runId As String = "", _
+    Optional ByVal stepN As Long = 0, _
+    Optional ByVal outputIndex As Long = -1, _
+    Optional ByVal sourceType As String = "OUTPUT" _
 )
     ' Best-effort: evita "Sub or Function not defined" se o wrapper ainda não existir/importado.
     On Error Resume Next
-    Application.Run "Files_LogEventOutput", pipelineNome, promptId, runFolder, fullPath, usageMode, op, notes, responseId
+    Application.Run "Files_LogEventOutput", pipelineNome, promptId, runFolder, fullPath, usageMode, op, notes, responseId, runId, stepN, outputIndex, sourceType
     On Error GoTo 0
 End Sub
 
@@ -2151,6 +2155,6 @@ Falha:
 End Sub
 
 
-    
+
 
 
