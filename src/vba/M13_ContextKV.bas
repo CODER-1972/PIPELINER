@@ -308,7 +308,8 @@ ByVal pipelineName As String, _
 ByVal stepN As Long, _
 ByVal promptId As String, _
 ByVal outputFolderBase As String, _
-ByVal runToken As String _
+ByVal runToken As String, _
+Optional ByVal outputTextOverride As String = "" _
 )
 On Error GoTo EH
 If Not ContextKV_GetBoolConfig("CONTEXT_KV_ENABLED", True) Then Exit Sub
@@ -326,15 +327,19 @@ If rowS = 0 Then
     Exit Sub
 End If
 
-Dim colOut As Long
-colOut = ContextKV_FindColumnByHeader(wsS, "Output (texto)")
-If colOut = 0 Then
-    ContextKV_LogEvent pipelineName, stepN, promptId, "CAPTURE_ERROR", "", "ERRO", "Coluna 'Output (texto)' não encontrada no Seguimento."
-    Exit Sub
-End If
-
 Dim rawOut As String
-rawOut = CStr(wsS.Cells(rowS, colOut).value)
+If Len(Trim$(outputTextOverride)) > 0 Then
+    rawOut = outputTextOverride
+Else
+    Dim colOut As Long
+    colOut = ContextKV_FindColumnByHeader(wsS, "Output (texto)")
+    If colOut = 0 Then
+        ContextKV_LogEvent pipelineName, stepN, promptId, "CAPTURE_ERROR", "", "ERRO", "Coluna 'Output (texto)' não encontrada no Seguimento."
+        Exit Sub
+    End If
+
+    rawOut = CStr(wsS.Cells(rowS, colOut).value)
+End If
 
 Dim fullOut As String
 fullOut = ContextKV_ResolveFullOutput(rawOut)
