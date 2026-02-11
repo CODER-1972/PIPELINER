@@ -98,7 +98,7 @@ Private Const H_HASH As String = "hash (SHA-256 do conteudo efetivamente usado)"
 Private Const H_LAST_MODIFIED As String = "last_modified"
 Private Const H_SIZE_BYTES As String = "size_bytes"
 Private Const H_LAST_USED_PIPELINE As String = "Last used_in_pipeline_name"
-Private Const H_UTILIZACOES As String = "Utilizações"
+Private Const H_UTILIZACOES As String = "UtilizaÃ§Ãµes"
 Private Const H_USED_IN_PROMPTS As String = "used_in_prompts"
 Private Const H_LAST_USED_AT As String = "last_used_at"
 Private Const H_NOTES As String = "notes"
@@ -146,9 +146,9 @@ End Sub
 
 
 ' ============================================================
-' (ALTERAR) Files_PrepararContextoDaPrompt — versão integral
-'   SUBSTITUA A FUNÇÃO INTEIRA por esta versão
-'   (Esta é a versão que cumpre D4: call EnsureConfig + allowReuse/reuseTag + passagem de parâmetros)
+' (ALTERAR) Files_PrepararContextoDaPrompt â€” versÃ£o integral
+'   SUBSTITUA A FUNÃ‡ÃƒO INTEIRA por esta versÃ£o
+'   (Esta Ã© a versÃ£o que cumpre D4: call EnsureConfig + allowReuse/reuseTag + passagem de parÃ¢metros)
 ' ============================================================
 Public Function Files_PrepararContextoDaPrompt( _
     ByVal apiKey As String, _
@@ -167,12 +167,12 @@ Public Function Files_PrepararContextoDaPrompt( _
 ) As Boolean
 
     ' ============================================================
-    ' Versão com:
-    ' - effective_mode (override quando /v1/responses não aceita as_is para DOCX/PPTX)
-    ' - Política DOCX/PPTX: AUTO_AS_PDF / AUTO_TEXT_EMBED / ERROR
-    ' - Fallback conversão PDF: TEXT_EMBED ou ERROR
-    ' - Limite e ação para text_embed grande
-    ' - PDF cache (evita reconversão -> evita hash diferente -> permite reutilização de file_id)
+    ' VersÃ£o com:
+    ' - effective_mode (override quando /v1/responses nÃ£o aceita as_is para DOCX/PPTX)
+    ' - PolÃ­tica DOCX/PPTX: AUTO_AS_PDF / AUTO_TEXT_EMBED / ERROR
+    ' - Fallback conversÃ£o PDF: TEXT_EMBED ou ERROR
+    ' - Limite e aÃ§Ã£o para text_embed grande
+    ' - PDF cache (evita reconversÃ£o -> evita hash diferente -> permite reutilizaÃ§Ã£o de file_id)
     ' - Label: ProcessarComoInputFile:
     ' ============================================================
 
@@ -204,7 +204,7 @@ Public Function Files_PrepararContextoDaPrompt( _
     Dim inlineMaxBytes As Double
     inlineMaxBytes = Files_Config_InlineMaxBytes()
 
-    ' --- políticas de contexto para Office + limites text_embed ---
+    ' --- polÃ­ticas de contexto para Office + limites text_embed ---
     Dim docxContextMode As String
     Dim docxAsPdfFallback As String
     Dim textEmbedMaxChars As Long
@@ -228,7 +228,8 @@ Public Function Files_PrepararContextoDaPrompt( _
     Dim textoInputs As String
     textoInputs = CStr(celInputsValor.value)
 
-    ' garantir que existe a opção de config para reutilização
+    Call Files_EnsureConfig_DocxPolicies
+    ' garantir que existe a opÃ§Ã£o de config para reutilizaÃ§Ã£o
     Call Files_EnsureConfig_ReutilizacaoUpload
 
     Dim diretivas As Collection
@@ -392,18 +393,18 @@ Public Function Files_PrepararContextoDaPrompt( _
                 policy = UCase$(Trim$(docxContextMode))
                 fallbackPolicy = UCase$(Trim$(docxAsPdfFallback))
 
-                overrideReason = "Extensão ." & extLower & " não suportada como input_file em /v1/responses."
+                overrideReason = "ExtensÃ£o ." & extLower & " nÃ£o suportada como input_file em /v1/responses."
 
                 Select Case policy
                     Case "ERROR"
                         status = "UNSUPPORTED_EXT_AS_INPUT_FILE"
                         Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_INPUTFILE_OVERRIDDEN", _
-                            "Pedido '" & modoPedido & "' para ." & extLower & " é incompatível (policy=ERROR).", _
+                            "Pedido '" & modoPedido & "' para ." & extLower & " Ã© incompatÃ­vel (policy=ERROR).", _
                             "Use (as pdf) ou (text) no anexo; ou configure FILES_DOCX_CONTEXT_MODE=AUTO_AS_PDF/AUTO_TEXT_EMBED.")
                         Call Files_OperacoesAdicionarResultado(d, status, resolvedName, modoPedido, overrideReason, False, True, required)
                         If required Then
                             outFalhaCritica = True
-                            outErroMsg = "Ficheiro obrigatório não suportado como input_file em /v1/responses: " & resolvedName & " (." & extLower & ")."
+                            outErroMsg = "Ficheiro obrigatÃ³rio nÃ£o suportado como input_file em /v1/responses: " & resolvedName & " (." & extLower & ")."
                         End If
                         GoTo ProximoItem
 
@@ -415,12 +416,12 @@ Public Function Files_PrepararContextoDaPrompt( _
                         Else
                             status = "UNSUPPORTED_EXT_NO_FALLBACK"
                             Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_INPUTFILE_OVERRIDDEN", _
-                                "Não há alternativa para tratar ." & extLower & " (sem conversão PDF e sem extração de texto).", _
-                                "Use (text) ou forneça PDF; ou configure FILES_DOCX_CONTEXT_MODE=AUTO_AS_PDF com fallback TEXT_EMBED.")
+                                "NÃ£o hÃ¡ alternativa para tratar ." & extLower & " (sem conversÃ£o PDF e sem extraÃ§Ã£o de texto).", _
+                                "Use (text) ou forneÃ§a PDF; ou configure FILES_DOCX_CONTEXT_MODE=AUTO_AS_PDF com fallback TEXT_EMBED.")
                             Call Files_OperacoesAdicionarResultado(d, status, resolvedName, modoPedido, overrideReason, False, True, required)
                             If required Then
                                 outFalhaCritica = True
-                                outErroMsg = "Ficheiro obrigatório não suportado e sem fallback: " & resolvedName & " (." & extLower & ")."
+                                outErroMsg = "Ficheiro obrigatÃ³rio nÃ£o suportado e sem fallback: " & resolvedName & " (." & extLower & ")."
                             End If
                             GoTo ProximoItem
                         End If
@@ -433,12 +434,12 @@ Public Function Files_PrepararContextoDaPrompt( _
                         Else
                             status = "UNSUPPORTED_EXT_PDF_CONVERSION_NOT_AVAILABLE"
                             Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_INPUTFILE_OVERRIDDEN", _
-                                "Conversão para PDF não disponível para ." & extLower & " e fallback=ERROR.", _
-                                "Use (text) ou forneça PDF; ou configure FILES_DOCX_AS_PDF_FALLBACK=TEXT_EMBED.")
+                                "ConversÃ£o para PDF nÃ£o disponÃ­vel para ." & extLower & " e fallback=ERROR.", _
+                                "Use (text) ou forneÃ§a PDF; ou configure FILES_DOCX_AS_PDF_FALLBACK=TEXT_EMBED.")
                             Call Files_OperacoesAdicionarResultado(d, status, resolvedName, modoPedido, overrideReason, False, True, required)
                             If required Then
                                 outFalhaCritica = True
-                                outErroMsg = "Conversão para PDF não disponível e fallback=ERROR para: " & resolvedName & " (." & extLower & ")."
+                                outErroMsg = "ConversÃ£o para PDF nÃ£o disponÃ­vel e fallback=ERROR para: " & resolvedName & " (." & extLower & ")."
                             End If
                             GoTo ProximoItem
                         End If
@@ -449,8 +450,8 @@ Public Function Files_PrepararContextoDaPrompt( _
                     overrideUsado = True
                     houveOverride = True
                     Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_INPUTFILE_OVERRIDDEN", _
-                        "Override automático: raw_mode=" & modoPedido & " => effective_mode=" & modoEfetivo & " (" & overrideReason & ")", _
-                        "Recomendação: para DOCX/PPTX, use (as pdf) por defeito; alternativa: (text).")
+                        "Override automÃ¡tico: raw_mode=" & modoPedido & " => effective_mode=" & modoEfetivo & " (" & overrideReason & ")", _
+                        "RecomendaÃ§Ã£o: para DOCX/PPTX, use (as pdf) por defeito; alternativa: (text).")
                 End If
             End If
         End If
@@ -529,7 +530,7 @@ Public Function Files_PrepararContextoDaPrompt( _
                     If UCase$(Trim$(docxAsPdfFallback)) = "ERROR" Then
                         If required Then
                             outFalhaCritica = True
-                            outErroMsg = "Falha conversão PDF para ficheiro obrigatório: " & resolvedName & " | " & erroLocal
+                            outErroMsg = "Falha conversÃ£o PDF para ficheiro obrigatÃ³rio: " & resolvedName & " | " & erroLocal
                         End If
                         Call Files_OperacoesAdicionarResultado(d, "PDF_CONVERSION_FAIL", resolvedName, "pdf_upload", erroLocal, False, True, required)
                         GoTo ProximoItem
@@ -542,15 +543,15 @@ Public Function Files_PrepararContextoDaPrompt( _
 
             Else
                 Call Debug_Registar(0, promptId, "ALERTA", "", "as_pdf", _
-                    "Conversão para PDF não suportada para extensão ." & ext & " | ficheiro=" & resolvedName, _
-                    "Use (text) ou forneça PDF; ou configure FILES_DOCX_CONTEXT_MODE=AUTO_TEXT_EMBED.")
+                    "ConversÃ£o para PDF nÃ£o suportada para extensÃ£o ." & ext & " | ficheiro=" & resolvedName, _
+                    "Use (text) ou forneÃ§a PDF; ou configure FILES_DOCX_CONTEXT_MODE=AUTO_TEXT_EMBED.")
 
                 If UCase$(Trim$(docxAsPdfFallback)) = "ERROR" Then
                     If required Then
                         outFalhaCritica = True
-                        outErroMsg = "Conversão para PDF não suportada (obrigatório): " & resolvedName & " (." & ext & ")."
+                        outErroMsg = "ConversÃ£o para PDF nÃ£o suportada (obrigatÃ³rio): " & resolvedName & " (." & ext & ")."
                     End If
-                    Call Files_OperacoesAdicionarResultado(d, "PDF_CONVERSION_NOT_SUPPORTED", resolvedName, "pdf_upload", "Sem conversão PDF", False, True, required)
+                    Call Files_OperacoesAdicionarResultado(d, "PDF_CONVERSION_NOT_SUPPORTED", resolvedName, "pdf_upload", "Sem conversÃ£o PDF", False, True, required)
                     GoTo ProximoItem
                 Else
                     usoFinal = "text_embed"
@@ -566,7 +567,7 @@ Public Function Files_PrepararContextoDaPrompt( _
         Dim textoExtraDeste As String
         textoExtraDeste = ""
 
-        ' calcular allowReuse/reuseTag por ficheiro (precedência: prompt > Config)
+        ' calcular allowReuse/reuseTag por ficheiro (precedÃªncia: prompt > Config)
         Dim allowReuse As Boolean
         Dim reuseTag As String
 
@@ -604,18 +605,18 @@ Public Function Files_PrepararContextoDaPrompt( _
 
                     Select Case overflowAction
                         Case "ALERT_ONLY"
-                            ' Só alerta
+                            ' SÃ³ alerta
 
                         Case "TRUNCATE"
                             textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: excedeu FILES_TEXT_EMBED_MAX_CHARS]"
 
                         Case "STOP"
                             Call Files_OperacoesAdicionarResultado(d, "TEXT_EMBED_TOO_LARGE_STOP", resolvedName, "text_embed", _
-                                "text_embed excede máximo (" & charsExtra & " > " & textEmbedMaxChars & ")", False, True, required)
+                                "text_embed excede mÃ¡ximo (" & charsExtra & " > " & textEmbedMaxChars & ")", False, True, required)
 
                             If required Then
                                 outFalhaCritica = True
-                                outErroMsg = "text_embed demasiado grande para ficheiro obrigatório: " & resolvedName & " (chars=" & charsExtra & ")."
+                                outErroMsg = "text_embed demasiado grande para ficheiro obrigatÃ³rio: " & resolvedName & " (chars=" & charsExtra & ")."
                             End If
                             GoTo ProximoItem
 
@@ -667,22 +668,22 @@ Public Function Files_PrepararContextoDaPrompt( _
                                     Else
                                         If UCase$(Trim$(docxAsPdfFallback)) = "ERROR" Then
                                             Call Files_OperacoesAdicionarResultado(d, "PDF_CONVERSION_FAIL", resolvedName, "pdf_upload", _
-                                                "Falha conversão PDF: " & erroConv2, False, True, required)
+                                                "Falha conversÃ£o PDF: " & erroConv2, False, True, required)
 
                                             If required Then
                                                 outFalhaCritica = True
-                                                outErroMsg = "Falha conversão PDF (overflow) para ficheiro obrigatório: " & resolvedName & " | " & erroConv2
+                                                outErroMsg = "Falha conversÃ£o PDF (overflow) para ficheiro obrigatÃ³rio: " & resolvedName & " | " & erroConv2
                                             End If
                                             GoTo ProximoItem
                                         Else
-                                            textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: conversão PDF falhou]"
+                                            textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: conversÃ£o PDF falhou]"
                                             usoFinal = "text_embed"
                                             dbgUsoFinal = usoFinal
                                             convertido = False
                                         End If
                                     End If
                                 Else
-                                    textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: não é possível converter para PDF]"
+                                    textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: nÃ£o Ã© possÃ­vel converter para PDF]"
                                     usoFinal = "text_embed"
                                     dbgUsoFinal = usoFinal
                                     convertido = False
@@ -715,9 +716,9 @@ Public Function Files_PrepararContextoDaPrompt( _
             Call Files_OperacoesAdicionarResultado(d, "OK", resolvedName, "text_embed", "", convertido, (overrideUsado Or overrideModo), False)
 
         ElseIf usoFinal = "image_upload" Then
-            ' (mantém o teu bloco existente de imagem — não alterado aqui)
-            ' ... (deixa como estava no teu módulo)
-            ' Para não perder funcionalidades, não mexo neste ramo aqui.
+            ' (mantÃ©m o teu bloco existente de imagem â€” nÃ£o alterado aqui)
+            ' ... (deixa como estava no teu mÃ³dulo)
+            ' Para nÃ£o perder funcionalidades, nÃ£o mexo neste ramo aqui.
 
         ElseIf usoFinal = "pdf_upload" Or usoFinal = "as_is" Then
 
@@ -728,7 +729,7 @@ ProcessarComoInputFile:
             modoCache = IIf(usoFinal = "as_is", "as_is", "pdf_upload")
 
             If transportMode = TRANSPORT_INLINE Then
-                ' (mantém o teu bloco existente INLINE — não alterado aqui)
+                ' (mantÃ©m o teu bloco existente INLINE â€” nÃ£o alterado aqui)
                 ' ...
             Else
                 fileId = Files_ObterOuCriarFileId(wsFiles, mapaCab, apiKey, promptId, pipelineNome, _
@@ -898,7 +899,7 @@ End Function
 '   - Procura uma linha na folha Config com:
 '       Col A = "FILES_MULTIPART_FILENAME_MODE"
 '       Col B = RAW | ASCII_SAFE | RFC5987
-'   - Default: RAW (compatível com versões anteriores)
+'   - Default: RAW (compatÃ­vel com versÃµes anteriores)
 Private Function Files_Config_MultipartFilenameMode() As String
     On Error GoTo Falha
 
@@ -1032,12 +1033,12 @@ Private Function Files_Config_TextEmbedOverflowAction() As String
 End Function
 
 ' ============================================================
-' NOVO: utilitários para políticas de formato em /v1/responses
+' NOVO: utilitÃ¡rios para polÃ­ticas de formato em /v1/responses
 ' ============================================================
 
 Private Function Files_IsExtSuportadaComoInputFileResponses(ByVal extLower As String) As Boolean
-    ' Extensões suportadas pelo /v1/responses para input_file (context stuffing).
-    ' Baseado na mensagem de erro observada (pode evoluir; ajustar se necessário).
+    ' ExtensÃµes suportadas pelo /v1/responses para input_file (context stuffing).
+    ' Baseado na mensagem de erro observada (pode evoluir; ajustar se necessÃ¡rio).
     extLower = LCase$(Replace$(Trim$(extLower), ".", ""))
 
     If extLower = "" Then
@@ -1151,8 +1152,8 @@ End Function
 
 
 ' ============================================================
-' (ALTERAR) Files_ParseItem — adicionar reuse_override_*
-'   SUBSTITUA A FUNÇÃO INTEIRA por esta versão
+' (ALTERAR) Files_ParseItem â€” adicionar reuse_override_*
+'   SUBSTITUA A FUNÃ‡ÃƒO INTEIRA por esta versÃ£o
 ' ============================================================
 Private Function Files_ParseItem(ByVal itemRaw As String) As Object
     Dim d As Object
@@ -1691,8 +1692,8 @@ End Function
 ' ============================================================
 
 ' ============================================================
-' (ALTERAR) Files_ObterOuCriarFileId — aceitar allowReuse/reuseTag e validar ativo
-'   SUBSTITUA A FUNÇÃO INTEIRA por esta versão
+' (ALTERAR) Files_ObterOuCriarFileId â€” aceitar allowReuse/reuseTag e validar ativo
+'   SUBSTITUA A FUNÃ‡ÃƒO INTEIRA por esta versÃ£o
 ' ============================================================
 Private Function Files_ObterOuCriarFileId( _
     ByVal wsFiles As Worksheet, _
@@ -1731,7 +1732,7 @@ Private Function Files_ObterOuCriarFileId( _
         colFileId = Files_Col(mapaCab, H_FILE_ID)
         colNome = Files_Col(mapaCab, H_FILE_NAME)
 
-        ' 1) Cache canónica: hash + usage_mode
+        ' 1) Cache canÃ³nica: hash + usage_mode
         linha = Files_EncontrarLinhaPorHash(wsFiles, mapaCab, hashUsado, usageMode, True)
 
         If linha > 0 Then
@@ -1745,7 +1746,7 @@ Private Function Files_ObterOuCriarFileId( _
                     Dim st As Long, errCheck As String
                     If Files_OpenAI_FileIdAtivo(apiKey, fileIdExistente, st, errCheck) Then
                         Call Debug_Registar(0, promptId, "INFO", "", "FILES REUSE", _
-                            "Reutilização OK | " & reuseTag & " | cache=hash+mode | file_id=" & fileIdExistente & " | file=" & fileName & " | mode=" & usageMode, _
+                            "ReutilizaÃ§Ã£o OK | " & reuseTag & " | cache=hash+mode | file_id=" & fileIdExistente & " | file=" & fileName & " | mode=" & usageMode, _
                             "")
 
                         Call Files_UpsertFilesManagement(wsFiles, mapaCab, pipelineNome, promptId, fileName, _
@@ -1764,13 +1765,13 @@ Private Function Files_ObterOuCriarFileId( _
                 reuseDiag = "cache_invalida: file_id vazio na linha encontrada (hash+mode)"
             End If
         Else
-            reuseDiag = "cache: não encontrei linha por hash+usage_mode"
+            reuseDiag = "cache: nÃ£o encontrei linha por hash+usage_mode"
         End If
 
-        ' 2) Robustez/migração: full_path + usage_mode (com validação size + last_modified)
-        '    ALTERAÇÃO: não bloquear por "nome diferente" neste fallback.
-        '    Justificação: em fluxos DOCX->PDF ou overrides, o fileName pode diferir do nome guardado,
-        '    mas o fullPath+mode+size+lastmod asseguram que é o mesmo artefacto em disco.
+        ' 2) Robustez/migraÃ§Ã£o: full_path + usage_mode (com validaÃ§Ã£o size + last_modified)
+        '    ALTERAÃ‡ÃƒO: nÃ£o bloquear por "nome diferente" neste fallback.
+        '    JustificaÃ§Ã£o: em fluxos DOCX->PDF ou overrides, o fileName pode diferir do nome guardado,
+        '    mas o fullPath+mode+size+lastmod asseguram que Ã© o mesmo artefacto em disco.
         Dim linhaP As Long
         linhaP = Files_EncontrarLinhaPorPath(wsFiles, mapaCab, fullPath, usageMode, True)
 
@@ -1803,9 +1804,9 @@ Private Function Files_ObterOuCriarFileId( _
                     Dim st2 As Long, errCheck2 As String
                     If Files_OpenAI_FileIdAtivo(apiKey, fileIdP, st2, errCheck2) Then
                         Call Debug_Registar(0, promptId, "INFO", "", "FILES REUSE", _
-                            "Reutilização OK | " & reuseTag & " | cache=path+mode (migração) | file_id=" & fileIdP & _
+                            "ReutilizaÃ§Ã£o OK | " & reuseTag & " | cache=path+mode (migraÃ§Ã£o) | file_id=" & fileIdP & _
                             " | file=" & fileName & " | mode=" & usageMode & " | cache_file_name='" & nomeP & "'", _
-                            "Nota: usado para evitar uploads duplicados quando há migração/ajuste do hash; validação é por path+mode+size+lastmod (nome pode divergir).")
+                            "Nota: usado para evitar uploads duplicados quando hÃ¡ migraÃ§Ã£o/ajuste do hash; validaÃ§Ã£o Ã© por path+mode+size+lastmod (nome pode divergir).")
 
                         Call Files_UpsertFilesManagement(wsFiles, mapaCab, pipelineNome, promptId, fileName, _
                             folderBase, fullPath, fileIdP, usageMode, convertido, sourceHash, lastMod, sizeBytes, hashUsado, _
@@ -1847,7 +1848,7 @@ Private Function Files_ObterOuCriarFileId( _
         outErro = "Upload falhou: " & errUpload
         Call Debug_Registar(0, promptId, "ERRO", "", "FILES UPLOAD", _
             "Upload FAIL | HTTP " & CStr(httpStatus) & " | " & reuseTag & IIf(reuseDiag <> "", " | " & reuseDiag, "") & " | " & outErro, _
-            "Sugestão: confirme API key, conectividade e logs. Se for DOCX, valide a conversão para PDF e o cache.")
+            "SugestÃ£o: confirme API key, conectividade e logs. Se for DOCX, valide a conversÃ£o para PDF e o cache.")
         Files_ObterOuCriarFileId = ""
         Exit Function
     End If
@@ -1882,8 +1883,8 @@ Private Function Files_DeterminarPurpose(ByVal usageMode As String) As String
 End Function
 
 ' ============================================================
-' (NOVO) Wrapper público para registar outputs no FILES_MANAGEMENT
-'   - Reutiliza a lógica existente de upsert/inserção no topo (linha 2)
+' (NOVO) Wrapper pÃºblico para registar outputs no FILES_MANAGEMENT
+'   - Reutiliza a lÃ³gica existente de upsert/inserÃ§Ã£o no topo (linha 2)
 ' ============================================================
 Public Sub Files_LogEventOutput( _
     ByVal pipelineNome As String, _
@@ -1991,7 +1992,7 @@ Falha:
     On Error Resume Next
     Debug_Registar 0, promptId, "ERRO", "", "Files_LogEventOutput", _
         "Falha a registar output no FILES_MANAGEMENT: " & Err.Description, _
-        "Confirma que FILES_MANAGEMENT existe e que a tabela tem os cabeçalhos esperados."
+        "Confirma que FILES_MANAGEMENT existe e que a tabela tem os cabeÃ§alhos esperados."
 End Sub
 
 Private Sub Files_UpsertFilesManagement( _
@@ -2014,7 +2015,7 @@ Private Sub Files_UpsertFilesManagement( _
 )
     ' v2: cada evento/uso gera sempre um novo registo, inserido no topo (linha 2 / topo da tabela).
     '     - DL/UL: DL se nao houve /v1/files; UL se houve upload real.
-    '     - Utilizações: contagem total por chave (file_id ou hash|usage_mode quando file_id vazio).
+    '     - UtilizaÃ§Ãµes: contagem total por chave (file_id ou hash|usage_mode quando file_id vazio).
     '     - used_in_prompts: lista (1 linha) de prompt_id, mais recente primeiro, separador ";  ", max 20 + "(...)"
     '     - last_used_at: guarda o prompt_id do evento (nao timestamp).
 
@@ -2024,11 +2025,11 @@ Private Sub Files_UpsertFilesManagement( _
     Set lo = Files_GetOrCreateTable_FilesManagement(wsFiles)
     If lo Is Nothing Then Exit Sub
 
-    ' Timestamp único do evento
+    ' Timestamp Ãºnico do evento
     Dim ts As Date
     ts = Now
 
-    ' ---- Garantir hash (SHA-256 do conteúdo efetivamente usado) + diagnóstico
+    ' ---- Garantir hash (SHA-256 do conteÃºdo efetivamente usado) + diagnÃ³stico
     If Trim$(CStr(hashUsado)) = "" Then
         If Trim$(CStr(fullPath)) <> "" Then
             If Dir(fullPath) <> "" Then
@@ -2037,7 +2038,7 @@ Private Sub Files_UpsertFilesManagement( _
                     notes = notes & " | hash recalculado"
                 End If
             Else
-                notes = notes & " | HASH_DIAG: fullPath não existe: " & fullPath
+                notes = notes & " | HASH_DIAG: fullPath nÃ£o existe: " & fullPath
             End If
         Else
             notes = notes & " | HASH_DIAG: fullPath vazio"
@@ -2098,11 +2099,11 @@ Private Sub Files_UpsertFilesManagement( _
     linha = lr.Range.Row
 
     ' ============================================================
-    ' CORRECÇÃO #1: o registo NÃO pode herdar a altura 6 do separador
+    ' CORRECÃ‡ÃƒO #1: o registo NÃƒO pode herdar a altura 6 do separador
     ' ============================================================
     On Error Resume Next
     lr.Range.EntireRow.RowHeight = wsFiles.StandardHeight
-    ' Também impedir herança de "preto" do separador
+    ' TambÃ©m impedir heranÃ§a de "preto" do separador
     lr.Range.Interior.pattern = xlNone
     lr.Range.Font.Bold = False
     On Error GoTo Falha
@@ -2138,7 +2139,7 @@ Private Sub Files_UpsertFilesManagement( _
     wsFiles.Cells(linha, Files_Col(mapaCab, H_LAST_USED_AT)).value = promptId
     wsFiles.Cells(linha, Files_Col(mapaCab, H_NOTES)).value = notes
 
-    ' ---- Formatação específica
+    ' ---- FormataÃ§Ã£o especÃ­fica
     On Error Resume Next
     wsFiles.Cells(linha, Files_Col(mapaCab, H_CONVERTED_TO_PDF)).HorizontalAlignment = xlCenter
     wsFiles.Cells(linha, Files_Col(mapaCab, H_USED_IN_PROMPTS)).WrapText = True
@@ -2359,28 +2360,28 @@ Falha:
 End Function
 
 Private Sub Files_AddRunSeparatorLine(ByVal wsFiles As Worksheet, ByVal lo As ListObject, ByVal runToken As String)
-    ' NOTA: Mantém-se o nome da rotina por compatibilidade com o resto do código,
+    ' NOTA: MantÃ©m-se o nome da rotina por compatibilidade com o resto do cÃ³digo,
     '       mas o separador deixa de ser Shape e passa a ser uma "linha de intervalo" (row separadora),
-    '       idêntica ao mecanismo usado na folha HISTÓRICO.
+    '       idÃªntica ao mecanismo usado na folha HISTÃ“RICO.
 
     On Error GoTo Falha
 
     If lo Is Nothing Then Exit Sub
 
     ' Inserir row separadora no topo da tabela (Position:=1)
-    ' (Esta row ficará entre o novo run (que será inserido acima) e o histórico anterior.)
+    ' (Esta row ficarÃ¡ entre o novo run (que serÃ¡ inserido acima) e o histÃ³rico anterior.)
     Dim lrSep As ListRow
     Set lrSep = lo.ListRows.Add(Position:=1)
 
-    ' Limpar conteúdos e aplicar formatação do separador
+    ' Limpar conteÃºdos e aplicar formataÃ§Ã£o do separador
     With lrSep.Range
         .ClearContents
 
-        ' Preto sólido em toda a largura da tabela
+        ' Preto sÃ³lido em toda a largura da tabela
         .Interior.pattern = xlSolid
         .Interior.Color = vbBlack
 
-        ' Garantir que não fica negrito nem wrap inesperado
+        ' Garantir que nÃ£o fica negrito nem wrap inesperado
         .Font.Bold = False
         .WrapText = False
     End With
@@ -2393,13 +2394,13 @@ Private Sub Files_AddRunSeparatorLine(ByVal wsFiles As Worksheet, ByVal lo As Li
     Exit Sub
 
 Falha:
-    ' Não bloquear a execução caso falhe a inserção/formatacao do separador
+    ' NÃ£o bloquear a execuÃ§Ã£o caso falhe a inserÃ§Ã£o/formatacao do separador
 End Sub
 
 
 
 Private Function Files_SanitizarNomeObjeto(ByVal s As String) As String
-    ' Nomes de Shape devem ser curtos e sem caracteres especiais problemáticos.
+    ' Nomes de Shape devem ser curtos e sem caracteres especiais problemÃ¡ticos.
     Dim i As Long
     Dim ch As String
     Dim out As String
@@ -2465,7 +2466,7 @@ Public Function Files_UploadFile_OpenAI( _
     fileNameSent = fileNameRaw
 
     Dim nameMode As String
-    nameMode = Files_Config_MultipartFilenameMode() ' default RAW (compatível)
+    nameMode = Files_Config_MultipartFilenameMode() ' default RAW (compatÃ­vel)
 
     If nameMode = "ASCII_SAFE" Then
         fileNameSent = Files_SanitizeFilenameAsciiSafe(fileNameRaw)
@@ -2786,7 +2787,7 @@ Public Function Files_SHA256_File(ByVal fullPath As String) As String
     End If
 
     If Not Files_ExisteFicheiro(fullPath) Then
-        gLastSHA256Diag = "SHA256_File: ficheiro não existe: " & fullPath
+        gLastSHA256Diag = "SHA256_File: ficheiro nÃ£o existe: " & fullPath
         Exit Function
     End If
 
@@ -2796,7 +2797,7 @@ Public Function Files_SHA256_File(ByVal fullPath As String) As String
     b = Files_ReadAllBytesEx(fullPath, errB)
 
     If Files_ByteArrayLen(b) <= 0 Then
-        gLastSHA256Diag = "SHA256_File: não foi possível ler bytes: " & errB
+        gLastSHA256Diag = "SHA256_File: nÃ£o foi possÃ­vel ler bytes: " & errB
         GoTo FallbackDet
     End If
 
@@ -2812,7 +2813,7 @@ Public Function Files_SHA256_File(ByVal fullPath As String) As String
         Exit Function
     End If
 
-    If diagSHA = "" Then diagSHA = "sem diagnóstico"
+    If diagSHA = "" Then diagSHA = "sem diagnÃ³stico"
     gLastSHA256Diag = "SHA256_File: SHA256 falhou (" & diagSHA & ")"
 
 FallbackDet:
@@ -2829,7 +2830,7 @@ FallbackDet:
         Exit Function
     End If
 
-    ' Último recurso: metadata (menos robusto)
+    ' Ãšltimo recurso: metadata (menos robusto)
     On Error Resume Next
     h2 = Files_FNV32_String(fullPath & "|" & CStr(FileLen(fullPath)) & "|" & CStr(FileDateTime(fullPath)))
     On Error GoTo Falha
@@ -2865,7 +2866,7 @@ Public Function Files_SHA256_Text(ByVal sText As String) As String
     bytes = StrConv(sText, vbFromUnicode)
 
     If Files_ByteArrayLen(bytes) <= 0 Then
-        gLastSHA256Diag = "SHA256_Text: byte array vazio após conversão"
+        gLastSHA256Diag = "SHA256_Text: byte array vazio apÃ³s conversÃ£o"
         Exit Function
     End If
 
@@ -2881,7 +2882,7 @@ Public Function Files_SHA256_Text(ByVal sText As String) As String
         Exit Function
     End If
 
-    If diagSHA = "" Then diagSHA = "sem diagnóstico"
+    If diagSHA = "" Then diagSHA = "sem diagnÃ³stico"
     gLastSHA256Diag = "SHA256_Text: SHA256 falhou (" & diagSHA & ")"
 
     Dim h2 As String
@@ -2922,7 +2923,7 @@ Private Function Files_SHA256_Bytes(ByRef bytes() As Byte) As String
     ub = UBound(bytes)
     If Err.Number <> 0 Then
         Err.Clear
-        gLastSHA256Diag = "SHA256_Bytes: array não inicializado (0 bytes)"
+        gLastSHA256Diag = "SHA256_Bytes: array nÃ£o inicializado (0 bytes)"
         Exit Function
     End If
     On Error GoTo Falha
@@ -2996,12 +2997,12 @@ Public Function Files_FNV32_String(ByVal s As String) As String
     gLastFNV32Diag = ""
     Files_FNV32_String = ""
 
-    ' Determinístico: bytes UTF-16LE (VBA Unicode)
+    ' DeterminÃ­stico: bytes UTF-16LE (VBA Unicode)
     Dim b() As Byte
     b = StrConv(s, vbUnicode)
 
 #If VBA7 And Win64 Then
-    ' 64-bit: usar LongLong + máscara 32-bit REAL (4294967295)
+    ' 64-bit: usar LongLong + mÃ¡scara 32-bit REAL (4294967295)
     Dim mask As LongLong
     mask = CLngLng(4294967295#)
 
@@ -3017,7 +3018,7 @@ Public Function Files_FNV32_String(ByVal s As String) As String
     Files_FNV32_String = "fnv32-" & Right$("00000000" & Hex$(h), 8)
     Exit Function
 #Else
-    ' 32-bit: versão safe em Double (mod 2^32)
+    ' 32-bit: versÃ£o safe em Double (mod 2^32)
     Dim u As Double
     u = 2166136261#
 
@@ -3048,8 +3049,8 @@ ByVal textoFinal As String, _
 ByVal includeFilesContext As Boolean, _
 ByVal promptId As String _
 ) As String
-' Alertas de tamanho (diagnóstico)
-' - Não altera payload; apenas avisa quando o input_text é grande o suficiente
+' Alertas de tamanho (diagnÃ³stico)
+' - NÃ£o altera payload; apenas avisa quando o input_text Ã© grande o suficiente
 '   para aumentar risco de limites de request/contexto.
 Const WARN_CHARS As Long = 120000
 Const HARD_CHARS As Long = 250000
@@ -3151,15 +3152,15 @@ End Function
 
 Private Function Files_JsonEscape(ByVal s As String) As String
     ' Wrapper local para o escape estrito (JSON) definido em M00_JsonUtil.Json_EscapeString
-    ' - Mantém a assinatura existente no M09 para não quebrar chamadas internas
-    ' - Resolve erros "invalid_json" quando o text_embed contém caracteres de controlo
+    ' - MantÃ©m a assinatura existente no M09 para nÃ£o quebrar chamadas internas
+    ' - Resolve erros "invalid_json" quando o text_embed contÃ©m caracteres de controlo
     On Error GoTo EH
 
     Files_JsonEscape = Json_EscapeString(CStr(s))
     Exit Function
 
 EH:
-    ' Fallback mínimo (não ideal, mas evita crash em caso de erro inesperado)
+    ' Fallback mÃ­nimo (nÃ£o ideal, mas evita crash em caso de erro inesperado)
     Dim t As String
     t = CStr(s)
 
@@ -3335,13 +3336,13 @@ End Sub
 Private Function Files_BuildFilesContextResumo(ByVal diretivas As Collection) As String
     ' ============================================================
     ' FILES CONTEXT (resumo para humans)
-    ' Mantém compatibilidade com a versão anterior, mas torna explícito
+    ' MantÃ©m compatibilidade com a versÃ£o anterior, mas torna explÃ­cito
     ' quando o modo final foi pdf_upload (ex.: DOCX/PPTX -> PDF).
     '
     ' Regras:
     ' - Se st="OK": mostra o ficheiro resolvido + modo
     '   * se modo="pdf_upload": "<nome> => PDF (pdf_upload)"
-    '   * caso contrário: "<nome> (<modo>)"
+    '   * caso contrÃ¡rio: "<nome> (<modo>)"
     ' - Se st<>"OK": mostra o pedido original + status: "<req> (<st>)"
     ' - Se "resultado_nome" vier vazio, faz fallback para "requested_name"
     ' ============================================================
@@ -3662,8 +3663,8 @@ End Function
 ' ============================================================
 
 Private Sub Files_EnsureSheetExists()
-    ' Garante existência da folha FILES_MANAGEMENT (v2) e da Tabela tblFILES_MANAGEMENT.
-    ' Se a folha existir mas tiver estrutura diferente, é renomeada para backup e é recriada vazia (sem migração).
+    ' Garante existÃªncia da folha FILES_MANAGEMENT (v2) e da Tabela tblFILES_MANAGEMENT.
+    ' Se a folha existir mas tiver estrutura diferente, Ã© renomeada para backup e Ã© recriada vazia (sem migraÃ§Ã£o).
 
     On Error GoTo Falha
 
@@ -3698,7 +3699,7 @@ Private Sub Files_EnsureSheetExists()
     Dim lo As ListObject
     Set lo = Files_GetOrCreateTable_FilesManagement(ws)
 
-    ' Formatação obrigatória
+    ' FormataÃ§Ã£o obrigatÃ³ria
     Dim mapa As Object
     Set mapa = Files_MapaCabecalhos(ws)
 
@@ -3712,14 +3713,14 @@ Private Sub Files_EnsureSheetExists()
 
 
     ' ------------------------------------------------------------
-    ' Formatação (idempotente): só o header a negrito; registos sem negrito
+    ' FormataÃ§Ã£o (idempotente): sÃ³ o header a negrito; registos sem negrito
     ' ------------------------------------------------------------
     If Not lo Is Nothing Then
         lo.HeaderRowRange.Font.Bold = True
         If Not lo.DataBodyRange Is Nothing Then lo.DataBodyRange.Font.Bold = False
     End If
 
-    ' Type e Utilizações centrados (header + registos)
+    ' Type e UtilizaÃ§Ãµes centrados (header + registos)
     Dim cType As Long, cUtil As Long, cDlUl As Long
     cType = Files_Col(mapa, H_TYPE)
     cUtil = Files_Col(mapa, H_UTILIZACOES)
@@ -3876,7 +3877,7 @@ Private Function Files_GetOrCreateTable_FilesManagement(ByVal ws As Worksheet) A
     Dim lo As ListObject
     Set lo = Files_TryGetTable_FilesManagement(ws)
 
-    ' Validar estrutura mínima
+    ' Validar estrutura mÃ­nima
     If Not lo Is Nothing Then
         If lo.HeaderRowRange.Row <> 1 Or lo.HeaderRowRange.Column <> 1 Or lo.ListColumns.Count <> 17 Then
             On Error Resume Next
@@ -3887,7 +3888,7 @@ Private Function Files_GetOrCreateTable_FilesManagement(ByVal ws As Worksheet) A
     End If
 
     If lo Is Nothing Then
-        ' Criar tabela com cabeçalho + 1 linha vazia (depois removida)
+        ' Criar tabela com cabeÃ§alho + 1 linha vazia (depois removida)
         Dim rng As Range
         Set rng = ws.Range(ws.Cells(1, 1), ws.Cells(2, 17))
         rng.rowS(2).ClearContents
@@ -3929,8 +3930,8 @@ End Function
 
 Private Function Files_NormalizarCabecalho(ByVal s As String) As String
     s = Replace(CStr(s), ChrW(160), " ") ' NBSP
-    s = Replace(s, ChrW(8220), ChrW(34)) ' “ -> "
-    s = Replace(s, ChrW(8221), ChrW(34)) ' ” -> "
+    s = Replace(s, ChrW(8220), ChrW(34)) ' â€œ -> "
+    s = Replace(s, ChrW(8221), ChrW(34)) ' â€ -> "
     s = Trim$(s)
 
     Do While InStr(1, s, "  ", vbBinaryCompare) > 0
@@ -3955,7 +3956,7 @@ End Function
 
 
 ' ============================================================
-' TESTES (Regressão) — FILES_MANAGEMENT v2
+' TESTES (RegressÃ£o) â€” FILES_MANAGEMENT v2
 ' ============================================================
 
 Public Sub Files_RegressionTests()
@@ -3994,9 +3995,9 @@ Public Sub Files_RegressionTests()
     ' Helper inline
     Dim SubOk As Boolean
 
-    ' --- Teste 1: Cabeçalhos
+    ' --- Teste 1: CabeÃ§alhos
     SubOk = Files_HeaderV2_OK(wsF)
-    Call Files_TestWrite(wsT, rowT, "Cabeçalhos v2 (ordem exacta)", SubOk, "")
+    Call Files_TestWrite(wsT, rowT, "CabeÃ§alhos v2 (ordem exacta)", SubOk, "")
     rowT = rowT + 1
 
     ' --- Teste 2: Mapeamento encontra todas as colunas
@@ -4013,7 +4014,7 @@ Public Sub Files_RegressionTests()
     Next i
 
     SubOk = (missing = "")
-    Call Files_TestWrite(wsT, rowT, "Mapeamento de cabeçalhos", SubOk, IIf(SubOk, "", "Faltam: " & missing))
+    Call Files_TestWrite(wsT, rowT, "Mapeamento de cabeÃ§alhos", SubOk, IIf(SubOk, "", "Faltam: " & missing))
     rowT = rowT + 1
 
     ' Guardar estado inicial
@@ -4032,25 +4033,25 @@ Public Sub Files_RegressionTests()
             "C:\TEST", "C:\TEST\teste.pdf", "", "pdf_upload", False, "", Now, 1234, h, "teste", "DL")
     Next n
 
-    ' Re-obter mapa e lo (podem ter mudado com inserções)
+    ' Re-obter mapa e lo (podem ter mudado com inserÃ§Ãµes)
     Set mapa = Files_MapaCabecalhos(wsF)
     Set lo = Files_GetOrCreateTable_FilesManagement(wsF)
 
-    ' --- Teste 3: Inserção no topo (linha 2)
+    ' --- Teste 3: InserÃ§Ã£o no topo (linha 2)
     Dim topRow As Long
     topRow = lo.ListRows(1).Range.Row
     SubOk = (topRow = lo.HeaderRowRange.Row + 1)
-    Call Files_TestWrite(wsT, rowT, "Inserção no topo (linha 2)", SubOk, "Row=" & CStr(topRow))
+    Call Files_TestWrite(wsT, rowT, "InserÃ§Ã£o no topo (linha 2)", SubOk, "Row=" & CStr(topRow))
     rowT = rowT + 1
 
-    ' --- Teste 4: Utilizações incrementa (deve ser 25 no topo)
+    ' --- Teste 4: UtilizaÃ§Ãµes incrementa (deve ser 25 no topo)
     Dim cUtil As Long
     cUtil = Files_Col(mapa, H_UTILIZACOES)
 
     Dim vUtil As Long
     vUtil = CLng(wsF.Cells(lo.ListRows(1).Range.Row, cUtil).value)
     SubOk = (vUtil = 25)
-    Call Files_TestWrite(wsT, rowT, "Utilizações (incremento)", SubOk, "Valor=" & CStr(vUtil))
+    Call Files_TestWrite(wsT, rowT, "UtilizaÃ§Ãµes (incremento)", SubOk, "Valor=" & CStr(vUtil))
     rowT = rowT + 1
 
     ' --- Teste 5: used_in_prompts formato e truncagem (20 + (...))
@@ -4072,13 +4073,13 @@ Public Sub Files_RegressionTests()
     Call Files_TestWrite(wsT, rowT, "DL/UL = DL (teste)", SubOk, "Valor=" & sDlUl)
     rowT = rowT + 1
 
-' --- Teste 7: Separador por run (linha separadora) — muda token e insere 1 registo
+' --- Teste 7: Separador por run (linha separadora) â€” muda token e insere 1 registo
 Call Files_SetRunToken("TEST_RUN2")
 Call Files_UpsertFilesManagement(wsF, mapa, "PIPE_TEST", "P_9999", "teste2.pdf", _
     "C:\TEST", "C:\TEST\teste2.pdf", "", "pdf_upload", False, "", Now, 1, h, "teste run2", "DL")
 
 ' Com o separador por linha:
-' - A linha 1 da tabela (ListRows(1)) é o novo registo do run actual
+' - A linha 1 da tabela (ListRows(1)) Ã© o novo registo do run actual
 ' - A linha 2 da tabela (ListRows(2)) deve ser a "linha de intervalo" (RowHeight=6, vbBlack, xlSolid)
 Dim isSep As Boolean
 isSep = False
@@ -4099,7 +4100,7 @@ If lo.ListRows.Count >= 2 Then
 End If
 
 SubOk = isSep
-Call Files_TestWrite(wsT, rowT, "Separador por run (linha separadora)", SubOk, IIf(isSep, "OK", "Não encontrado/formatado como esperado"))
+Call Files_TestWrite(wsT, rowT, "Separador por run (linha separadora)", SubOk, IIf(isSep, "OK", "NÃ£o encontrado/formatado como esperado"))
 rowT = rowT + 1
 
 ' --- Limpeza: remover registos inseridos pelo teste
@@ -4113,7 +4114,7 @@ If added > 0 Then
 End If
 
 
-    Call Files_TestWrite(wsT, rowT, "Limpeza pós-testes", True, "OK")
+    Call Files_TestWrite(wsT, rowT, "Limpeza pÃ³s-testes", True, "OK")
     rowT = rowT + 1
 
     wsT.Columns("A:D").AutoFit
@@ -4329,10 +4330,10 @@ Private Function Files_BuildMultipartBody_Safe( _
 End Function
 
 ' ============================================================
-' (NOVO) Sanitização de filename para multipart (ASCII_SAFE)
+' (NOVO) SanitizaÃ§Ã£o de filename para multipart (ASCII_SAFE)
 '   - Apenas altera o "filename" enviado no Content-Disposition do multipart
 '   - NAO altera o ficheiro no disco
-'   - Mantém extensão (quando existir)
+'   - MantÃ©m extensÃ£o (quando existir)
 ' ============================================================
 
 Public Function Files_SanitizeFilenameAsciiSafe(ByVal fileName As String) As String
@@ -4353,18 +4354,18 @@ Public Function Files_SanitizeFilenameAsciiSafe(ByVal fileName As String) As Str
         ext = Mid$(nameOnly, p + 1)
     End If
 
-    ' 1) Normalizações principais
+    ' 1) NormalizaÃ§Ãµes principais
     baseName = Files_RemoverAcentosPT(baseName)
     baseName = Files_NormalizarPontuacaoFilename(baseName)
     baseName = Files_WhitespaceToHyphen(baseName)
 
-    ' 2) Forçar apenas ASCII seguro
+    ' 2) ForÃ§ar apenas ASCII seguro
     baseName = Files_SanitizeFilenameAsciiCore(baseName, True)
     baseName = Files_CollapseFilenameSeparators(baseName)
     baseName = Files_TrimChars(baseName, "-_.")
     If baseName = "" Then baseName = "file"
 
-    ' 3) Extensão: apenas alfanumérico ASCII
+    ' 3) ExtensÃ£o: apenas alfanumÃ©rico ASCII
     If ext <> "" Then
         ext = Files_RemoverAcentosPT(ext)
         ext = Files_SanitizeExtensionAscii(ext)
@@ -4372,7 +4373,7 @@ Public Function Files_SanitizeFilenameAsciiSafe(ByVal fileName As String) As Str
         ext = LCase$(ext)
     End If
 
-    ' 4) Encurtar preservando extensão
+    ' 4) Encurtar preservando extensÃ£o
     Dim reserve As Long
     reserve = 0
     If ext <> "" Then reserve = Len(ext) + 1
@@ -4391,11 +4392,11 @@ Public Function Files_SanitizeFilenameAsciiSafe(ByVal fileName As String) As Str
 End Function
 
 Private Function Files_NormalizarPontuacaoFilename(ByVal s As String) As String
-    s = Replace$(s, ChrW(8211), "-") ' –
-    s = Replace$(s, ChrW(8212), "-") ' —
+    s = Replace$(s, ChrW(8211), "-") ' â€“
+    s = Replace$(s, ChrW(8212), "-") ' â€”
     s = Replace$(s, ChrW(160), " ")  ' NBSP
 
-    ' Aspas tipográficas (remover)
+    ' Aspas tipogrÃ¡ficas (remover)
     s = Replace$(s, ChrW(8216), "")
     s = Replace$(s, ChrW(8217), "")
     s = Replace$(s, ChrW(8220), "")
@@ -4563,7 +4564,7 @@ End Function
 
 
 ' ============================================================
-' (NOVO) CONFIG — Reutilização de ficheiros no upload
+' (NOVO) CONFIG â€” ReutilizaÃ§Ã£o de ficheiros no upload
 ' ============================================================
 Private Sub Files_EnsureConfig_ReutilizacaoUpload()
     On Error Resume Next
@@ -4573,7 +4574,7 @@ Private Sub Files_EnsureConfig_ReutilizacaoUpload()
     If ws Is Nothing Then Exit Sub
 
     Dim label As String
-    label = "Reutilização de ficheiros no upload"
+    label = "ReutilizaÃ§Ã£o de ficheiros no upload"
 
     ' Tenta encontrar a linha pelo texto na Col A
     Dim lastR As Long, r As Long
@@ -4587,13 +4588,13 @@ Private Sub Files_EnsureConfig_ReutilizacaoUpload()
         End If
     Next i
 
-    ' Se não existir, cria numa linha "segura" (ex.: 8)
+    ' Se nÃ£o existir, cria numa linha "segura" (ex.: 8)
     If r = 0 Then r = 8
 
     ws.Cells(r, 1).value = label
     If Trim$(CStr(ws.Cells(r, 2).value)) = "" Then ws.Cells(r, 2).value = "TRUE"
     If Trim$(CStr(ws.Cells(r, 3).value)) = "" Then
-        ws.Cells(r, 3).value = "TRUE = tenta reutilizar file_id do histórico (nome+hash+modo), validando se o file_id ainda existe via GET /v1/files/<id>. FALSE = força upload novo sempre."
+        ws.Cells(r, 3).value = "TRUE = tenta reutilizar file_id do histÃ³rico (nome+hash+modo), validando se o file_id ainda existe via GET /v1/files/<id>. FALSE = forÃ§a upload novo sempre."
     End If
 
     On Error GoTo 0
@@ -4609,7 +4610,7 @@ Private Function Files_Config_ReutilizacaoUpload() As Boolean
     Set ws = ThisWorkbook.Worksheets(SHEET_CONFIG)
 
     Dim label As String
-    label = "Reutilização de ficheiros no upload"
+    label = "ReutilizaÃ§Ã£o de ficheiros no upload"
 
     Dim lastR As Long, r As Long, i As Long
     lastR = ws.Cells(ws.rowS.Count, 1).End(xlUp).Row
@@ -4637,8 +4638,8 @@ End Function
 
 
 ' ============================================================
-' (NOVO) Override por ficheiro na própria prompt
-'   Ex.: "relatorio.pdf (required) (Reutilização de ficheiro=FALSE)"
+' (NOVO) Override por ficheiro na prÃ³pria prompt
+'   Ex.: "relatorio.pdf (required) (ReutilizaÃ§Ã£o de ficheiro=FALSE)"
 ' ============================================================
 Private Sub Files_ParseReuseOverride(ByVal rawItem As String, ByRef outFound As Boolean, ByRef outValue As Boolean)
     outFound = False
@@ -4649,7 +4650,7 @@ Private Sub Files_ParseReuseOverride(ByVal rawItem As String, ByRef outFound As 
 
     ' Aceita com/sem acentos
     Dim p As Long
-    p = InStr(1, low, "reutilização de ficheiro", vbTextCompare)
+    p = InStr(1, low, "reutilizaÃ§Ã£o de ficheiro", vbTextCompare)
     If p = 0 Then p = InStr(1, low, "reutilizacao de ficheiro", vbTextCompare)
     If p = 0 Then Exit Sub
 
@@ -4665,7 +4666,7 @@ Private Sub Files_ParseReuseOverride(ByVal rawItem As String, ByRef outFound As 
     pEnd = InStr(1, sVal, ")", vbTextCompare)
     If pEnd > 0 Then sVal = Left$(sVal, pEnd - 1)
 
-    ' Limpar ruído
+    ' Limpar ruÃ­do
     sVal = Replace(sVal, "[", "")
     sVal = Replace(sVal, "]", "")
     sVal = Replace(sVal, """", "")
@@ -4679,7 +4680,7 @@ End Sub
 
 
 ' ============================================================
-' (NOVO) Validação online do file_id (ativo/reutilizável)
+' (NOVO) ValidaÃ§Ã£o online do file_id (ativo/reutilizÃ¡vel)
 ' ============================================================
 Private Function Files_OpenAI_FileIdAtivo(ByVal apiKey As String, ByVal fileId As String, ByRef outHttpStatus As Long, ByRef outErro As String) As Boolean
     On Error GoTo Falha
@@ -4739,36 +4740,36 @@ End Function
 Private Sub Files_MaybeAddRunSeparator(ByVal wsFiles As Worksheet, ByVal lo As ListObject)
     On Error GoTo Falha
 
-    ' Sem token de run: não há separador por run
+    ' Sem token de run: nÃ£o hÃ¡ separador por run
     If Trim$(gRunToken) = "" Then Exit Sub
 
-    ' Já foi tratado este run: não repetir
+    ' JÃ¡ foi tratado este run: nÃ£o repetir
     If StrComp(gRunToken, gLastSeparatorRunToken, vbTextCompare) = 0 Then Exit Sub
 
-    ' Só inserir separador se existir histórico anterior
+    ' SÃ³ inserir separador se existir histÃ³rico anterior
     Dim haHistoricoAnterior As Boolean
     haHistoricoAnterior = False
 
     If Not lo Is Nothing Then
         haHistoricoAnterior = (lo.ListRows.Count > 0)
     Else
-        ' fallback (caso raro): histórico existe se houver dados a partir da linha 2
+        ' fallback (caso raro): histÃ³rico existe se houver dados a partir da linha 2
         haHistoricoAnterior = (wsFiles.Cells(wsFiles.rowS.Count, 1).End(xlUp).Row >= 2)
     End If
 
     If haHistoricoAnterior Then
-        ' Insere a row separadora no topo do histórico anterior
+        ' Insere a row separadora no topo do histÃ³rico anterior
         Call Files_AddRunSeparatorLine(wsFiles, lo, gRunToken)
     End If
 
     ' MUITO IMPORTANTE:
-    ' Mesmo que não haja histórico anterior (1º run), marcar o token como tratado,
+    ' Mesmo que nÃ£o haja histÃ³rico anterior (1Âº run), marcar o token como tratado,
     ' para evitar inserir separador entre ficheiros do mesmo run.
     gLastSeparatorRunToken = gRunToken
     Exit Sub
 
 Falha:
-    ' Não bloquear o pipeline por erro de UI/formatacao do separador
+    ' NÃ£o bloquear o pipeline por erro de UI/formatacao do separador
 End Sub
 
 
@@ -4802,7 +4803,7 @@ Private Function Files_U32_XorByte(ByVal u As Double, ByVal b As Byte) As Double
     hi = CLng(Fix(u / 65536#))
     lo = CLng(u - (CDbl(hi) * 65536#))
 
-    ' XOR só mexe no low byte — continua seguro em 16 bits
+    ' XOR sÃ³ mexe no low byte â€” continua seguro em 16 bits
     lo = (lo Xor CLng(b)) And &HFFFF&
 
     Files_U32_XorByte = (CDbl(hi) * 65536#) + CDbl(lo)
@@ -4856,7 +4857,7 @@ End Function
 
 Private Function Files_Config_GetByKey(ByVal keyName As String, Optional ByVal defaultValue As String = "") As String
     ' Procura uma chave na folha Config (coluna A = chave, coluna B = valor).
-    ' Se não existir (ou houver erro), devolve defaultValue.
+    ' Se nÃ£o existir (ou houver erro), devolve defaultValue.
     On Error GoTo EH
 
     Dim ws As Worksheet
@@ -4893,20 +4894,19 @@ End Function
 
 Private Sub Files_EnsureConfig_DocxPolicies()
     ' ============================================================
-    ' Garante que as políticas/limites para DOCX/PPTX e text_embed
-    ' existem na folha Config (auto-documentação).
+    ' existem na folha Config (auto-documentaÃ§Ã£o).
     '
-    ' Cria (se não existir) as chaves:
+    ' Cria (se nÃ£o existir) as chaves:
     ' - FILES_DOCX_CONTEXT_MODE
     ' - FILES_DOCX_AS_PDF_FALLBACK
     ' - FILES_TEXT_EMBED_MAX_CHARS
     ' - FILES_TEXT_EMBED_OVERFLOW_ACTION
     '
     ' Regras:
-    ' - Não sobrescreve valores já preenchidos (coluna B).
-    ' - Só preenche descrições (coluna C) se estiverem vazias.
+    ' - NÃ£o sobrescreve valores jÃ¡ preenchidos (coluna B).
+    ' - SÃ³ preenche descriÃ§Ãµes (coluna C) se estiverem vazias.
     ' - Evita colidir com B1..B7; escreve em linhas >= 9.
-    ' - Idempotente (pode correr múltiplas vezes sem duplicar).
+    ' - Idempotente (pode correr mÃºltiplas vezes sem duplicar).
     ' ============================================================
 
     On Error Resume Next
@@ -4915,8 +4915,8 @@ Private Sub Files_EnsureConfig_DocxPolicies()
     Set ws = ThisWorkbook.Worksheets(SHEET_CONFIG)
     If ws Is Nothing Then Exit Sub
 
-    ' (Opcional mas recomendável) garantir primeiro a chave antiga de reutilização em row "segura"
-    ' para manter coerência com o padrão já existente do M09.
+    ' (Opcional mas recomendÃ¡vel) garantir primeiro a chave antiga de reutilizaÃ§Ã£o em row "segura"
+    ' para manter coerÃªncia com o padrÃ£o jÃ¡ existente do M09.
     Call Files_EnsureConfig_ReutilizacaoUpload
     Call Files_EnsureConfig_ReutilizacaoUpload
 
@@ -4937,16 +4937,16 @@ Private Sub Files_EnsureConfig_DocxPolicies()
     )
 
     descs = Array( _
-        "Política quando um DOC/DOCX/PPT/PPTX é pedido como (as_is)/(input_file) mas /v1/responses não aceita esse formato como input_file. Valores: AUTO_AS_PDF (recomendado), AUTO_TEXT_EMBED, ERROR. Default: AUTO_AS_PDF.", _
-        "Fallback quando a conversão DOCX/PPTX->PDF falha. Valores: TEXT_EMBED (recomendado) ou ERROR. Default: TEXT_EMBED.", _
-        "Limite máximo de caracteres para text_embed (texto extraído/embebido). Se exceder, gera alerta (TEXT_EMBED_TOO_LARGE) e aplica FILES_TEXT_EMBED_OVERFLOW_ACTION. Default: 50000.", _
-        "Ação quando text_embed excede FILES_TEXT_EMBED_MAX_CHARS. Valores: ALERT_ONLY | TRUNCATE | RETRY_AS_PDF (recomendado) | STOP. Default: RETRY_AS_PDF." _
+        "PolÃ­tica quando um DOC/DOCX/PPT/PPTX Ã© pedido como (as_is)/(input_file) mas /v1/responses nÃ£o aceita esse formato como input_file. Valores: AUTO_AS_PDF (recomendado), AUTO_TEXT_EMBED, ERROR. Default: AUTO_AS_PDF.", _
+        "Fallback quando a conversÃ£o DOCX/PPTX->PDF falha. Valores: TEXT_EMBED (recomendado) ou ERROR. Default: TEXT_EMBED.", _
+        "Limite mÃ¡ximo de caracteres para text_embed (texto extraÃ­do/embebido). Se exceder, gera alerta (TEXT_EMBED_TOO_LARGE) e aplica FILES_TEXT_EMBED_OVERFLOW_ACTION. Default: 50000.", _
+        "AÃ§Ã£o quando text_embed excede FILES_TEXT_EMBED_MAX_CHARS. Valores: ALERT_ONLY | TRUNCATE | RETRY_AS_PDF (recomendado) | STOP. Default: RETRY_AS_PDF." _
     )
 
     Dim lastR As Long
     lastR = ws.Cells(ws.rowS.Count, 1).End(xlUp).Row
 
-    ' Se a coluna A ainda não tem nada (porque Config usa B1..B7),
+    ' Se a coluna A ainda nÃ£o tem nada (porque Config usa B1..B7),
     ' End(xlUp) pode devolver 1; garantir zona "segura" >= 9.
     If lastR < 8 Then lastR = 8
 
@@ -4968,14 +4968,14 @@ Private Sub Files_EnsureConfig_DocxPolicies()
             End If
         Next i
 
-        ' Se não existe, criar nova linha no fim (>= 9)
+        ' Se nÃ£o existe, criar nova linha no fim (>= 9)
         If r = 0 Then
             r = lastR + 1
             If r < 9 Then r = 9
             lastR = r
         End If
 
-        ' Preencher chave / default / descrição
+        ' Preencher chave / default / descriÃ§Ã£o
         ws.Cells(r, 1).value = keyName
         If Trim$(CStr(ws.Cells(r, 2).value)) = "" Then ws.Cells(r, 2).value = CStr(defs(k))
         If Trim$(CStr(ws.Cells(r, 3).value)) = "" Then ws.Cells(r, 3).value = CStr(descs(k))
@@ -4986,12 +4986,12 @@ End Sub
 
 
 ' ============================================================
-' PDF Cache — evita reconversões desnecessárias (e file_id novo)
+' PDF Cache â€” evita reconversÃµes desnecessÃ¡rias (e file_id novo)
 ' - Para DOCX/PPTX convertidos para PDF, o Word/PPT pode gerar
-'   bytes diferentes a cada exportação (metadata). Isso quebra a
-'   reutilização baseada em hash.
-' - Solução: cache local + sidecar .src.sha256 com o hash do source.
-'   Se o source não mudou, reutiliza o PDF existente sem reconverter.
+'   bytes diferentes a cada exportaÃ§Ã£o (metadata). Isso quebra a
+'   reutilizaÃ§Ã£o baseada em hash.
+' - SoluÃ§Ã£o: cache local + sidecar .src.sha256 com o hash do source.
+'   Se o source nÃ£o mudou, reutiliza o PDF existente sem reconverter.
 ' ============================================================
 
 
@@ -5017,12 +5017,12 @@ Private Function Files_PdfCache_GetOrConvertPdf( _
     sourceHash = Trim$(CStr(sourceHash))
 
     If srcPath = "" Or destPdfPath = "" Then
-        outErro = "Paths inválidos para cache PDF."
+        outErro = "Paths invÃ¡lidos para cache PDF."
         Exit Function
     End If
 
     If sourceHash = "" Then
-        outErro = "sourceHash vazio (não é possível validar cache)."
+        outErro = "sourceHash vazio (nÃ£o Ã© possÃ­vel validar cache)."
         Exit Function
     End If
 
@@ -5030,7 +5030,7 @@ Private Function Files_PdfCache_GetOrConvertPdf( _
     sidecar = Files_PdfCache_SidecarPath(destPdfPath)
 
     ' ============================================================
-    ' 1) Cache HIT (preferência: sidecar hash)
+    ' 1) Cache HIT (preferÃªncia: sidecar hash)
     ' ============================================================
     If Files_ExisteFicheiro(destPdfPath) Then
 
@@ -5053,7 +5053,7 @@ Private Function Files_PdfCache_GetOrConvertPdf( _
                     outUsedCache = True
                     Call Debug_Registar(0, promptId, "INFO", "", "PDF_CACHE_HIT", _
                         "PDF em cache usado (sidecar OK): " & srcName, _
-                        "Sem reconversão. Se o DOCX mudar, o sourceHash muda e será reconvertido.")
+                        "Sem reconversÃ£o. Se o DOCX mudar, o sourceHash muda e serÃ¡ reconvertido.")
                     Files_PdfCache_GetOrConvertPdf = True
                     Exit Function
                 End If
@@ -5076,7 +5076,7 @@ Private Function Files_PdfCache_GetOrConvertPdf( _
 
                 Call Debug_Registar(0, promptId, "INFO", "", "PDF_CACHE_HIT", _
                     "PDF em cache usado (timestamp OK; sidecar atualizado): " & srcName, _
-                    "Sem reconversão. Se existirem divergências, apague o PDF/sidecar do _pdf_cache.")
+                    "Sem reconversÃ£o. Se existirem divergÃªncias, apague o PDF/sidecar do _pdf_cache.")
                 Files_PdfCache_GetOrConvertPdf = True
                 Exit Function
             End If
@@ -5097,7 +5097,7 @@ Private Function Files_PdfCache_GetOrConvertPdf( _
     End If
 
     If Not Files_ExisteFicheiro(destPdfPath) Then
-        outErro = "Conversão PDF reportou OK mas o ficheiro não foi criado: " & destPdfPath
+        outErro = "ConversÃ£o PDF reportou OK mas o ficheiro nÃ£o foi criado: " & destPdfPath
         Files_PdfCache_GetOrConvertPdf = False
         Exit Function
     End If
@@ -5117,7 +5117,7 @@ Private Function Files_PdfCache_GetOrConvertPdf( _
 
     Call Debug_Registar(0, promptId, "INFO", "", "PDF_CACHE_MISS_CONVERTED", _
         "PDF gerado (cache miss): " & srcName, _
-        "Na próxima execução deverá ocorrer PDF_CACHE_HIT e não reconverter.")
+        "Na prÃ³xima execuÃ§Ã£o deverÃ¡ ocorrer PDF_CACHE_HIT e nÃ£o reconverter.")
 
     Files_PdfCache_GetOrConvertPdf = True
     Exit Function
@@ -5205,7 +5205,7 @@ Public Function Files_FNV32_Bytes(ByRef b() As Byte) As String
     End If
 
 #If VBA7 And Win64 Then
-    ' 64-bit: usar LongLong com máscara 32-bit
+    ' 64-bit: usar LongLong com mÃ¡scara 32-bit
     Dim mask As LongLong
     mask = CLngLng(4294967295#)
 
