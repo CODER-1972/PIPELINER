@@ -4,8 +4,10 @@ Option Explicit
 
 Public Function Catalogo_ObterPromptPorID(ByVal promptId As String) As PromptDefinicao
     Dim p As PromptDefinicao
-    p.Id = Trim$(promptId)
-    p.nomeFolha = ExtrairNomeFolhaDoID(p.Id)
+    Dim lookupId As String
+    lookupId = Trim$(promptId)
+
+    p.nomeFolha = ExtrairNomeFolhaDoID(lookupId)
 
     If Trim$(p.nomeFolha) = "" Then
         Catalogo_ObterPromptPorID = p
@@ -31,7 +33,8 @@ Public Function Catalogo_ObterPromptPorID(ByVal promptId As String) As PromptDef
 
     Dim linha As Long
     For linha = 2 To ultimaLinha
-        If Trim$(CStr(ws.Cells(linha, 1).value)) = p.Id Then
+        If Trim$(CStr(ws.Cells(linha, 1).value)) = lookupId Then
+            p.Id = lookupId
             p.NomeCurto = CStr(ws.Cells(linha, 2).value)
             p.NomeDescritivo = CStr(ws.Cells(linha, 3).value)
             p.textoPrompt = CStr(ws.Cells(linha, 4).value)
