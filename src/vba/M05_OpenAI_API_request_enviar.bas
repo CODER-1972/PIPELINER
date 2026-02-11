@@ -259,7 +259,6 @@ Public Function OpenAI_Executar( _
     Optional ByVal promptIdForDebug As String = "" _
 ) As ApiResultado
 
-
     Dim resultado As ApiResultado
     Dim dbgPromptId As String
     dbgPromptId = IIf(Trim$(promptIdForDebug) <> "", promptIdForDebug, "M05")
@@ -450,44 +449,138 @@ On Error Resume Next
     On Error GoTo TrataErro
 
     ' -------------------------
-    ' HTTP POST
+    ' HTTP POST com retry 5xx
     ' -------------------------
-    Dim http As Object
-    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+    Const MAX_RETRIES_5XX As Long = 3
+    Dim waitsSec(1 To 3) As Long
+    waitsSec(1) = 2
+    waitsSec(2) = 6
+    waitsSec(3) = 14
 
-    ' Mais tolerante para payloads com base64 (INLINE_BASE64)
-    http.SetTimeouts 15000, 15000, 60000, 120000
-
-    http.Open "POST", OPENAI_ENDPOINT, False
-    http.SetRequestHeader "Authorization", "Bearer " & apiKey
-    http.SetRequestHeader "Content-Type", "application/json; charset=utf-8"
-    http.SetRequestHeader "Accept", "application/json"
-
-    http.Send json
-
-    resultado.httpStatus = CLng(http.status)
-
+    Dim attempt As Long
+    Dim httpStatus As Long
     Dim resposta As String
-    resposta = CStr(http.ResponseText)
+    Dim reqId As String
 
-    ' Guardar JSON bruto para auditoria (sempre)
-    resultado.rawResponseJson = resposta
+    attempt = 0
 
-    If resultado.httpStatus < 200 Or resultado.httpStatus >= 300 Then
-        resultado.Erro = "HTTP " & resultado.httpStatus & " - " & resposta
-        OpenAI_Executar = resultado
-        Exit Function
-    End If
+    Do
+        attempt = attempt + 1
+        reqId = ""
 
-    resultado.responseId = ExtrairCampoJsonSimples(resposta, """id"":")
-    resultado.outputText = ExtrairTextoOutputText(resposta)
+        Dim http As Object
+        Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
 
-    OpenAI_Executar = resultado
-    Exit Function
+        ' Mais tolerante para payloads com base64 (INLINE_BASE64)
+        http.SetTimeouts 15000, 15000, 60000, 120000
+
+        http.Open "POST", OPENAI_ENDPOINT, False
+        http.SetRequestHeader "Authorization", "Bearer " & apiKey
+        http.SetRequestHeader "Content-Type", "application/json; charset=utf-8"
+        http.SetRequestHeader "Accept", "application/json"
+
+        http.Send json
+
+        httpStatus = CLng(http.Status)
+        resposta = CStr(http.ResponseText)
+
+        ' Guardar JSON bruto para auditoria (sempre)
+        resultado.rawResponseJson = resposta
+        resultado.httpStatus = httpStatus
+
+        If httpStatus >= 200 And httpStatus < 300 Then
+            resultado.responseId = ExtrairCampoJsonSimples(resposta, """id"":")
+            resultado.outputText = ExtrairTextoOutputText(resposta)
+            OpenAI_Executar = resultado
+            Exit Function
+        End If
+
+        If httpStatus >= 500 And httpStatus <= 599 Then
+            reqId = ExtrairCampoJsonSimples(resposta, """request_id"":")
+            If reqId = "" Then
+                reqId = M05_ExtrairReqIdDeTexto(resposta)
+            End If
+
+            If attempt <= MAX_RETRIES_5XX Then
+                Dim waitS As Long
+                waitS = waitsSec(attempt)
+
+                On Error Resume Next
+                Call Debug_Registar(0, dbgPromptId, "ALERTA", "", "API_RETRY_5XX", _
+                    "HTTP " & httpStatus & " (server_error) | attempt=" & attempt & "/" & MAX_RETRIES_5XX & _
+                    " | wait=" & waitS & "s" & IIf(reqId <> "", " | req_id=" & reqId, ""), _
+                    "Sugestão: erro transitório do servidor. O PIPELINER vai repetir automaticamente.")
+                On Error GoTo TrataErro
+
+                Call M05_SleepSeconds(waitS)
+            Else
+                resultado.Erro = "HTTP " & httpStatus & " - " & resposta
+                On Error Resume Next
+                Call Debug_Registar(0, dbgPromptId, "ERRO", "", "API", _
+                    "HTTP " & httpStatus & " (server_error) | retries_esgotados=" & MAX_RETRIES_5XX & _
+                    IIf(reqId <> "", " | req_id=" & reqId, ""), _
+                    "Sugestão: tente mais tarde. Se persistir, contacte suporte com o req_id.")
+                On Error GoTo TrataErro
+
+                OpenAI_Executar = resultado
+                Exit Function
+            End If
+        Else
+            resultado.Erro = "HTTP " & httpStatus & " - " & resposta
+            OpenAI_Executar = resultado
+            Exit Function
+        End If
+    Loop
 
 TrataErro:
     resultado.Erro = "Erro VBA: " & Err.Description
     OpenAI_Executar = resultado
+End Function
+
+Private Sub M05_SleepSeconds(ByVal seconds As Long)
+    On Error GoTo EH
+
+    If seconds <= 0 Then Exit Sub
+    Application.Wait Now + TimeSerial(0, 0, seconds)
+    Exit Sub
+
+EH:
+    ' Falha silenciosa: não bloquear o pipeline por causa do wait
+End Sub
+
+Private Function M05_ExtrairReqIdDeTexto(ByVal s As String) As String
+    On Error GoTo EH
+
+    Dim p As Long
+    p = InStr(1, s, "req_", vbTextCompare)
+    If p = 0 Then
+        M05_ExtrairReqIdDeTexto = ""
+        Exit Function
+    End If
+
+    Dim i As Long
+    Dim ch As String
+    Dim tok As String
+    tok = ""
+
+    For i = p To Len(s)
+        ch = Mid$(s, i, 1)
+        If ch Like "[A-Za-z0-9_]" Then
+            tok = tok & ch
+        Else
+            Exit For
+        End If
+    Next i
+
+    If Left$(tok, 4) = "req_" Then
+        M05_ExtrairReqIdDeTexto = tok
+    Else
+        M05_ExtrairReqIdDeTexto = ""
+    End If
+    Exit Function
+
+EH:
+    M05_ExtrairReqIdDeTexto = ""
 End Function
 
 
