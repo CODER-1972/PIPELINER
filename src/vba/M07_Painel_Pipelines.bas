@@ -1,6 +1,25 @@
 Attribute VB_Name = "M07_Painel_Pipelines"
 Option Explicit
 
+' =============================================================================
+' Módulo: M07_Painel_Pipelines
+' Propósito:
+' - Orquestrar execução de pipelines a partir da folha PAINEL e ações de botões.
+' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
+'
+' Atualizações:
+' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
+'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
+'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+'
+' Funções e procedimentos (inventário público):
+' - Painel_CriarBotoes (Sub): rotina pública do módulo.
+' - Painel_Click_Iniciar (Sub): rotina pública do módulo.
+' - Painel_Click_Registar (Sub): rotina pública do módulo.
+' - Painel_Click_SetDefault (Sub): rotina pública do módulo.
+' - Painel_Click_CriarMapa (Sub): rotina pública do módulo.
+' =============================================================================
+
 ' ============================================================
 ' M07_Painel_Pipelines  (VERSAO REVISTA)
 '

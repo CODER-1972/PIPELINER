@@ -1,6 +1,24 @@
 Attribute VB_Name = "M10_FileOutput1"
 Option Explicit
 
+' =============================================================================
+' Módulo: M10_FileOutput1
+' Propósito:
+' - Gerir registo e resolução de ficheiros de output produzidos por prompts.
+' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
+'
+' Atualizações:
+' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
+'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
+'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+'
+' Funções e procedimentos (inventário público):
+' - FileOutput_ResolveEffectiveConfig (Sub): rotina pública do módulo.
+' - FileOutput_PrepareRequest (Sub): rotina pública do módulo.
+' - FileOutput_ProcessAfterResponse (Function): rotina pública do módulo.
+' - Test_FileOutput (Sub): rotina pública do módulo.
+' =============================================================================
+
 ' ============================================================
 ' M10_FileOutput
 '   Gestão de outputs em ficheiro (metadata + code_interpreter)

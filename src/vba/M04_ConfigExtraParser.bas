@@ -1,6 +1,21 @@
 Attribute VB_Name = "M04_ConfigExtraParser"
 Option Explicit
 
+' =============================================================================
+' Módulo: M04_ConfigExtraParser
+' Propósito:
+' - Converter o campo amigável "Config extra" em JSON válido para a API.
+' - Validar sintaxe, chaves proibidas e coerência de parâmetros com logging em DEBUG.
+'
+' Atualizações:
+' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
+'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
+'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+'
+' Funções e procedimentos (inventário público):
+' - ConfigExtra_Converter (Sub): rotina pública do módulo.
+' =============================================================================
+
 
 ' =============================================================================
 ' PARSER DIDÁCTICO: "Config extra" amigável -> JSON

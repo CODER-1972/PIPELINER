@@ -1,6 +1,23 @@
 Attribute VB_Name = "M11_DebugLogging"
 Option Explicit
 
+' =============================================================================
+' Módulo: M11_DebugLogging
+' Propósito:
+' - Fornecer utilitários de logging técnico em DEBUG/Seguimento/FILES_MANAGEMENT.
+' - Padronizar severidades e helpers de criação/obtenção de folhas de log.
+'
+' Atualizações:
+' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
+'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
+'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+'
+' Funções e procedimentos (inventário público):
+' - DebugLog (Sub): rotina pública do módulo.
+' - SeguimentoInfo (Sub): rotina pública do módulo.
+' - FilesManagementNote (Sub): rotina pública do módulo.
+' =============================================================================
+
 ' Logging leve e compatível com folhas DEBUG/Seguimento.
 ' Escreve apenas texto e metadados; nunca escreve chaves nem bytes de ficheiros.
 

@@ -1,6 +1,21 @@
 Attribute VB_Name = "M03_Catalogo_ler_prompt_porID"
 Option Explicit
 
+' =============================================================================
+' Módulo: M03_Catalogo_ler_prompt_porID
+' Propósito:
+' - Resolver um Prompt ID no catálogo Excel e devolver a estrutura PromptDefinicao.
+' - Aplicar validações básicas de folha e conversões de campos tipados.
+'
+' Atualizações:
+' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
+'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
+'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+'
+' Funções e procedimentos (inventário público):
+' - Catalogo_ObterPromptPorID (Function): rotina pública do módulo.
+' =============================================================================
+
 
 Public Function Catalogo_ObterPromptPorID(ByVal promptId As String) As PromptDefinicao
     Dim p As PromptDefinicao

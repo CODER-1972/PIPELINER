@@ -1,6 +1,40 @@
 Attribute VB_Name = "M09_FilesManagement"
 Option Explicit
 
+' =============================================================================
+' Módulo: M09_FilesManagement
+' Propósito:
+' - Gerir resolução de anexos FILES, upload, cache e auditoria em FILES_MANAGEMENT.
+' - Aplicar effective_mode, robustez multipart e utilitários de ficheiros para pipeline.
+'
+' Atualizações:
+' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
+'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
+'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+'
+' Funções e procedimentos (inventário público):
+' - Files_SetRunToken (Sub): rotina pública do módulo.
+' - Files_PrepararContextoDaPrompt (Function): rotina pública do módulo.
+' - Files_ResolverOutputToken (Sub): rotina pública do módulo.
+' - Files_LogEventOutput (Sub): rotina pública do módulo.
+' - Files_UploadFile_OpenAI (Function): rotina pública do módulo.
+' - Files_ContentTypePorExtensao (Function): rotina pública do módulo.
+' - Files_ExtrairCampoJsonSimples (Function): rotina pública do módulo.
+' - Files_SHA256_File (Function): rotina pública do módulo.
+' - Files_SHA256_Text (Function): rotina pública do módulo.
+' - Files_FNV32_String (Function): rotina pública do módulo.
+' - Files_ObterExtensao (Function): rotina pública do módulo.
+' - Files_RegressionTests (Sub): rotina pública do módulo.
+' - Files_Diag_TestarLeituraFicheiro (Sub): rotina pública do módulo.
+' - Files_Diag_TestarConectividadeOpenAI (Sub): rotina pública do módulo.
+' - Files_Diag_TestarUploadFicheiro (Sub): rotina pública do módulo.
+' - Files_Diag_CorridaCompleta (Sub): rotina pública do módulo.
+' - Files_SanitizeFilenameAsciiSafe (Function): rotina pública do módulo.
+' - Files_FNV32_LastDiag (Function): rotina pública do módulo.
+' - Files_SHA256_LastDiag (Function): rotina pública do módulo.
+' - Files_FNV32_Bytes (Function): rotina pública do módulo.
+' =============================================================================
+
 ' ============================================================================
 ' M09_FilesManagement (REWRITE COMPLETO + FIX UPLOAD + DIAGNOSTICOS)
 '

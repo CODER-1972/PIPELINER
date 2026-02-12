@@ -82,6 +82,45 @@ Para cada subsistema, manter contratos estáveis:
 - FILES: resolução de caminhos e effective_mode.
 - Logging: formato e severidades.
 
+### 3.4 Header obrigatório no topo de cada módulo
+Todos os módulos `.bas/.cls/.frm` devem incluir um header de comentários **imediatamente após `Option Explicit`** com três blocos:
+1) **Propósito do módulo**
+   - O que faz, responsabilidades e limites.
+2) **Atualizações**
+   - Registo cronológico inverso: `YYYY-MM-DD | autor | propósito` + bullets de alterações.
+3) **Funções e procedimentos**
+   - Lista de rotinas públicas (e privadas críticas), cada uma com descrição sumária e efeitos colaterais.
+
+Regras práticas:
+- Alteração funcional no módulo => atualizar bloco “Atualizações” no mesmo commit.
+- Adição/remoção/renomeação de rotina => atualizar bloco “Funções e procedimentos”.
+- Evitar descrições vagas (“melhorias gerais”); descrever intenção e impacto.
+- Não incluir segredos/credenciais/dados sensíveis no header.
+
+Template base:
+
+```vb
+Option Explicit
+
+' =============================================================================
+' Módulo: MNN_NomeDoModulo
+' Propósito:
+' - <responsabilidade principal>
+' - <responsabilidade secundária>
+'
+' Atualizações:
+' - 2026-02-12 | <autor> | <propósito>
+'   - <alteração 1>
+'   - <alteração 2>
+'
+' Funções e procedimentos:
+' - NomeDaRotinaA(...)
+'   - <descrição sumária + efeitos colaterais>
+' - NomeDaRotinaB(...)
+'   - <descrição sumária + efeitos colaterais>
+' =============================================================================
+```
+
 ---
 
 ## 4) Estilo e legibilidade (consistência > preferências)
