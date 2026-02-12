@@ -1,6 +1,23 @@
 Attribute VB_Name = "M08_VBA_Code_Manager"
 Option Explicit
 
+' =============================================================================
+' Módulo: M08_VBA_Code_Manager
+' Propósito:
+' - Automatizar import/export e manutenção de módulos VBA no projeto.
+' - Apoiar tarefas de engenharia de código e sincronização de ficheiros .bas.
+'
+' Atualizações:
+' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
+'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
+'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+'
+' Funções e procedimentos (inventário público):
+' - VbaCode_Setup (Sub): rotina pública do módulo.
+' - VbaCode_Download (Sub): rotina pública do módulo.
+' - VbaCode_Upload (Sub): rotina pública do módulo.
+' =============================================================================
+
 ' ============================================================
 ' M08_VBA_Code_Manager (versao limpa)
 '

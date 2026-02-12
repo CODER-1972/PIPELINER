@@ -1,6 +1,21 @@
 Attribute VB_Name = "M06_Execucao_orq_alert_segui"
 Option Explicit
 
+' =============================================================================
+' Módulo: M06_Execucao_orq_alert_segui
+' Propósito:
+' - Disponibilizar entry point simples para execução de prompt por ID em contexto local.
+' - Encaminhar execução para a orquestração principal preservando compatibilidade.
+'
+' Atualizações:
+' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
+'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
+'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+'
+' Funções e procedimentos (inventário público):
+' - ExecutarPrompt_PorID (Sub): rotina pública do módulo.
+' =============================================================================
+
 
 Public Sub ExecutarPrompt_PorID()
     Dim promptId As String

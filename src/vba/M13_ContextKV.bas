@@ -1,5 +1,28 @@
 Attribute VB_Name = "M13_ContextKV"
 Option Explicit
+
+' =============================================================================
+' Módulo: M13_ContextKV
+' Propósito:
+' - Capturar variáveis chave-valor do output e injetá-las em prompts seguintes.
+' - Resolver placeholders/directivas de contexto com observabilidade e fallback seguro.
+'
+' Atualizações:
+' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
+'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
+'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+'
+' Funções e procedimentos (inventário público):
+' - ContextKV_EnsureLayout (Sub): rotina pública do módulo.
+' - ContextKV_InjectForStep (Function): rotina pública do módulo.
+' - ContextKV_WriteInjectedVars (Sub): rotina pública do módulo.
+' - ContextKV_CaptureRow (Sub): rotina pública do módulo.
+' - SelfTest_ContextKV_Parse_RESULTS_JSON (Sub): rotina pública do módulo.
+' - SelfTest_ContextKV_Placeholder_Replace (Sub): rotina pública do módulo.
+' - SelfTest_ContextKV_FileFallback (Sub): rotina pública do módulo.
+' - SelfTest_ContextKV_OutputRef (Sub): rotina pública do módulo.
+' - SelfTest_RunAll_ContextKV (Sub): rotina pública do módulo.
+' =============================================================================
 ' =============================================================================
 ' M11_ContextKV
 ' Captura + Injeção de Variáveis (Key-Value) usando a folha "Seguimento"

@@ -2,6 +2,21 @@ Attribute VB_Name = "M12_SelfTests"
 Option Explicit
 
 ' =============================================================================
+' Módulo: M12_SelfTests
+' Propósito:
+' - Executar self-tests idempotentes de componentes críticos do motor VBA.
+' - Registar resultados PASS/FAIL/ALERTA no DEBUG para diagnóstico rápido.
+'
+' Atualizações:
+' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
+'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
+'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+'
+' Funções e procedimentos (inventário público):
+' - SelfTest_RunAll (Sub): rotina pública do módulo.
+' =============================================================================
+
+' =============================================================================
 ' M12_SelfTests
 ' - Testes internos idempotentes (não alteram Config permanentemente)
 ' - Escrevem resultados na folha DEBUG via Debug_Registar (M02_Logger_DEBUG_e_Seguimento)

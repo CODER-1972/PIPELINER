@@ -1,6 +1,23 @@
 Attribute VB_Name = "M02_Logger_DEBUG_e_Seguimento"
 Option Explicit
 
+' =============================================================================
+' Módulo: M02_Logger_DEBUG_e_Seguimento
+' Propósito:
+' - Registar auditoria operacional nas folhas DEBUG e Seguimento.
+' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
+'
+' Atualizações:
+' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
+'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
+'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+'
+' Funções e procedimentos (inventário público):
+' - Debug_Registar (Sub): rotina pública do módulo.
+' - Seguimento_Registar (Sub): rotina pública do módulo.
+' - Seguimento_ArquivarLimpar (Sub): rotina pública do módulo.
+' =============================================================================
+
 Private Const SHEET_DEBUG As String = "DEBUG"
 Private Const SHEET_SEGUIMENTO As String = "Seguimento"
 Private Const SHEET_HISTORICO As String = "HISTÓRICO"
