@@ -549,7 +549,10 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         "OK")
 
     Dim runToken As String
-    runToken = "RUN|" & pipelineNome & "|" & Format$(Now, "yyyymmdd_hhnnss") & "|P" & Format$(pipelineIndex, "00")
+    runToken = FileOutput_GetOrCreateRunId(pipelineIndex)
+    If Trim$(runToken) = "" Then
+        runToken = "RUN|" & pipelineNome & "|" & Format$(Now, "yyyymmdd_hhnnss") & "|P" & Format$(pipelineIndex, "00")
+    End If
 
     ' Definir token de run (PAINEL) para separador visual na folha FILES_MANAGEMENT (M09)
     Call Files_SetRunToken(runToken)

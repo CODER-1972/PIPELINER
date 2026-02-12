@@ -1138,6 +1138,10 @@ Private Function FileOutput_GetRunId(ByVal pipelineIndex As Long) As String
     FileOutput_GetRunId = gRunId(pipelineIndex)
 End Function
 
+Public Function FileOutput_GetOrCreateRunId(ByVal pipelineIndex As Long) As String
+    FileOutput_GetOrCreateRunId = FileOutput_GetRunId(pipelineIndex)
+End Function
+
 Private Function FileOutput_BuildRunFolder(ByVal outputFolderBase As String, ByVal pipelineNome As String, ByVal runId As String) As String
     Dim strat As String
     strat = LCase$(Config_Get("FILE_FOLDER_STRATEGY_DEFAULT", "by_pipeline_run"))
