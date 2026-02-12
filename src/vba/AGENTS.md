@@ -1,406 +1,477 @@
-# src/vba/AGENTS.md — Regras técnicas de VBA (PIPELINER)
+# AGENTS.md — PIPELINER (Template Excel + VBA para execução de pipelines e catálogos de prompts)
 
-## 0) Propósito deste ficheiro
-Estas regras existem para evitar regressões em VBA e tornar o comportamento:
-- compatível (Excel/VBA),
-- previsível (determinístico),
-- robusto (erros e edge cases),
-- auditável (logs úteis),
-- seguro (sem segredos em logs/código).
+## Objetivo deste repositório (visão de alto nível)
+Este repositório contém o “motor” (VBA) e as regras operacionais de um template Excel (.xlsm) que permite:
+- Definir **catálogos de prompts** (em folhas de catálogo) com IDs e metadados.
+- Definir **pipelines** (sequências de prompts) na folha **PAINEL** (até 10 pipelines).
+- Executar pipelines via VBA, chamando a API (Responses API) e, quando aplicável, a Files API para anexos.
+- Registar auditoria e troubleshooting em **Seguimento** e **DEBUG**.
+- (Opcional) Gerar e descarregar ficheiros de output para um OUTPUT Folder e registar na folha FILES_MANAGEMENT.
 
-Este ficheiro é “lei” para alterações em `src/vba/*.bas` (e eventuais `.cls/.frm`).
+A arquitetura separa duas camadas:
+1) **Excel (dados/UI)**: folhas com prompts, pipelines, configurações e logs.
+2) **VBA/API (execução)**: macros que lêem o Excel, constroem pedidos à API, encadeiam contexto e aplicam validações/limites.
 
----
+Regra de ouro:
+- Alterações ao VBA **não devem exigir** alterações estruturais no Excel, salvo necessidade explícita.
+- Alterações às folhas devem ser feitas como “dados” (conteúdo), preservando layout, nomes e cabeçalhos.
 
-## 1) Premissas do host e compatibilidade
-### 1.1 Host alvo
-- Host principal: **Excel (Windows)**.
-- Assumir que o utilizador cola/usa o código num `.xlsm` com macros activas.
-
-### 1.2 32-bit vs 64-bit
-- Se houver declarações de API/PtrSafe:
-  - usar `#If VBA7 Then` e `LongPtr` quando necessário.
-- Evitar tipos “ambíguos” que rebentam em 64-bit.
-
-### 1.3 Referências e binding
-Preferência:
-- **Late binding** quando possível (portabilidade e menos dependências), sobretudo para:
-  - `Scripting.Dictionary` (via `CreateObject("Scripting.Dictionary")`)
-  - HTTP clients (WinHTTP/MSXML)
-  - FileSystemObject (se usado, ponderar alternativas nativas)
-
-Se usares early binding:
-- documentar explicitamente a referência necessária (nome, versão) e justificar.
+Diretriz de documentação (README):
+- O `README.md` é a referência principal de **funcionamento global do projeto** (arquitetura, fluxo, componentes e operação).
+- Evitar transformar o README num guia exclusivo de um único teste/caso.
+- Guias de teste específicos (ex.: T1/T3/selftests) devem ser adicionados como secções complementares ou documentos dedicados, sem substituir a visão end-to-end do sistema.
 
 ---
 
-## 2) Regras não negociáveis (falha = P0)
-### 2.1 `Option Explicit`
-- Todos os módulos `.bas/.cls` têm de começar com:
-  - `Option Explicit`
-- Deve estar antes de qualquer procedimento.
-
-### 2.2 Compilação e auto-contenção
-- O código entregue/alterado tem de compilar sem erros.
-- O módulo/feature tem de ser **auto-contido**:
-  - Não chamar procedimentos inexistentes no repo.
-  - Se criares uma função helper, inclui-a no commit e garante que está acessível.
-
-### 2.3 Sem “Resume Next” global
-- Proibido `On Error Resume Next` como modo global.
-- Só permitido:
-  - em blocos curtos, para “capability checks” (guardas),
-  - seguido de validação do resultado,
-  - e com limpeza de erro (`Err.Clear`) e reposição (`On Error GoTo 0`).
-
-### 2.4 Objectos: `Set` obrigatório
-- Sempre que a atribuição for um objecto, usar `Set`.
-- Em colecções/dicionários que armazenem objectos:
-  - usar helpers para encapsular a atribuição com `Set`.
+## “Mapa mental” do funcionamento (pipeline em 60 segundos)
+Quando uma pipeline é iniciada:
+1) O VBA lê a lista de IDs no PAINEL (pipeline escolhida).
+2) Resolve o prompt inicial e encontra o respetivo bloco no catálogo (folha cujo nome coincide com o prefixo do ID).
+3) Constrói o request com base em:
+   - defaults globais (folha Config),
+   - overrides no catálogo (modelo, modos, storage, config extra),
+   - anexos definidos na célula INPUTS (via directiva FILES:) e regras de Config para anexos.
+4) Faz a chamada à API e escreve:
+   - auditoria detalhada no Seguimento,
+   - alertas/erros e diagnóstico no DEBUG.
+5) Determina o próximo passo via:
+   - Next PROMPT determinístico, ou
+   - Next PROMPT = AUTO (extrai `NEXT_PROMPT_ID: ...` do output), com fallback para Next PROMPT default.
+6) Aplica limites (Max Steps, Max Repetitions, deteção de loops) e termina quando chegar a STOP/limite/erro.
 
 ---
 
-## 3) Convenções de estrutura do código (módulos e responsabilidades)
-### 3.1 Convenção de nomes de módulos
-- Módulos seguem padrão `MNN_...` (ex.: `M07_Painel_Pipelines`).
-- Não renomear `Attribute VB_Name` sem necessidade (impacta import/export e referências).
+## Estrutura do workbook e função de cada folha (INVARIANTES)
 
-### 3.2 Separação por camadas
-Evitar misturar:
-- UI Excel (ler/escrever folhas, status bar) com lógica pura.
-- Construção de payload com execução HTTP.
-- Parsing de “Config extra” com validação de folhas.
+### 1) Folha “PAINEL” (obrigatória)
+Finalidade:
+- UI principal para gerir pipelines, limites, e botões de execução.
+- Define INPUT Folder e OUTPUT Folder por pipeline.
 
-Regra: funções “puras” (sem I/O) devem existir quando possível:
-- mais fáceis de testar,
-- menos regressões.
+Invariantes críticos:
+- Existem **10 pipelines**, cada uma num “par de colunas”: (INICIAR à esquerda, REGISTAR à direita).
+- A **lista de IDs começa na linha 9** (por pipeline).
+- Deve existir um campo para:
+  - Nome da pipeline (linha 1),
+  - INPUT Folder (linha 2),
+  - OUTPUT Folder (linha 3),
+  - Max Steps (linha 4),
+  - Max Repetitions (linha 5),
+  - Botões INICIAR/REGISTAR (linha 7).
+- Não reformatar nem “mexer no layout” do PAINEL sem alterar o VBA correspondente.
 
-### 3.3 Interfaces internas (contratos)
-Para cada subsistema, manter contratos estáveis:
-- Leitura de catálogo por ID: entradas/saídas determinísticas.
-- Parsing de Config extra: chaves proibidas e validações.
-- FILES: resolução de caminhos e effective_mode.
-- Logging: formato e severidades.
+Comportamentos operacionais esperados (não quebrar):
+- Ao clicar em INICIAR, o foco muda para a folha Seguimento (A1).
+- Ao iniciar, a folha DEBUG é limpa (mantém cabeçalho) para evitar confusão com logs anteriores.
+- Durante execução, a barra de estado do Excel mostra progresso do tipo: `(hh:mm) Step: x of y | Retry: z`.
 
-### 3.4 Header obrigatório no topo de cada módulo
-Todos os módulos `.bas/.cls/.frm` devem incluir um header de comentários **imediatamente após `Option Explicit`** com três blocos:
-1) **Propósito do módulo**
-   - O que faz, responsabilidades e limites.
-2) **Atualizações**
-   - Registo cronológico inverso: `YYYY-MM-DD | autor | propósito` + bullets de alterações.
-3) **Funções e procedimentos**
-   - Lista de rotinas públicas (e privadas críticas), cada uma com descrição sumária e efeitos colaterais.
+### 2) Folha “Config” (obrigatória)
+Finalidade:
+- Defaults globais para execução e controlo de anexos.
 
-Regras práticas:
-- Alteração funcional no módulo => atualizar bloco “Atualizações” no mesmo commit.
-- Adição/remoção/renomeação de rotina => atualizar bloco “Funções e procedimentos”.
-- Evitar descrições vagas (“melhorias gerais”); descrever intenção e impacto.
-- Não incluir segredos/credenciais/dados sensíveis no header.
+Chaves base (invariantes de célula):
+- Config!B1 = OPENAI_API_KEY (NUNCA versionar valores reais no repo; apenas placeholder)
+- Config!B2 = MODELO (default)
+- Config!B3 = TEMPERATURA (default)
+- Config!B4 = MAX_OUTPUT_TOKENS (default)
 
-Template base:
+Parâmetros de ficheiros (sintético — ver secção “FILES” abaixo):
+- Config!B5 = FILES_TRANSPORT_MODE (FILE_ID recomendado; alternativa: INLINE_BASE64)
+- Config!B6 = FILES_ENABLE_IA_FALLBACK (TRUE/FALSE)
+- Config!B7 = FILES_INLINE_MAX_MB (limite para INLINE_BASE64)
 
-```vb
-Option Explicit
+Outras opções (normalmente em linhas “label -> valor”):
+- FILES_UPLOAD_PROFILE (ROBUST_THEN_LEGACY | ROBUST_ONLY | LEGACY_ONLY)
+- FILES_UPLOAD_ENGINE_PRIMARY (WINHTTP | MSXML)
+- FILES_UPLOAD_ENGINE_FALLBACK (WINHTTP | MSXML | NONE)
+- FILES_MULTIPART_FILENAME_MODE (ASCII_SAFE | RAW | RFC5987)
+- FILES_UPLOAD_DEBUG_LEVEL (OFF | BASIC | VERBOSE)
+- FILES_DOCX_CONTEXT_MODE (AUTO_AS_PDF | AUTO_TEXT_EMBED | ERROR)
+- FILES_DOCX_AS_PDF_FALLBACK (TEXT_EMBED | ERROR)
+- FILES_TEXT_EMBED_MAX_CHARS (número; default típico ~50000)
+- FILES_TEXT_EMBED_OVERFLOW_ACTION (ALERT_ONLY | TRUNCATE | RETRY_AS_PDF | STOP)
+- “Reutilização de ficheiros no upload” (TRUE/FALSE)
 
-' =============================================================================
-' Módulo: MNN_NomeDoModulo
-' Propósito:
-' - <responsabilidade principal>
-' - <responsabilidade secundária>
-'
-' Atualizações:
-' - 2026-02-12 | <autor> | <propósito>
-'   - <alteração 1>
-'   - <alteração 2>
-'
-' Funções e procedimentos:
-' - NomeDaRotinaA(...)
-'   - <descrição sumária + efeitos colaterais>
-' - NomeDaRotinaB(...)
-'   - <descrição sumária + efeitos colaterais>
-' =============================================================================
-```
+Invariantes:
+- O VBA deve tolerar Config incompleta (compatibilidade retroativa): se uma chave não existir, usar defaults internos.
+- Não introduzir dependências frágeis (por ex. exigir novas chaves sem fallback).
+
+### 3) Folha “Seguimento” (obrigatória)
+Finalidade:
+- Auditoria por passo: prompt, modelo, config, HTTP status, output, pipeline, next decidido, etc.
+
+Invariantes:
+- Cabeçalhos devem manter o mesmo texto (a ordem pode mudar, mas os nomes devem ser estáveis).
+- Deve ser suficiente para auditar:
+  - que prompt correu,
+  - com que parâmetros,
+  - que request foi feito (pelo menos em forma de resumo),
+  - que resposta veio (resumo + ids relevantes),
+  - qual foi o Next PROMPT decidido.
+
+### 4) Folha “DEBUG” (obrigatória)
+Finalidade:
+- Erros/alertas e troubleshooting, incluindo:
+  - parsing (Config extra),
+  - validações (Next PROMPT, allowed/default),
+  - limites (Max Steps / Max Repetitions / loops),
+  - anexos (FILES:), uploads e compatibilidades,
+  - diagnósticos SELFTEST.
+
+Invariantes:
+- Cabeçalhos estáveis.
+- Deve conter apenas:
+  - ERRO/ALERTA/INFO relevantes,
+  - sugestões curtas e acionáveis,
+  - sem dados sensíveis (NUNCA API key; evitar dumps extensos).
+
+### 5) Folha “PROMPT PARAMETROS” (recomendada)
+Finalidade:
+- Guia humano dos parâmetros suportados em “Config extra” (sintaxe amigável).
+- NÃO é usada diretamente pela execução; serve para consistência e manutenção.
+
+Regra:
+- Quando o parser (VBA) aceitar novas chaves / mudar comportamento, atualizar este guia.
+
+### 6) Folha “PROMPT TEMPLATE” (recomendada)
+Finalidade:
+- Biblioteca de secções e boas práticas para prompts (agnóstico do domínio).
+- Ajuda a manter prompts consistentes e auditáveis.
+
+Estrutura típica (não rígida):
+- SEÇÃO | Itens | Propósito | Situações a não usar | Exemplos | IDs em que foi usada
+
+### 7) Folhas de catálogo (obrigatórias)
+Finalidade:
+- Cada folha de catálogo contém prompts “executáveis”.
+
+Invariantes:
+- O **nome da folha tem de coincidir com o prefixo do ID** (antes do primeiro `/`).
+- Não usar merges.
+- As linhas “Next PROMPT” começam na coluna B (ver layout do bloco abaixo).
+- O VBA assume um layout por prompt (blocos fixos).
+
+### 8) Folha “FILES_MANAGEMENT” (se presente/ativa)
+Finalidade:
+- Auditoria de ficheiros: file_id, hash, reutilização, last_used_at, used_in_prompts, caminhos, e eventos de download/output.
+
+Regra:
+- Se o módulo de gestão de ficheiros estiver ativo, esta folha deve existir e ser tratada como “log/auditoria”.
 
 ---
 
-## 4) Estilo e legibilidade (consistência > preferências)
-### 4.1 Indentação e formatação
-- Indentar consistentemente (4 espaços recomendado).
-- `With ... End With` sempre completo.
-- Evitar linhas demasiado longas; usar `_` correctamente.
+## Convenções de IDs (prompt IDs) e nomenclatura
+Formato recomendado (compatível com o template):
+`ID = <NomeDaFolha>/<número>/<nomeCurto>/<versão>`
 
-### 4.2 Tipos (evitar Variant por omissão)
-- Declarar tipos sempre que possível.
-- Preferir `Long` a `Integer` (Excel usa muito Long para rows/cols).
-- Evitar `Variant` excepto quando:
-  - interage com APIs que devolvem Variant,
-  - precisa de arrays variant para Range.Value.
-
-### 4.3 Strings e encoding
-- Ser explícito quando precisa de:
-  - escapes JSON,
-  - normalização de CRLF/LF,
-  - sanitização ASCII_SAFE para filenames.
-
----
-
-## 5) Padrão oficial de tratamento de erros (entry points)
-### 5.1 Regra base
-Entry points públicos (macros de botão, orquestrações principais) devem usar:
-- `On Error GoTo EH`
-- Secção `EH:` com reporte mínimo:
-  - nome da rotina,
-  - `Err.Number` e `Err.Description`,
-  - contexto essencial (p.ex. ID actual, pipeline, step),
-  - (opcional) `Erl` se houver linhas numeradas.
-
-### 5.2 “Try/Finally” em VBA
-Sempre que alterares estado global do Excel:
-- `Application.ScreenUpdating`
-- `Application.EnableEvents`
-- `Application.Calculation`
-- `Application.StatusBar`
-
-…deves:
-1) guardar valores anteriores,
-2) aplicar alterações,
-3) garantir reposição em `Finally:` (mesmo em erro).
-
-Exemplo de estrutura (padrão, não copiar sem adaptar):
-- `On Error GoTo EH`
-- `...`
-- `GoTo Finally`
-- `EH: ...`
-- `Finally: ... restore ...`
-
-### 5.3 Guardas com Resume Next (permitido, com disciplina)
-Usar apenas para:
-- testar se uma propriedade/método existe no objecto,
-- ou quando uma chamada falha legitimamente em certos tipos.
+Exemplo:
+`AvalCap/02/Poema/A`
 
 Regras:
-- `On Error Resume Next`
-- executar 1–3 linhas
-- capturar `Err.Number`
-- `Err.Clear`
-- `On Error GoTo 0`
-- fallback determinístico
-
-Nunca:
-- engolir erros sem log quando impacta execução.
-- deixar `Resume Next` activo.
+- Prefixo do ID (antes do primeiro `/`) == nome exato da folha onde o prompt está definido.
+- Evitar espaços; usar nomes curtos e estáveis (CamelCase quando necessário).
+- Número sequencial dentro da folha (01, 02, 03...).
+- Versão (A, B, C...) muda quando há alterações relevantes ao comportamento do prompt.
+- `STOP` é sentinela (não é ID de prompt).
 
 ---
 
-## 6) Logging e auditoria (DEBUG vs Seguimento)
-### 6.1 Objetivo dos logs
-- Seguimento: log por passo (auditoria funcional).
-- DEBUG: alertas, erros, INFO de diagnóstico e troubleshooting.
+## Layout do catálogo (bloco por prompt) — INVARIANTE
+Cada prompt ocupa um bloco de **5 linhas**:
+- Linha principal (linha do ID): campos executáveis.
+- +3 linhas de configuração/documentação.
+- +1 linha em branco.
 
-### 6.2 Regras de conteúdo (anti-lixo)
-- Logs devem permitir diagnosticar sem abrir o VBA.
-- Não registar:
-  - API keys,
-  - payload completo com segredos,
-  - dados pessoais desnecessários.
-- Truncar conteúdo longo (ex.: previews de JSON).
+### Linha principal (linha do ID) — colunas esperadas
+A: ID (lookup)
+B: Nome curto (documentação)
+C: Nome descritivo (documentação)
+D: Texto prompt (conteúdo enviado por defeito como input)
+E: Modelo (override do default Config!B2)
+F: Modos (ativa tools conforme lógica do VBA; ex.: Web search / None)
+G: Storage (store:true/false para a API)
+H: Config extra (amigável; convertido para JSON)
+I: Comentários (documentação)
+J: Notas para desenvolvimento (documentação)
+K: Histórico de versões (documentação)
 
-### 6.3 Estrutura recomendada (consistência)
-Sempre que possível, incluir:
-- timestamp,
-- severidade (INFO/WARN/ERROR/PASS/FAIL),
-- componente (M09_FILES, M05_API, M04_PARSER),
-- contexto (pipeline, prompt_id, step),
-- mensagem curta e accionável.
+### Linhas seguintes (sem merges; texto começa na coluna B)
+Linha +1: `Next PROMPT: <ID | AUTO | STOP | vazio>`
+Linha +2: `Next PROMPT default: <ID | STOP>`
+Linha +3: `Next PROMPT allowed: <ALL; STOP | lista separada por ';'>`
 
----
+Documentação estrutural em C/D (padrão recomendado):
+- C: `Descrição textual:` | D: (descrição)
+- C: `INPUTS:` | D: (inputs necessários; aqui entra FILES:)
+- C: `OUTPUTS:` | D: (outputs esperados)
 
-## 7) Excel Object Model — boas práticas (evitar bugs clássicos)
-### 7.1 Qualificar tudo
-Evitar:
-- `ActiveWorkbook`, `ActiveSheet`, `Selection`
-Preferir:
-- `ThisWorkbook.Worksheets("...")`
-- objectos passados como parâmetro.
 
-### 7.2 Evitar Select/Activate
-- Proibido usar `.Select`/`.Activate` para lógica.
-- Só permitido para UX deliberada (ex.: focar Seguimento!A1 no arranque).
+### Nota operacional para testes de injeção por placeholder (ContextKV)
+Quando estiver a validar mecanismos de **injeção por placeholder** (por exemplo, `{{VAR:RESULTS_JSON}}`):
+- O placeholder tem de existir **no Texto da prompt** (coluna D), porque é isso que entra no request enviado à API.
+- Uma linha isolada `VARS: ...` é útil para pedir variáveis por “directiva”, mas **não testa** o caminho de *placeholder injection*.
+- Para um teste E2E completo, inclua ambos quando necessário:
+  - `{{VAR:RESULTS_JSON}}` (valida detecção/substituição de placeholder)
+  - `VARS: REGISTO_PESQUISAS` (valida pedido explícito de variável sem placeholder)
 
-### 7.3 Leitura/escrita eficiente
-- Para milhares de células:
-  - ler Range para array Variant,
-  - processar em memória,
-  - escrever de volta em bloco.
-
-### 7.4 Sem merges em catálogos
-- Código deve assumir “sem merges” nas zonas de catálogo e Next PROMPT.
-- Se detectar merges, logar alerta e falhar de forma clara.
+Isto evita falsos negativos em testes (por exemplo, ver `(SEM_VAR_...)` no output apesar de a captura existir) e torna o diagnóstico mais imediato.
 
 ---
 
-## 8) Parser de “Config extra” (amigável → JSON)
-### 8.1 Gramática suportada (resumo operacional)
-- `chave: valor` por linha
-- nesting com pontos: `a.b.c: valor`
-- listas: `[a, b, c]`
-- objectos: `{k: v}`
-- `input:` com linhas indentadas `role:` e `content:`
+## “Next PROMPT” e execução condicional (pipeline dinâmica)
+O template suporta 3 padrões:
+1) Determinístico: Next PROMPT = `<ID>`
+2) Terminação: Next PROMPT = `STOP` (ou vazio)
+3) Dinâmico: Next PROMPT = `AUTO`
 
-### 8.2 Validação e alertas
-- Linhas inválidas → ignorar + alerta em DEBUG.
-- Chaves proibidas → ignorar + alerta em DEBUG:
-  - model, temperature, max_output_tokens, store, tools
-- “conversation” vs “previous_response_id”:
-  - não permitir simultâneo; escolher comportamento determinístico e logar.
+### Quando Next PROMPT = AUTO (invariante de parsing)
+O VBA tenta extrair do output uma linha no formato exato:
+`NEXT_PROMPT_ID: <ID completo ou STOP>`
 
-### 8.3 Robustez JSON
-- Nunca construir JSON “a olho” sem escaping.
-- Usar utilitários de escape e builders consistentes.
-- Se existir “preview do payload” em DEBUG:
-  - truncar,
-  - mascarar segredos,
-  - garantir CRLF escapado.
+Boas práticas (para reduzir falhas):
+- Incluir sempre `NEXT_PROMPT_ID: ...` numa linha isolada, sem ruído.
+- Opcional (para auditoria humana):
+  - `DECISION: ...`
+  - `RATIONALE: ...` (1–2 linhas)
+
+Fallback obrigatório:
+- Se o output não tiver `NEXT_PROMPT_ID`, o VBA usa `Next PROMPT default`.
+
+### Allowed/default (controlo de integridade)
+- `Next PROMPT default` deve estar sempre preenchido (ou STOP), salvo intenção explícita de terminar.
+- `Next PROMPT allowed` deve incluir:
+  - o default,
+  - e STOP,
+  - e (idealmente) restringir opções para evitar saltos inesperados.
+
+### Controlo de loops e limites (não quebrar)
+- Max Steps: limite absoluto de passos por execução (PAINEL).
+- Max Repetitions: limite por ID (PAINEL).
+- Deteção de alternância A↔B (padrão A-B-A-B): interromper com alerta.
+- STOP explícito termina.
 
 ---
 
-## 9) Construção de pedidos à API (robustez)
-### 9.1 Responsabilidades mínimas
-- Construir request determinístico a partir de:
-  - Config global (defaults),
-  - overrides do catálogo (modelo, tools, store),
-  - Config extra convertido para JSON,
-  - anexos (FILES),
-  - encadeamento (previous_response_id).
+## Campo “Config extra” (amigável) — sintaxe, validações e precedência
+Objetivo:
+- Permitir parâmetros extra sem proliferar colunas.
 
-### 9.2 HTTP: timeouts, status e retries
-- Definir timeouts razoáveis (connect/send/receive).
-- Logar sempre:
-  - endpoint,
+Formato:
+- Uma linha = `chave: valor` (linhas separadas por ALT+ENTER).
+- Linhas sem `:` são ignoradas com alerta em DEBUG.
+- Chaves podem usar notação com pontos (nesting): `text.format.type`
+- Listas: `[a, b, c]`
+- Objetos: `{k: v, k2: v2}`
+
+Bloco `input:` (override do conteúdo enviado):
+- Após `input:`, só aceitar `role:` e `content:` (indentados).
+
+Chaves proibidas em Config extra (devem ser ignoradas com alerta):
+- `model`, `temperature`, `max_output_tokens`, `store`, `tools`
+(Estas chaves têm colunas dedicadas / lógica própria.)
+
+Regras de coerência:
+- Não usar `conversation` e `previous_response_id` em simultâneo; se ambos aparecerem, manter `conversation` e ignorar `previous_response_id` (com alerta).
+
+---
+
+## Directiva FILES: (anexos) — comportamento e invariantes
+### Onde e como declarar
+Na célula INPUTS (no bloco do prompt; tipicamente linha +2, coluna D):
+- `FILES: ficheiro1.pdf; imagem1.png; doc1.docx (as pdf)`
+Separador suportado: `;`
+Sinónimo suportado: `FICHEIROS:` (com ou sem espaço antes de `:`)
+
+### Flags reconhecidas por ficheiro (exatas)
+Entre parênteses no mesmo item:
+- Obrigatoriedade:
+  - `(required)` ou `(obrigatorio)` ou `(obrigatoria)`
+- “mais recente” (wildcards):
+  - `(latest)` ou `(mais recente)` ou `(mais_recente)`
+- Modo:
+  - `(as pdf)` ou `(as_pdf)`
+  - `(as is)` ou `(as_is)`
+  - `(text)` ou `(text_embed)`
+
+### Regra base: onde o sistema procura
+- O VBA resolve ficheiros **apenas** dentro do INPUT Folder do pipeline (PAINEL, linha 2).
+- Por segurança, deve ignorar caminhos que tentem sair da pasta (usar apenas filename).
+- Wildcard `*` procura dentro da própria pasta (não contar com subpastas).
+
+### Precedência de configuração (quando há conflito)
+1) Overrides na directiva FILES (por ficheiro)
+2) Config (global)
+3) Defaults internos (fallback/compatibilidade)
+
+### Transport mode (como o conteúdo chega ao request)
+- `FILES_TRANSPORT_MODE=FILE_ID` (recomendado):
+  - Faz upload para `/v1/files` quando necessário e referencia por `file_id`.
+  - Pode reutilizar uploads via cache (hash + modo + nome).
+- `FILES_TRANSPORT_MODE=INLINE_BASE64`:
+  - Embute como data URL no request; sujeito a `FILES_INLINE_MAX_MB`.
+
+### Compatibilidade /v1/responses (ponto crítico)
+- Alguns formatos Office (DOC/DOCX/PPT/PPTX/XLSX/...) podem ser aceites no `/v1/files`, mas **não são aceites como `input_file`** no `/v1/responses`.
+- Por isso, existe “effective_mode” para evitar falhas a meio:
+  - Se alguém pedir `(as is)` para DOCX/PPTX, o sistema pode fazer override automático para:
+    - PDF (`AUTO_AS_PDF`), ou
+    - text_embed (`AUTO_TEXT_EMBED`),
+    - ou erro (`ERROR`), conforme Config.
+
+### Comportamento por tipo (síntese)
+A) PDF
+- Default: upload como PDF para o modelo (modo “pdf_upload”).
+- Recomendação: usar PDF quando precisa de layout/tabelas/imagens.
+
+B) Imagens (png/jpg/jpeg/webp)
+- Default: upload como imagem (“image_upload”).
+
+C) Word (DOC/DOCX)
+- Default: `text_embed` (extração de texto), se não disser nada.
+- `(as pdf)`: converte para PDF (cache `_pdf_cache`) e envia como PDF.
+- `(as is)`: pode ser override por effective_mode (Config: FILES_DOCX_CONTEXT_MODE).
+
+D) PowerPoint (PPT/PPTX)
+- Similar a DOCX: default `text_embed`; `(as pdf)` converte; `(as is)` pode ser override.
+
+E) Excel (XLS/XLSX/XLSM)
+- Em geral, não há extração robusta (text_embed) nem conversão automática fiável no fluxo atual.
+- Recomendação prática: exportar previamente para PDF/CSV e anexar esses artefactos.
+
+### Controlo de tamanho (text_embed)
+- `FILES_TEXT_EMBED_MAX_CHARS` limita chars do texto extraído.
+- Se exceder:
+  - emitir alerta `TEXT_EMBED_TOO_LARGE`,
+  - aplicar `FILES_TEXT_EMBED_OVERFLOW_ACTION`:
+    - ALERT_ONLY | TRUNCATE | RETRY_AS_PDF | STOP.
+
+### Upload robustness (evitar 415/invalid multipart)
+- `FILES_UPLOAD_PROFILE` controla estratégia (ROBUST_THEN_LEGACY recomendado).
+- `FILES_UPLOAD_ENGINE_PRIMARY` + fallback (WINHTTP/MSXML).
+- `FILES_MULTIPART_FILENAME_MODE` (ASCII_SAFE por defeito) para evitar problemas com Unicode/acentos em filename.
+- Em erros de upload, registar no DEBUG:
   - HTTP status,
-  - erro de transporte (se HTTP 0),
-  - snippet curto da resposta em erro (sem segredos).
+  - inputFolder, resolvedPath, FileExists=SIM/NAO,
+  - engine e profile usados.
 
-### 9.3 Gestão de erros comuns (mínimo esperado)
-- 401/403: credenciais/permissões → mensagem clara.
-- 413: payload demasiado grande → recomendar PDF vs text_embed, reduzir limites.
-- 415: multipart inválido → sugerir ASCII_SAFE e alternar engine/perfil.
-- 429/5xx: sugerir retry controlado (se existir política), com logs.
+### Roteiro de verificação (3 checks) — recomendado em troubleshooting
+1) JSON final contém `input_file/input_image` e `file_id` quando esperado
+2) Upload `/v1/files` devolve HTTP 2xx (quando aplicável)
+3) FILES_MANAGEMENT tem registo (file_id, hash, last_used_at, used_in_prompts)
 
----
-
-## 10) FILES: resolução, upload e “effective_mode”
-### 10.1 Segurança de caminhos
-- Resolver sempre paths dentro do INPUT Folder.
-- Proibir path traversal (`..\`, `:` e afins) — usar apenas nome do ficheiro quando necessário.
-
-### 10.2 Resolução determinística
-- wildcard `*`:
-  - resolver candidatos na pasta,
-  - se `latest`, escolher o mais recente (critério claro),
-  - se ambíguo, logar AMBIGUOUS e aplicar regra/política.
-
-### 10.3 Transport modes
-- `FILE_ID`:
-  - upload /v1/files quando necessário,
-  - reutilização via cache (hash + modo),
-  - validação do file_id (GET /v1/files/<id>) quando aplicável.
-- `INLINE_BASE64`:
-  - respeitar limite de MB,
-  - falhar com mensagem accionável se exceder.
-
-### 10.4 Office “as is” e compatibilidade com Responses
-- DOCX/PPTX/XLSX como `input_file` pode ser incompatível.
-- Implementar `effective_mode`:
-  - por defeito converter para PDF (AUTO_AS_PDF),
-  - fallback para text_embed,
-  - ou ERROR (parar) conforme config.
-
-### 10.5 text_embed: limites e overflow
-- Respeitar `FILES_TEXT_EMBED_MAX_CHARS`.
-- Em overflow:
-  - aplicar acção definida: ALERT_ONLY/TRUNCATE/RETRY_AS_PDF/STOP
-- Logar claramente:
-  - tamanho extraído,
-  - limite,
-  - acção tomada.
+### Fallback IA (ambiguidade) — usar com critério
+- `FILES_ENABLE_IA_FALLBACK=TRUE` pode fazer chamada adicional para escolher o ficheiro quando há ambiguidades.
+- Deve ser usado apenas quando ambiguidade é frequente e não há regra determinística.
 
 ---
 
-## 11) File Output (download/gravação)
-- Validar OUTPUT Folder:
-  - existe,
-  - permissões,
-  - caminho simples (evitar falhas de sync/rede).
-- Em colisão de nomes:
-  - usar estratégia previsível (suffix timestamp) se configurado.
-- Registar em FILES_MANAGEMENT:
-  - path completo,
-  - tipo/extensão,
-  - hash/tamanho,
-  - response_id (se disponível),
-  - status.
+## File Output (criação/descarregamento de ficheiros)
+Objetivo:
+- Permitir que uma prompt produza um artefacto final (.xlsx/.docx/.pptx/.pdf/.csv) guardado no OUTPUT Folder.
+
+Invariantes:
+- OUTPUT Folder é definido no PAINEL (linha 3) e a pasta tem de existir/permissões.
+- Prompt deve pedir explicitamente um ficheiro e indicar nome + extensão.
+- Registar evento em FILES_MANAGEMENT (path completo, tipo, notas, response_id quando aplicável).
+- Em caso de colisão de nome (ficheiro já existe):
+  - preferir sufixo com timestamp/versão,
+  - ou política clara de overwrite (se existir).
 
 ---
 
-## 12) Idempotência (quando aplicável)
-Se o código:
-- cria ficheiros,
-- cria folhas,
-- escreve estruturas no DEBUG/Seguimento,
-- cria caches (_pdf_cache),
-- cria registos FILES_MANAGEMENT,
-
-…deve ser idempotente:
-- não duplicar estruturas em execuções repetidas,
-- apagar/recriar apenas o que o próprio código criou (por prefixo/tag),
-- manter logs claros.
+## Regras de segurança e privacidade (não negociáveis)
+- NUNCA commitar API keys reais (Config!B1 deve ser placeholder).
+- NUNCA escrever segredos em DEBUG/Seguimento.
+- Minimizar exposição de dados sensíveis nos logs (mascarar quando necessário).
+- Quando falhar, preferir logs “curtos e acionáveis” a dumps extensos.
 
 ---
 
-## 13) SelfTests (obrigatório manter e actualizar quando tocar em subsistemas)
-- SelfTest_RunAll deve:
-  - ser rápido,
-  - ser idempotente,
-  - escrever PASS/FAIL no DEBUG,
-  - validar sanitização, multipart e engines (mínimo).
-- Se mexeres em:
-  - sanitização de filename → adicionar teste específico,
-  - upload/profile/engine → adicionar teste e logs,
-  - parser Config extra → adicionar casos de erro/edge cases.
+## Compatibilidade retroativa e disciplina de mudanças
+Quando alterar VBA:
+- Preservar compatibilidade com templates existentes sempre que possível.
+- Se introduzir nova configuração:
+  1) adicionar default interno,
+  2) tolerar ausência da chave,
+  3) atualizar PROMPT PARAMETROS e documentação,
+  4) adicionar/atualizar SelfTest correspondente (se aplicável).
+
+Quando alterar prompts/catálogos:
+- Se o comportamento mudar, atualizar versão do ID (A->B->C...).
+- Manter regras de Next PROMPT (AUTO/default/allowed) coerentes para evitar loops e custos.
 
 ---
 
-## 14) Checklist pré-entrega (antes de commit/PR)
-1) Compila com Option Explicit.
-2) Não há referências a membros inexistentes no host.
-3) Não há object assignments sem Set.
-4) Não há On Error Resume Next fora de guardas curtas.
-5) Logs:
-   - DEBUG tem alertas úteis,
-   - Seguimento mantém auditoria por passo,
-   - sem segredos.
-6) FILES:
-   - effective_mode não quebra compatibilidade,
-   - overflow controlado.
-7) Se aplicável:
-   - SelfTest_RunAll passa,
-   - execução curta (MaxSteps baixo) funciona.
+## Padrões de qualidade VBA (para revisão e alterações)
+### Checklist mínimo antes de aceitar um PR com VBA
+(1) Host e compatibilidade
+- Assumir Excel como host principal.
+- Se usar APIs específicas, aplicar guardas e fallbacks.
+
+(2) Auto-contenção
+- Código entregue/alterado deve incluir dependências necessárias (evitar chamadas para procedimentos “fantasma”).
+
+(3) Option Explicit e símbolos
+- `Option Explicit` obrigatório.
+- Sem variáveis não declaradas / nomes inconsistentes.
+
+(4) Objectos e Set
+- Atribuições a objectos usam `Set`.
+- Em dictionaries/collections, evitar atribuições encadeadas ambíguas; usar helpers consistentes.
+
+(5) Guardas por tipo/capacidade
+- Antes de chamar métodos/propriedades não universais, validar TypeName/.Type/.HasX ou usar `On Error Resume Next` apenas em blocos curtos + verificação do resultado.
+
+(6) Late binding e constantes
+- Preferir late binding para portabilidade.
+- Evitar enums dependentes de versão; usar `Const ... As Long = ...` quando necessário.
+
+(7) Integridade estrutural (copy-paste seguro)
+- Sem `With` sem `End With`, sem `Select Case` sem `End Select`, sem linhas truncadas.
+
+(8) Idempotência
+- Quando cria/atualiza artefactos (folhas, tabelas, shapes, ficheiros), evitar duplicação em execuções repetidas.
+
+(9) Tratamento e reporte de erros
+- Entry points principais com `On Error GoTo EH` e reporte mínimo (rotina, Err.Number, Err.Description; Erl se aplicável).
+- Evitar `On Error Resume Next` como “modo global”.
+
+(10) Smoke tests / SelfTest
+- Manter rotinas de teste idempotentes (ex.: `SelfTest_RunAll`) e registar PASS/FAIL no DEBUG.
 
 ---
 
-## 15) Anti-padrões (proibidos ou altamente desencorajados)
-- Uso generalizado de `Select`/`Activate` para lógica.
-- “Hardcode” de paths pessoais ou dependência de OneDrive/UNC sem fallback.
-- Guardar API key em texto no repo.
-- Alterar nomes de folhas/cabeçalhos sem migração coordenada.
-- Construir JSON por concatenação sem escape.
-- Silenciar erros sem logging quando afectam execução.
+## Instruções para o Codex durante code review (como avaliar PRs)
+### Prioridades (classificação de severidade)
+- P0 (bloqueador): quebra execução, perda de dados, regressão de compatibilidade, erros de anexos/requests, loops infinitos, fuga de segredos.
+- P1 (alto): edge cases frequentes, logs insuficientes para diagnosticar, validações fracas (Next PROMPT), parsing frágil.
+- P2 (médio): clareza/legibilidade, duplicação, pequenas melhorias de robustez.
+- P3 (baixo): estilo, micro-optimizações, “nitpicks”.
+
+### O que o Codex deve sempre verificar
+- Não há alterações inadvertidas ao layout esperado (PAINEL, Config, Seguimento, DEBUG, catálogo).
+- Next PROMPT e regras de AUTO/default/allowed mantêm-se consistentes.
+- FILES: continua compatível (flags, effective_mode, limites, logs).
+- Não foi introduzida dependência que exija Office apps ausentes sem fallback.
+- Não há segredos/versionamento indevido.
+- Todas as alterações que atualizem ou modifiquem o funcionamento devem levar a uma revisão e atualização do ficheiro README, e isso deve ser reportado no chat.
+- Todos os erros detectados no VBA, se puderem ser detectados, devem levar a uma atualização no ficheiro src\vba\AGENTS.md, com a revisão e o enunciar de regras ou princípios agnósticos que evitem a repetição do erro.
+
+### Como propor alterações
+- Preferir diffs pequenos e testáveis.
+- Não fazer refactors massivos “por limpeza” sem necessidade.
+- Quando sugerir mudança, indicar:
+  - risco,
+  - impacto em compatibilidade,
+  - como validar (passos de teste / onde ver logs).
 
 ---
 
-## 16) Nota final para agentes
-Se uma regra for impossível de cumprir:
-- explica no PR (curto e objectivo),
-- propõe fallback,
-- e adiciona logging/guardas para reduzir risco.
+## Nota sobre tamanho e manutenção das instruções
+Este AGENTS.md é propositadamente detalhado, mas deve manter-se “operacional”.
+Se começar a ficar demasiado grande:
+- mover detalhe para `docs/*.md`,
+- criar `src/vba/AGENTS.md` com regras específicas de VBA/módulos,
+- manter aqui apenas invariantes e instruções de revisão.
+
+(As instruções mais próximas do ficheiro alterado devem ter prioridade.)
