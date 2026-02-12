@@ -464,3 +464,60 @@ Se começar a ficar demasiado grande:
 - manter aqui apenas invariantes e instruções de revisão.
 
 (As instruções mais próximas do ficheiro alterado devem ter prioridade.)
+
+---
+
+## Padrão obrigatório de header por módulo VBA
+Objetivo:
+- Garantir que cada módulo `.bas/.cls/.frm` tem contexto mínimo para manutenção, auditoria e troubleshooting sem depender de memória implícita da equipa.
+
+Quando aplicar:
+- Em **todos os módulos VBA** já existentes (incrementalmente, quando forem tocados).
+- Em **todos os módulos novos** no momento da criação.
+
+Estrutura mínima do header (topo do módulo, logo após `Option Explicit`):
+1) **Propósito do módulo**
+   - 2–6 linhas com o que o módulo faz, responsabilidades e fronteiras.
+2) **Histórico de atualizações**
+   - Lista cronológica inversa (mais recente primeiro).
+   - Cada entrada: `Data (YYYY-MM-DD) | Autor | Propósito | Alterações`.
+   - Em “Alterações”, usar bullets curtos e acionáveis (sem parágrafos longos).
+3) **Inventário de funções/procedimentos**
+   - Lista dos entry points e helpers relevantes.
+   - Para cada item: nome + descrição sumária + efeitos colaterais principais (folhas/log/API/ficheiros), quando aplicável.
+
+Regras de manutenção do header:
+- Sempre que houver mudança funcional no módulo, atualizar o histórico.
+- Se forem adicionadas/removidas funções, atualizar o inventário no mesmo commit.
+- Evitar texto genérico (“ajustes diversos”); descrever a intenção real.
+- Não incluir segredos, tokens, paths sensíveis nem dados de clientes.
+
+Template recomendado (adaptar sem perder secções):
+
+```vb
+Option Explicit
+
+' =============================================================================
+' Módulo: MNN_NomeDoModulo
+' Propósito:
+' - <responsabilidade 1>
+' - <responsabilidade 2>
+' - <fora de escopo / limites>
+'
+' Atualizações:
+' - 2026-02-12 | <autor> | <propósito da alteração>
+'   - <alteração 1>
+'   - <alteração 2>
+' - 2026-01-20 | <autor> | <propósito anterior>
+'   - <alteração>
+'
+' Funções e procedimentos:
+' - RunPipeline(pipelineIndex As Long)
+'   - Orquestra execução completa da pipeline; escreve em Seguimento/DEBUG.
+' - ResolvePromptById(promptId As String) As Object
+'   - Lê catálogo e devolve estrutura do prompt (sem I/O de rede).
+' =============================================================================
+```
+
+Critério de revisão (PR):
+- PRs que alterem VBA e não mantenham este header atualizado devem ser classificados como **P1 (alto)** por risco de manutenção.

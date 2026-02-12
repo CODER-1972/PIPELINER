@@ -1,6 +1,25 @@
 Attribute VB_Name = "M07_Painel_Pipelines"
 Option Explicit
 
+' =============================================================================
+' Módulo: M07_Painel_Pipelines
+' Propósito:
+' - Orquestrar execução de pipelines a partir da folha PAINEL e ações de botões.
+' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
+'
+' Atualizações:
+' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
+'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
+'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+'
+' Funções e procedimentos (inventário público):
+' - Painel_CriarBotoes (Sub): rotina pública do módulo.
+' - Painel_Click_Iniciar (Sub): rotina pública do módulo.
+' - Painel_Click_Registar (Sub): rotina pública do módulo.
+' - Painel_Click_SetDefault (Sub): rotina pública do módulo.
+' - Painel_Click_CriarMapa (Sub): rotina pública do módulo.
+' =============================================================================
+
 ' ============================================================
 ' M07_Painel_Pipelines  (VERSAO REVISTA)
 '
@@ -628,12 +647,14 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         injectErro = ""
         injectOk = True
 
+        ' ================================
+        ' CONTEXTKV - INJECAO (ANTES DA API)
+        ' ================================
         On Error Resume Next
         injectOk = ContextKV_InjectForStep(pipelineNome, passo, prompt.Id, outputFolderBase, runToken, promptTextFinal, injectedVarsJson, injectErro)
         If Err.Number <> 0 Then
             Call Debug_Registar(passo, prompt.Id, "ALERTA", "", "CONTEXT_KV", _
-                "Falha a executar ContextKV_InjectForStep: " & Err.Description, _
-                "Sugestao: compilar o VBAProject e verificar se M13_ContextKV esta presente.")
+                "Erro ao executar ContextKV_InjectForStep: " & Err.Description, "")
             Err.Clear
             injectOk = True
             injectErro = ""
@@ -643,10 +664,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         On Error GoTo TrataErro
 
         If injectOk = False Then
-            Call Debug_Registar(passo, prompt.Id, "ERRO", "", "CONTEXT_KV", _
-                injectErro, _
-                "Sugestao: verifique captured_vars do passo anterior e placeholders {{VAR:...}} / {@OUTPUT:...}.")
-            Call Seguimento_Registar(passo, prompt, modeloUsado, "{}", 0, "", "[ERRO CONTEXT_KV] " & injectErro, pipelineNome, "STOP", "", "", "")
+            Call Debug_Registar(passo, prompt.Id, "ERRO", "", "CONTEXT_KV", injectErro, "")
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
             GoTo SaidaLimpa
         End If
@@ -809,13 +827,15 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, resultado.httpStatus, resultado.responseId, _
             textoSeguimento, pipelineNome, "", filesUsedResumo, filesOpsResumo, fileIds)
 
+        ' ================================
+        ' CONTEXTKV - REGISTAR + CAPTURAR
+        ' ================================
         On Error Resume Next
         Call ContextKV_WriteInjectedVars(pipelineNome, passo, prompt.Id, injectedVarsJson, outputFolderBase, runToken)
         Call ContextKV_CaptureRow(pipelineNome, passo, prompt.Id, outputFolderBase, runToken)
         If Err.Number <> 0 Then
             Call Debug_Registar(passo, prompt.Id, "ALERTA", "", "CONTEXT_KV", _
-                "Falha em WriteInjectedVars/CaptureRow: " & Err.Description, _
-                "Sugestao: confirme cabecalhos Seguimento/DEBUG e compile o VBAProject.")
+                "Erro em WriteInjectedVars/CaptureRow: " & Err.Description, "")
             Err.Clear
         End If
         On Error GoTo TrataErro

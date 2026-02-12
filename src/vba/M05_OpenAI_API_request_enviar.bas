@@ -1,6 +1,21 @@
 Attribute VB_Name = "M05_OpenAI_API_request_enviar"
 Option Explicit
 
+' =============================================================================
+' Módulo: M05_OpenAI_API_request_enviar
+' Propósito:
+' - Construir e enviar pedidos para a Responses API com tratamento de retries/erros.
+' - Extrair campos úteis da resposta JSON para consumo da orquestração.
+'
+' Atualizações:
+' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
+'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
+'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+'
+' Funções e procedimentos (inventário público):
+' - OpenAI_Executar (Function): rotina pública do módulo.
+' =============================================================================
+
 Private Const OPENAI_ENDPOINT As String = "https://api.openai.com/v1/responses"
 
 ' ============================================================
