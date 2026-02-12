@@ -653,7 +653,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         ' Converter Config extra (amigavel) -> JSON (audit) / input override / extra fragment
         Dim auditJson As String, inputJsonLiteral As String, extraFragment As String
-        Call ConfigExtra_Converter(prompt.ConfigExtra, prompt.textoPrompt, passo, prompt.Id, auditJson, inputJsonLiteral, extraFragment)
+        Call ConfigExtra_Converter(prompt.ConfigExtra, promptTextFinal, passo, prompt.Id, auditJson, inputJsonLiteral, extraFragment)
 
         ' Encadear previous_response_id, apenas se o config extra nao tiver conversation/previous_response_id
         If prevResponseId <> "" Then
@@ -696,7 +696,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 pipelineNome, _
                 inputFolder, _
                 prompt.Id, _
-                prompt.textoPrompt, _
+                promptTextFinal, _
                 inputJsonLiteral, _
                 inputJsonFinal, _
                 filesUsed, _
