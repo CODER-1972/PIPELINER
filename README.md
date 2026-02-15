@@ -227,6 +227,11 @@ O módulo ContextKV permite:
 
 ## 9. Logs, troubleshooting e validação operacional
 
+Boas práticas de manutenção VBA (preventivas):
+
+- em literais de string com aspas duplas, usar escaping válido do VBA (ex.: `""""`) ou `Chr$(34)`;
+- após alterações em módulos `.bas`, correr compilação do projeto (`Debug > Compile VBAProject`) para apanhar erros de sintaxe antes de execução.
+
 ### Seguimento
 
 Usar para auditar:
