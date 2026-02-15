@@ -475,3 +475,8 @@ Se começar a ficar demasiado grande:
 - manter aqui apenas invariantes e instruções de revisão.
 
 (As instruções mais próximas do ficheiro alterado devem ter prioridade.)
+
+
+## Checklist anti-erros de sintaxe em strings VBA
+- Ao remover aspas duplas em `Replace`, usar literal válido de VBA (`""""`) ou `Chr$(34)`; nunca usar `"""` porque gera erro de compilação.
+- Sempre que editar strings com escape (JSON, regex-like, Replace), executar verificação rápida no VBE (Debug > Compile VBAProject) antes de fechar a alteração.

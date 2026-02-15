@@ -8,6 +8,8 @@ Option Explicit
 ' - Aplicar effective_mode, robustez multipart e utilitários de ficheiros para pipeline.
 '
 ' Atualizações:
+' - 2026-02-15 | Codex | Correção de sintaxe na normalização de nome de ficheiro
+'   - Corrige escaping de aspas em Replace para evitar erro de compilação no VBA.
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
 '   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
 '   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
@@ -1236,7 +1238,7 @@ Private Function Files_ParseItem(ByVal itemRaw As String) As Object
         If p > 0 Then nome = Trim$(Left$(raw, p - 1))
     End If
 
-    nome = Replace(nome, """, "")
+    nome = Replace(nome, """", "")
     nome = Replace(nome, "'", "")
 
     d("requested_name") = Trim$(nome)
