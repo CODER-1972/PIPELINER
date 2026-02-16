@@ -8,6 +8,9 @@ Option Explicit
 ' - Registar resultados PASS/FAIL/ALERTA no DEBUG para diagnóstico rápido.
 '
 ' Atualizações:
+' - 2026-02-16 | Codex | Novos self-tests para resolução segura de OPENAI_API_KEY
+'   - Substitui teste de presença simples por cenários de precedência ENV -> Config!B1.
+'   - Valida alertas/erros de migração sem exposição de segredo em logs.
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
 '   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
 '   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
@@ -58,8 +61,8 @@ Public Sub SelfTest_RunAll()
     ' 3) Disponibilidade de engines COM (WinHTTP / MSXML)
     SelfTest_EnginesAvailability
 
-    ' 4) Check simples de Config (sem imprimir a key)
-    SelfTest_ConfigApiKeyPresence
+    ' 4) Resolução de OPENAI_API_KEY (precedência e diagnósticos)
+    SelfTest_ConfigApiKeyResolution
 
     ' 5) Esquema mínimo da FILES_MANAGEMENT para output chain
     SelfTest_Schema_FilesManagement
@@ -201,25 +204,50 @@ EH:
 End Sub
 
 ' =============================================================================
-' Teste 4: presença de OPENAI_API_KEY na Config (sem imprimir a key)
+' Teste 4: resolução de OPENAI_API_KEY (ENV -> Config!B1)
 ' =============================================================================
 
-Private Sub SelfTest_ConfigApiKeyPresence()
+Private Sub SelfTest_ConfigApiKeyResolution()
     On Error GoTo EH
 
-    Dim v As String
-    v = Config_GetValue("OPENAI_API_KEY")
+    Dim apiKey As String, src As String, warnTxt As String, errTxt As String
+    Dim ok As Boolean
 
-    If Trim$(v) <> "" Then
-        SelfTest_Log SEV_INFO, "SELFTEST_CONFIG", "OPENAI_API_KEY presente na Config (valor não exibido).", "OK"
+    ' Cenário A: ENV presente, Config literal também presente -> usa ENV + alerta
+    ok = Config_SelfTest_ResolveOpenAIApiKey("env-secret", "cfg-secret", apiKey, src, warnTxt, errTxt)
+    If ok And src = "ENV" And apiKey = "env-secret" And warnTxt <> "" And errTxt = "" Then
+        SelfTest_Log SEV_INFO, "SELFTEST_CONFIG", "APIKEY_RESOLUTION ENV precedence: PASS", "OK"
     Else
-        SelfTest_Log SEV_ALERTA, "SELFTEST_CONFIG", "OPENAI_API_KEY ausente/vazia na Config.", "Sem API key, uploads e chamadas à OpenAI falham."
+        SelfTest_Log SEV_ERRO, "SELFTEST_CONFIG", "APIKEY_RESOLUTION ENV precedence: FAIL", "Esperado source=ENV com alerta de key literal em Config!B1."
+    End If
+
+    ' Cenário B: ENV vazio, Config literal válida -> fallback com alerta
+    ok = Config_SelfTest_ResolveOpenAIApiKey("", "cfg-secret", apiKey, src, warnTxt, errTxt)
+    If ok And src = "CONFIG_B1" And apiKey = "cfg-secret" And warnTxt <> "" And errTxt = "" Then
+        SelfTest_Log SEV_INFO, "SELFTEST_CONFIG", "APIKEY_RESOLUTION Config fallback: PASS", "OK"
+    Else
+        SelfTest_Log SEV_ERRO, "SELFTEST_CONFIG", "APIKEY_RESOLUTION Config fallback: FAIL", "Esperado source=CONFIG_B1 com alerta de migração para ambiente."
+    End If
+
+    ' Cenário C: Config diretiva Environ e ENV vazio -> erro
+    ok = Config_SelfTest_ResolveOpenAIApiKey("", "(Environ(""OPENAI_API_KEY""))", apiKey, src, warnTxt, errTxt)
+    If (Not ok) And errTxt <> "" Then
+        SelfTest_Log SEV_INFO, "SELFTEST_CONFIG", "APIKEY_RESOLUTION Environ directive sem ENV: PASS", "OK"
+    Else
+        SelfTest_Log SEV_ERRO, "SELFTEST_CONFIG", "APIKEY_RESOLUTION Environ directive sem ENV: FAIL", "Esperado erro com instrução para definir OPENAI_API_KEY no ambiente."
+    End If
+
+    ' Cenário D: sem ENV e sem Config válida -> erro
+    ok = Config_SelfTest_ResolveOpenAIApiKey("", "", apiKey, src, warnTxt, errTxt)
+    If (Not ok) And errTxt <> "" Then
+        SelfTest_Log SEV_INFO, "SELFTEST_CONFIG", "APIKEY_RESOLUTION sem fontes: PASS", "OK"
+    Else
+        SelfTest_Log SEV_ERRO, "SELFTEST_CONFIG", "APIKEY_RESOLUTION sem fontes: FAIL", "Esperado erro quando ENV e Config!B1 estão vazios/inválidos."
     End If
 
     Exit Sub
-
 EH:
-    SelfTest_Log SEV_ERRO, "SELFTEST_CONFIG", "Exceção no SelfTest_ConfigApiKeyPresence: " & Err.Number & " - " & Err.Description, "Verificar folha Config e estrutura A:B (chave/valor)."
+    SelfTest_Log SEV_ERRO, "SELFTEST_CONFIG", "Exceção no SelfTest_ConfigApiKeyResolution: " & Err.Number & " - " & Err.Description, "Verificar M14_ConfigApiKey e cenários de precedência."
 End Sub
 
 
@@ -393,34 +421,6 @@ Private Function NormalizeHeader(ByVal s As String) As String
     Loop
     s = RemoveDiacriticsPT(s)
     NormalizeHeader = s
-End Function
-
-' =============================================================================
-' Config helper (folha Config: Col A = chave, Col B = valor)
-' =============================================================================
-
-Private Function Config_GetValue(ByVal key As String) As String
-    On Error GoTo EH
-
-    Dim ws As Worksheet
-    Set ws = ThisWorkbook.Worksheets("Config")
-
-    Dim lastRow As Long
-    lastRow = ws.Cells(ws.rowS.Count, 1).End(xlUp).Row
-
-    Dim r As Long
-    For r = 1 To lastRow
-        If StrComp(Trim$(CStr(ws.Cells(r, 1).value)), key, vbTextCompare) = 0 Then
-            Config_GetValue = CStr(ws.Cells(r, 2).value)
-            Exit Function
-        End If
-    Next r
-
-    Config_GetValue = ""
-    Exit Function
-
-EH:
-    Config_GetValue = ""
 End Function
 
 ' =============================================================================
