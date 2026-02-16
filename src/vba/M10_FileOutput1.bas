@@ -8,6 +8,9 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-02-16 | Codex | Mensagens acionaveis para falhas de schema/manifest
+'   - Adiciona diagnostico contextual para erros invalid_json_schema relacionados com subfolder.
+'   - Adiciona alertas com instrucoes diretas quando files[] chega sem a chave subfolder.
 ' - 2026-02-16 | Codex | Hardening de Structured Outputs (json_schema) para File Output
 '   - Corrige schema strict: inclui `subfolder` em `required` quando presente em `properties`.
 '   - Adiciona validação preventiva (properties vs required) e logs de diagnóstico no DEBUG.
@@ -283,6 +286,9 @@ Public Function FileOutput_ProcessAfterResponse( _
         Call Debug_Registar(passo, promptId, "ERRO", "", "M10_PATH_TOO_LONG", msgRaw, _
             "Encurtar OUTPUT Folder no PAINEL e/ou reduzir pipeline_name.")
     End If
+
+    Call FileOutput_LogActionableApiErrorHints(passo, promptId, resultado, outputKind, processMode)
+
     If LCase$(Trim$(outputKind)) <> "file" Then
         FileOutput_ProcessAfterResponse = ""
         Exit Function
@@ -371,6 +377,8 @@ Private Function Process_Metadata( _
     End If
 
     Dim savedCount As Long
+    Dim missingSubfolderLogged As Boolean
+    missingSubfolderLogged = False
     savedCount = 0
 
     For i = 1 To n
@@ -383,6 +391,15 @@ Private Function Process_Metadata( _
         subFolder = Json_GetString(obj, "subfolder")
         payload_kind = LCase$(Json_GetString(obj, "payload_kind"))
         payload = Json_GetString(obj, "payload") ' já unescaped
+
+        If Not FO_ObjectHasKey(obj, "subfolder") Then
+            If Not missingSubfolderLogged Then
+                Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_MANIFEST_SUBFOLDER_MISSING", _
+                    "Manifest files[] sem chave obrigatoria 'subfolder'. O modo strict espera a chave em todos os itens.", _
+                    "No prompt, devolva sempre 'subfolder'. Se quiser raiz, use string vazia. Exemplo: {""file_name"":""relatorio.pdf"",""file_type"":""pdf"",""subfolder"":"""",""payload_kind"":""base64"",""payload"":""...""}.")
+                missingSubfolderLogged = True
+            End If
+        End If
 
         If Trim$(file_name) = "" Then file_name = "output_" & Format$(i, "00")
         file_name = FileOutput_SafeFileName(file_name)
@@ -635,6 +652,59 @@ ProximoFicheiro:
     Exit Function
 Falha:
     Process_CodeInterpreter = "[ERRO] Process_CodeInterpreter: " & Err.Description
+End Function
+
+Private Sub FileOutput_LogActionableApiErrorHints( _
+    ByVal passo As Long, _
+    ByVal promptId As String, _
+    ByRef resultado As ApiResultado, _
+    ByVal outputKind As String, _
+    ByVal processMode As String _
+)
+    On Error GoTo Falha
+
+    Dim errTxt As String
+    errTxt = LCase$(Nz(resultado.Erro))
+    If Trim$(errTxt) = "" Then Exit Sub
+
+    If LCase$(Trim$(outputKind)) <> "file" Then Exit Sub
+    If LCase$(Trim$(processMode)) <> "metadata" Then Exit Sub
+
+    Dim isSchemaErr As Boolean
+    isSchemaErr = (InStr(1, errTxt, "invalid_json_schema", vbTextCompare) > 0 Or _
+                   InStr(1, errTxt, "json_schema", vbTextCompare) > 0 Or _
+                   InStr(1, errTxt, "required", vbTextCompare) > 0)
+
+    If Not isSchemaErr Then Exit Sub
+
+    Dim mentionsSubfolder As Boolean
+    mentionsSubfolder = (InStr(1, errTxt, "subfolder", vbTextCompare) > 0)
+
+    If mentionsSubfolder Then
+        Call Debug_Registar(passo, promptId, "ERRO", "", "M10_SCHEMA_SUBFOLDER_REQUIRED", _
+            "Falha de validacao do json_schema: o manifest exige 'subfolder' em files[] quando strict=true.", _
+            "Acao imediata: inclua 'subfolder' em cada item. Se for raiz, use string vazia. Revise prompt OUTPUTS e, se necessario, teste temporariamente structured_outputs_mode=json_object para isolar o problema.")
+    Else
+        Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_SCHEMA_INVALID_JSON", _
+            "A API rejeitou o manifest com erro de json_schema/required.", _
+            "Revise o schema file_manifest e o JSON gerado (keys obrigatorias por item: file_name, file_type, subfolder, payload_kind, payload). Verifique o _raw do step para comparar com o esperado.")
+    End If
+
+    Exit Sub
+Falha:
+    On Error Resume Next
+End Sub
+
+Private Function FO_ObjectHasKey(ByVal jsonObj As String, ByVal keyName As String) As Boolean
+    On Error GoTo Falha
+
+    Dim pat As String
+    pat = Chr$(34) & LCase$(Trim$(keyName)) & Chr$(34) & ":"
+
+    FO_ObjectHasKey = (InStr(1, LCase$(jsonObj), pat, vbTextCompare) > 0)
+    Exit Function
+Falha:
+    FO_ObjectHasKey = False
 End Function
 
 ' ============================================================
