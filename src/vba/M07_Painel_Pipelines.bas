@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-16 | Codex | Resolução de API key via ambiente com fallback compatível
+'   - Substitui leitura direta de Config!B1 por resolver central (M14_ConfigApiKey).
+'   - Regista ALERTA/ERRO no DEBUG para origem/falhas da credencial sem expor segredo.
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
 '   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
 '   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
@@ -488,9 +491,6 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     Dim wsPainel As Worksheet
     Set wsPainel = ThisWorkbook.Worksheets(SHEET_PAINEL)
 
-    Dim wsCfg As Worksheet
-    Set wsCfg = ThisWorkbook.Worksheets(SHEET_CONFIG)
-
     Dim colIniciar As Long, colRegistar As Long
     Call Painel_ObterColunasPipeline(pipelineIndex, colIniciar, colRegistar)
 
@@ -517,13 +517,26 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     ' Reset visual da coluna INICIAR
     Call Painel_ReporFormatoColunaIDs(wsPainel, colIniciar)
 
-    ' Ler API key e defaults
+    ' Ler API key (ambiente primeiro) e defaults
     Dim apiKey As String
-    apiKey = Trim$(CStr(wsCfg.Range("B1").value))
-    If apiKey = "" Then
-        MsgBox "Falta OPENAI_API_KEY em Config!B1.", vbExclamation
+    Dim apiKeySource As String
+    Dim apiKeyAlert As String
+    Dim apiKeyError As String
+
+    If Not Config_ResolveOpenAIApiKey(apiKey, apiKeySource, apiKeyAlert, apiKeyError) Then
+        Call Debug_Registar(0, pipelineNome, "ERRO", "", "OPENAI_API_KEY", _
+            apiKeyError, _
+            "Defina a variável de ambiente OPENAI_API_KEY (recomendado) ou um fallback válido em Config!B1.")
+        MsgBox "OPENAI_API_KEY ausente. Verifique a variável de ambiente OPENAI_API_KEY ou o fallback em Config!B1.", vbExclamation
         GoTo SaidaLimpa
     End If
+
+    If Trim$(apiKeyAlert) <> "" Then
+        Call Debug_Registar(0, pipelineNome, "ALERTA", "", "OPENAI_API_KEY", apiKeyAlert, "Sem ação imediata; recomendado migrar para variável de ambiente.")
+    End If
+
+    Dim wsCfg As Worksheet
+    Set wsCfg = ThisWorkbook.Worksheets(SHEET_CONFIG)
 
     Dim modeloDefault As String
     modeloDefault = Trim$(CStr(wsCfg.Range("B2").value))

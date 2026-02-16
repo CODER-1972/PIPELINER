@@ -8,6 +8,8 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-02-16 | Codex | Test macro alinhada com resolução central de API key
+'   - Test_FileOutput passa a usar Config_ResolveOpenAIApiKey para evitar dependência direta de Config!B1.
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
 '   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
 '   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
@@ -2119,7 +2121,14 @@ Public Sub Test_FileOutput()
     End If
 
     Dim apiKey As String
-    apiKey = Trim$(CStr(ThisWorkbook.Worksheets("Config").Range("B1").value))
+    Dim apiKeySource As String
+    Dim apiKeyAlert As String
+    Dim apiKeyError As String
+
+    If Not Config_ResolveOpenAIApiKey(apiKey, apiKeySource, apiKeyAlert, apiKeyError) Then
+        MsgBox "OPENAI_API_KEY ausente para Test_FileOutput: " & apiKeyError, vbExclamation
+        Exit Sub
+    End If
 
     Dim pipelineNome As String: pipelineNome = "TEST"
     Dim passo As Long: passo = 1
