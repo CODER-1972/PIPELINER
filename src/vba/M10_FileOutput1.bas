@@ -8,6 +8,9 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-02-16 | Codex | Hardening de Structured Outputs (json_schema) para File Output
+'   - Corrige schema strict: inclui `subfolder` em `required` quando presente em `properties`.
+'   - Adiciona validação preventiva (properties vs required) e logs de diagnóstico no DEBUG.
 ' - 2026-02-16 | Codex | Test macro alinhada com resolução central de API key
 '   - Test_FileOutput passa a usar Config_ResolveOpenAIApiKey para evitar dependência direta de Config!B1.
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
@@ -641,6 +644,8 @@ Private Function FileOutput_TextFormat_JsonSchema() As String
     Dim schema As String
     schema = FileOutput_ManifestJsonSchema()
 
+    Call FileOutput_LogSchemaDiagnostics(schema, "file_manifest", True)
+
     FileOutput_TextFormat_JsonSchema = _
         """text"":{""format"":{""type"":""json_schema"",""name"":""file_manifest"",""schema"":" & schema & ",""strict"":true}}"
 End Function
@@ -659,8 +664,117 @@ Private Function FileOutput_ManifestJsonSchema() As String
             """subfolder"":{""type"":""string""}," & _
             """payload_kind"":{""type"":""string"",""enum"":[""text"",""markdown"",""structure"",""base64""]}," & _
             """payload"":{""type"":""string""}" & _
-        "},""required"":[""file_name"",""file_type"",""payload_kind"",""payload""]}}}" & _
+        "},""required"":[""file_name"",""file_type"",""subfolder"",""payload_kind"",""payload""]}}}" & _
         "},""required"":[""output_kind"",""files""]}"
+End Function
+
+Private Sub FileOutput_LogSchemaDiagnostics(ByVal schemaJson As String, ByVal schemaName As String, ByVal strictMode As Boolean)
+    On Error GoTo Falha
+
+    Dim propCount As Long
+    Dim reqCount As Long
+    Dim missing As String
+    Dim extraReq As String
+    Dim ok As Boolean
+
+    ok = FileOutput_ValidateManifestSchemaStrict(schemaJson, propCount, reqCount, missing, extraReq)
+
+    If ok Then
+        Call Debug_Registar(0, "M10_FILEOUTPUT_SCHEMA", "INFO", "", "M10_SCHEMA_SUMMARY", _
+            "schema_name=" & schemaName & " | strict=" & IIf(strictMode, "true", "false") & _
+            " | properties=" & CStr(propCount) & " | required=" & CStr(reqCount) & " | check=OK", "")
+    Else
+        Call Debug_Registar(0, "M10_FILEOUTPUT_SCHEMA", "ERRO", "", "M10_SCHEMA_INVALID", _
+            "schema_name=" & schemaName & " | strict=" & IIf(strictMode, "true", "false") & _
+            " | missing_required=" & IIf(missing = "", "(none)", missing) & _
+            " | extra_required=" & IIf(extraReq = "", "(none)", extraReq), _
+            "Alinhe required com as chaves em properties quando strict=true.")
+    End If
+    Exit Sub
+
+Falha:
+    On Error Resume Next
+    Call Debug_Registar(0, "M10_FILEOUTPUT_SCHEMA", "ALERTA", "", "M10_SCHEMA_DIAG_FAIL", _
+        "Falha ao gerar diagnóstico do schema: " & Err.Description, _
+        "Verifique FileOutput_ValidateManifestSchemaStrict.")
+End Sub
+
+Private Function FileOutput_ValidateManifestSchemaStrict( _
+    ByVal schemaJson As String, _
+    ByRef outPropertiesCount As Long, _
+    ByRef outRequiredCount As Long, _
+    ByRef outMissingRequired As String, _
+    ByRef outExtraRequired As String _
+) As Boolean
+    On Error GoTo Falha
+
+    Dim props As Object
+    Dim reqs As Object
+    Set props = CreateObject("Scripting.Dictionary")
+    Set reqs = CreateObject("Scripting.Dictionary")
+    props.CompareMode = vbTextCompare
+    reqs.CompareMode = vbTextCompare
+
+    Dim re As Object
+    Dim matches As Object
+    Dim m As Object
+
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = True
+    re.IgnoreCase = True
+
+    re.Pattern = """(file_name|file_type|subfolder|payload_kind|payload)""\s*:\s*\{"
+    Set matches = re.Execute(schemaJson)
+    For Each m In matches
+        props(LCase$(CStr(m.SubMatches(0)))) = True
+    Next m
+
+    re.Pattern = """required""\s*:\s*\[(.*?)\]"
+    Set matches = re.Execute(schemaJson)
+    If matches.Count = 0 Then
+        outMissingRequired = "required=(em falta)"
+        FileOutput_ValidateManifestSchemaStrict = False
+        Exit Function
+    End If
+
+    Dim reqBlock As String
+    reqBlock = CStr(matches(matches.Count - 1).SubMatches(0))
+
+    re.Pattern = """([^"]+)"""
+    Set matches = re.Execute(reqBlock)
+    For Each m In matches
+        reqs(LCase$(CStr(m.SubMatches(0)))) = True
+    Next m
+
+    Dim k As Variant
+    outMissingRequired = ""
+    outExtraRequired = ""
+
+    For Each k In props.Keys
+        If Not reqs.Exists(CStr(k)) Then
+            If outMissingRequired <> "" Then outMissingRequired = outMissingRequired & ";"
+            outMissingRequired = outMissingRequired & CStr(k)
+        End If
+    Next k
+
+    For Each k In reqs.Keys
+        If Not props.Exists(CStr(k)) Then
+            If outExtraRequired <> "" Then outExtraRequired = outExtraRequired & ";"
+            outExtraRequired = outExtraRequired & CStr(k)
+        End If
+    Next k
+
+    outPropertiesCount = props.Count
+    outRequiredCount = reqs.Count
+    FileOutput_ValidateManifestSchemaStrict = (outMissingRequired = "" And outExtraRequired = "")
+    Exit Function
+
+Falha:
+    outPropertiesCount = 0
+    outRequiredCount = 0
+    outMissingRequired = "validator_error"
+    outExtraRequired = ""
+    FileOutput_ValidateManifestSchemaStrict = False
 End Function
 
 Private Sub ExtraFragment_Append(ByRef extraFragment As String, ByVal fragmentSemChavesExternas As String)

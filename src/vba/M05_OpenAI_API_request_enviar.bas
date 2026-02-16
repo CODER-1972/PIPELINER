@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-16 | Codex | Dump opcional do payload final para troubleshooting local
+'   - Adiciona escrita do JSON final em C:\Temp\payload.json antes do envio HTTP.
+'   - Regista INFO/ALERTA no DEBUG sem expor segredos.
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
 '   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
 '   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
@@ -417,6 +420,8 @@ Public Function OpenAI_Executar( _
 
     json = json & "}"
 
+    Call M05_DumpPayloadForDebug(json, dbgPromptId)
+
     ' -------------------------
     ' Log diagnostico (sem despejar base64)
     ' -------------------------
@@ -599,3 +604,33 @@ EH:
 End Function
 
 
+
+Private Sub M05_DumpPayloadForDebug(ByVal payloadJson As String, ByVal dbgPromptId As String)
+    On Error GoTo Falha
+
+    Dim targetPath As String
+    targetPath = "C:\Temp\payload.json"
+
+    Dim folderPath As String
+    folderPath = Left$(targetPath, InStrRev(targetPath, "\") - 1)
+
+    If Dir(folderPath, vbDirectory) = "" Then MkDir folderPath
+
+    Dim ff As Integer
+    ff = FreeFile
+    Open targetPath For Output As #ff
+    Print #ff, payloadJson
+    Close #ff
+
+    Call Debug_Registar(0, dbgPromptId, "INFO", "", "M05_PAYLOAD_DUMP", _
+        "Payload final gravado em " & targetPath & " | len=" & CStr(Len(payloadJson)), _
+        "Use este ficheiro para validar text.format.schema e outros fragmentos antes de novo envio.")
+    Exit Sub
+
+Falha:
+    On Error Resume Next
+    If ff > 0 Then Close #ff
+    Call Debug_Registar(0, dbgPromptId, "ALERTA", "", "M05_PAYLOAD_DUMP_FAIL", _
+        "Não foi possível gravar payload em C:\Temp\payload.json: " & Err.Description, _
+        "Verifique permissões locais e existência da pasta C:\Temp.")
+End Sub
