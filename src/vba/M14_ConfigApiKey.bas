@@ -2,22 +2,22 @@ Attribute VB_Name = "M14_ConfigApiKey"
 Option Explicit
 
 ' =============================================================================
-' MÃ³dulo: M14_ConfigApiKey
-' PropÃ³sito:
-' - Resolver OPENAI_API_KEY com precedÃªncia segura (variÃ¡vel de ambiente antes de Config!B1).
-' - Fornecer diagnÃ³stico sem exposiÃ§Ã£o de segredos para consumo de DEBUG e self-tests.
+' Módulo: M14_ConfigApiKey
+' Propósito:
+' - Resolver OPENAI_API_KEY com precedência segura (variável de ambiente antes de Config!B1).
+' - Fornecer diagnóstico sem exposição de segredos para consumo de DEBUG e self-tests.
 '
-' AtualizaÃ§Ãµes:
+' Atualizações:
 ' - 2026-02-16 | Codex | Resolver de API key com prioridade para ambiente
 '   - Adiciona Config_ResolveOpenAIApiKey para uso transversal no motor.
-'   - MantÃ©m fallback retrocompatÃ­vel para Config!B1 sem obrigar alteraÃ§Ãµes estruturais no Excel.
-'   - ExpÃµe helper de self-test sem ler ambiente real.
+'   - Mantém fallback retrocompatível para Config!B1 sem obrigar alterações estruturais no Excel.
+'   - Expõe helper de self-test sem ler ambiente real.
 '
-' FunÃ§Ãµes e procedimentos:
+' Funções e procedimentos:
 ' - Config_ResolveOpenAIApiKey(ByRef outApiKey, ByRef outSource, ByRef outAlert, ByRef outError) As Boolean
-'   - Resolve key efetiva; nÃ£o escreve logs diretamente.
+'   - Resolve key efetiva; não escreve logs diretamente.
 ' - Config_SelfTest_ResolveOpenAIApiKey(ByVal envValue, ByVal configB1Value, ByRef outApiKey, ByRef outSource, ByRef outAlert, ByRef outError) As Boolean
-'   - Variante determinÃ­stica para SelfTests.
+'   - Variante determinística para SelfTests.
 ' =============================================================================
 
 Private Const CFG_SHEET As String = "Config"
@@ -74,7 +74,7 @@ Private Function ResolveOpenAIApiKeyCore( _
         outSource = "ENV"
 
         If Config_IsUsableLiteralKey(cfgRaw) Then
-            outAlert = "Config!B1 contÃ©m API key literal, mas OPENAI_API_KEY do ambiente foi priorizada. Recomenda-se remover a key literal da folha Config."
+            outAlert = "Config!B1 contém API key literal, mas OPENAI_API_KEY do ambiente foi priorizada. Recomenda-se remover a key literal da folha Config."
         End If
 
         ResolveOpenAIApiKeyCore = True
@@ -82,7 +82,7 @@ Private Function ResolveOpenAIApiKeyCore( _
     End If
 
     If Config_IsEnvDirective(cfgRaw) Then
-        outError = "Config!B1 estÃ¡ configurada para usar Environ(\"OPENAI_API_KEY\"), mas a variÃ¡vel de ambiente OPENAI_API_KEY estÃ¡ vazia/ausente."
+        outError = "Config!B1 está configurada para usar Environ(""OPENAI_API_KEY""), mas a variável de ambiente OPENAI_API_KEY está vazia/ausente."
         ResolveOpenAIApiKeyCore = False
         Exit Function
     End If
@@ -90,12 +90,12 @@ Private Function ResolveOpenAIApiKeyCore( _
     If Config_IsUsableLiteralKey(cfgRaw) Then
         outApiKey = cfgRaw
         outSource = "CONFIG_B1"
-        outAlert = "OPENAI_API_KEY nÃ£o encontrada no ambiente; foi usado fallback em Config!B1. Recomenda-se migrar para variÃ¡vel de ambiente."
+        outAlert = "OPENAI_API_KEY não encontrada no ambiente; foi usado fallback em Config!B1. Recomenda-se migrar para variável de ambiente."
         ResolveOpenAIApiKeyCore = True
         Exit Function
     End If
 
-    outError = "OPENAI_API_KEY ausente: variÃ¡vel de ambiente OPENAI_API_KEY vazia e Config!B1 sem valor vÃ¡lido."
+    outError = "OPENAI_API_KEY ausente: variável de ambiente OPENAI_API_KEY vazia e Config!B1 sem valor válido."
     ResolveOpenAIApiKeyCore = False
 End Function
 
@@ -120,7 +120,7 @@ Private Function Config_IsEnvDirective(ByVal cfgValue As String) As Boolean
     s = Replace$(s, " ", "")
     s = Replace$(s, "'", "")
 
-    If InStr(1, s, "environ(\"" & LCase$(ENV_OPENAI_API_KEY) & "\")", vbTextCompare) > 0 Then
+    If InStr(1, s, "environ(""" & LCase$(ENV_OPENAI_API_KEY) & """)", vbTextCompare) > 0 Then
         Config_IsEnvDirective = True
         Exit Function
     End If
@@ -139,7 +139,7 @@ Private Function Config_IsUsableLiteralKey(ByVal cfgValue As String) As Boolean
     If Config_IsEnvDirective(s) Then Exit Function
 
     Select Case LCase$(s)
-        Case "openai_api_key", "your_openai_api_key", "<openai_api_key>", "(environ(\"openai_api_key\"))"
+        Case "openai_api_key", "your_openai_api_key", "<openai_api_key>", "(environ(""openai_api_key""))"
             Exit Function
     End Select
 

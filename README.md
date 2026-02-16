@@ -27,6 +27,7 @@ Template Excel + VBA para execução de pipelines de prompts com auditoria opera
 - [9. Logs, troubleshooting e validação operacional](#9-logs-troubleshooting-e-validação-operacional)
 - [10. Segurança e compatibilidade retroativa](#10-segurança-e-compatibilidade-retroativa)
 - [11. Guia rápido de operação](#11-guia-rápido-de-operação)
+- [12. Automação do checklist pré-commit (VBA)](#12-automação-do-checklist-pré-commit-vba)
 
 ---
 
@@ -294,3 +295,37 @@ Notas operacionais:
 ---
 
 > Este README é a referência de funcionamento do projeto. Guias de teste específicos (ex.: T3) devem viver como subseções operacionais ou documentação complementar, sem substituir a visão global do sistema.
+
+
+---
+
+
+## 12. Automação do checklist pré-commit (VBA)
+
+Para reduzir regressões de encoding e sintaxe de strings VBA, o repositório inclui:
+
+- `scripts/precommit_vba_checks.py`: valida módulos `.bas/.cls/.frm` staged (fail-fast);
+- `.githooks/pre-commit`: hook que invoca o script automaticamente antes do commit.
+
+### O que o script valida
+
+1. Encoding `cp1252` (ANSI/VBE) nos módulos VBA;
+2. Proíbe escape C-style `\"` em strings VBA (usar `""` ou `Chr$(34)`).
+
+### Como ativar localmente
+
+```bash
+git config core.hooksPath .githooks
+```
+
+### Como testar manualmente
+
+```bash
+# valida apenas ficheiros VBA staged
+scripts/precommit_vba_checks.py
+
+# valida todos os módulos VBA versionados
+scripts/precommit_vba_checks.py --all
+```
+
+> Nota: o check não substitui `Debug > Compile VBAProject` no Excel; complementa-o com validações automáticas de baixo custo antes de commitar.

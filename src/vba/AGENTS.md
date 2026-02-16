@@ -480,4 +480,5 @@ Se começar a ficar demasiado grande:
 
 ## Checklist anti-erros de sintaxe em strings VBA
 - Ao remover aspas duplas em `Replace`, usar literal válido de VBA (`""""`) ou `Chr$(34)`; nunca usar `"""` porque gera erro de compilação.
+- Em qualquer string VBA, nunca usar escape C-style (`\"`); para aspas internas usar `""` (duplicação) ou `Chr$(34)`.
 - Sempre que editar strings com escape (JSON, regex-like, Replace), executar verificação rápida no VBE (Debug > Compile VBAProject) antes de fechar a alteração.
