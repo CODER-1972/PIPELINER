@@ -252,6 +252,12 @@ Usar para diagnosticar:
 - limites de execução;
 - eventos de captura/injeção.
 
+Notas adicionais para File Output + Structured Outputs (`json_schema`):
+
+- quando `structured_outputs_mode=json_schema` e `strict=true`, o schema do manifest deve manter `required` alinhado com todas as chaves definidas em `properties` (incluindo chaves como `subfolder` quando existirem);
+- o motor passa a emitir diagnóstico resumido do schema no DEBUG (`schema_name`, `strict`, contagem de `properties` e `required`), para reduzir tempo de troubleshooting de erros `invalid_json_schema`;
+- durante construção do request, o payload final pode ser gravado em `C:\Temp\payload.json` para inspeção local antes de nova execução.
+
 Recomendação operacional:
 
 - limpar `Seguimento`/`DEBUG` antes de testes formais;

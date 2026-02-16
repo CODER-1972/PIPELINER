@@ -8,6 +8,9 @@ Option Explicit
 ' - Registar resultados PASS/FAIL/ALERTA no DEBUG para diagnóstico rápido.
 '
 ' Atualizações:
+' - 2026-02-16 | Codex | SelfTest de schema strict para File Output (required vs properties)
+'   - Adiciona macro pública SELFTEST_FILEOUTPUT_SCHEMA para validar alinhamento entre properties e required.
+'   - Integra o teste no SelfTest_RunAll com registo PASS/FAIL no DEBUG.
 ' - 2026-02-16 | Codex | Novos self-tests para resolução segura de OPENAI_API_KEY
 '   - Substitui teste de presença simples por cenários de precedência ENV -> Config!B1.
 '   - Valida alertas/erros de migração sem exposição de segredo em logs.
@@ -17,6 +20,7 @@ Option Explicit
 '
 ' Funções e procedimentos (inventário público):
 ' - SelfTest_RunAll (Sub): rotina pública do módulo.
+' - SELFTEST_FILEOUTPUT_SCHEMA (Sub): valida schema strict do manifest de File Output.
 ' =============================================================================
 
 ' =============================================================================
@@ -69,6 +73,9 @@ Public Sub SelfTest_RunAll()
 
     ' 6) Fluxo register/resolve output->input
     SelfTest_OutputRegister_And_Resolve
+
+    ' 7) File Output json_schema strict (required alinhado com properties)
+    SELFTEST_FILEOUTPUT_SCHEMA
 
     SelfTest_Log SEV_INFO, "SELFTEST_RUN", "Fim dos testes internos.", "OK"
     Exit Sub
@@ -250,6 +257,59 @@ EH:
     SelfTest_Log SEV_ERRO, "SELFTEST_CONFIG", "Exceção no SelfTest_ConfigApiKeyResolution: " & Err.Number & " - " & Err.Description, "Verificar M14_ConfigApiKey e cenários de precedência."
 End Sub
 
+
+
+Public Sub SELFTEST_FILEOUTPUT_SCHEMA()
+    On Error GoTo EH
+
+    Dim modos As String
+    Dim frag As String
+    modos = ""
+    frag = ""
+
+    Call FileOutput_PrepareRequest("file", "metadata", "json_schema", modos, frag)
+
+    Dim ok As Boolean
+    Dim missing As String
+    ok = SelfTest_FileOutputSchemaHasRequiredSubfolder(frag, missing)
+
+    If ok Then
+        SelfTest_Log SEV_INFO, "SELFTEST_FILEOUTPUT_SCHEMA", "PASS: required inclui todas as keys críticas (inclui subfolder).", "OK"
+    Else
+        SelfTest_Log SEV_ERRO, "SELFTEST_FILEOUTPUT_SCHEMA", "FAIL: required/properties desalinhados no manifest schema. missing=" & missing, "Atualizar FileOutput_ManifestJsonSchema para alinhar strict=true."
+    End If
+    Exit Sub
+EH:
+    SelfTest_Log SEV_ERRO, "SELFTEST_FILEOUTPUT_SCHEMA", "Exceção no SELFTEST_FILEOUTPUT_SCHEMA: " & Err.Number & " - " & Err.Description, "Verificar geração do fragmento text.format no M10_FileOutput1."
+End Sub
+
+Private Function SelfTest_FileOutputSchemaHasRequiredSubfolder(ByVal extraFragment As String, ByRef outMissing As String) As Boolean
+    Dim must As Variant
+    must = Array("file_name", "file_type", "subfolder", "payload_kind", "payload")
+
+    Dim i As Long
+    outMissing = ""
+
+    For i = LBound(must) To UBound(must)
+        Dim key As String
+        key = CStr(must(i))
+
+        Dim tokenProp As String
+        tokenProp = """" & key & """:{"
+
+        Dim tokenReq As String
+        tokenReq = """" & key & """"
+
+        If InStr(1, extraFragment, tokenProp, vbTextCompare) > 0 Then
+            If InStr(1, extraFragment, tokenReq, vbTextCompare) = 0 Then
+                If outMissing <> "" Then outMissing = outMissing & ";"
+                outMissing = outMissing & key
+            End If
+        End If
+    Next i
+
+    SelfTest_FileOutputSchemaHasRequiredSubfolder = (outMissing = "")
+End Function
 
 Private Sub SelfTest_Schema_FilesManagement()
     On Error GoTo EH
