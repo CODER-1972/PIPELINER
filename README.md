@@ -232,6 +232,7 @@ Boas práticas de manutenção VBA (preventivas):
 
 - em literais de string com aspas duplas, usar escaping válido do VBA (ex.: `""""`) ou `Chr$(34)`;
 - após alterações em módulos `.bas`, correr compilação do projeto (`Debug > Compile VBAProject`) para apanhar erros de sintaxe antes de execução.
+- em strings de regex com classe de caracteres que inclui aspas (ex.: `[^"]`), duplicar as aspas no literal VBA (`[^""]`) para evitar `Compile error: Syntax error`.
 
 ### Seguimento
 
