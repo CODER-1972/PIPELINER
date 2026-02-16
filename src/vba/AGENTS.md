@@ -453,6 +453,7 @@ Quando alterar prompts/catálogos:
 - Não há alterações inadvertidas ao layout esperado (PAINEL, Config, Seguimento, DEBUG, catálogo).
 - Next PROMPT e regras de AUTO/default/allowed mantêm-se consistentes.
 - FILES: continua compatível (flags, effective_mode, limites, logs).
+- Erros de validação (ex.: `invalid_json_schema`, `required`, `subfolder`) devem gerar mensagens de DEBUG com causa provável + ação imediata + exemplo mínimo de correção.
 - Não foi introduzida dependência que exija Office apps ausentes sem fallback.
 - Não há segredos/versionamento indevido.
 - Todas as alterações que atualizem ou modifiquem o funcionamento devem levar a uma revisão e atualização do ficheiro README, e isso deve ser reportado no chat.
