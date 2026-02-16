@@ -416,7 +416,8 @@ Quando alterar prompts/catálogos:
 - Sem variáveis não declaradas / nomes inconsistentes.
 
 (4) Objectos e Set
-- Atribuições a objectos usam `Set`.
+- Atribuições a objectos usam `Set` (incluindo quando o destino é `Variant`).
+- Ao ler `Scripting.Dictionary.Item(key)` cujo valor pode ser objecto, testar `IsObject(...)` e usar `Set` para evitar erro 450.
 - Em dictionaries/collections, evitar atribuições encadeadas ambíguas; usar helpers consistentes.
 
 (5) Guardas por tipo/capacidade

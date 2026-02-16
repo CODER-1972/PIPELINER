@@ -8,12 +8,16 @@ Option Explicit
 ' - Validar sintaxe, chaves proibidas e coerência de parâmetros com logging em DEBUG.
 '
 ' Atualizações:
+' - 2026-02-16 | Codex | Correção de serialização de dicionários aninhados e helper de dump
+'   - Evita erro 450 ao ler itens Object de Scripting.Dictionary sem Set.
+'   - Adiciona helper público para dump recursivo de dicionários na janela Immediate.
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
 '   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
 '   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
 '
 ' Funções e procedimentos (inventário público):
 ' - ConfigExtra_Converter (Sub): rotina pública do módulo.
+' - ConfigExtra_DebugDumpDictionary (Sub): imprime recursivamente keys/tipos/valores no Immediate.
 ' =============================================================================
 
 
@@ -140,7 +144,11 @@ Private Function Dict_ToJsonObject(ByVal d As Object) As String
     Dim k As Variant
     For Each k In d.keys
         Dim v As Variant
-        v = d(k)
+        If IsObject(d.Item(k)) Then
+            Set v = d.Item(k)
+        Else
+            v = d.Item(k)
+        End If
 
         Dim jsonValor As String
         If IsObject(v) Then
@@ -170,6 +178,38 @@ Private Function Dict_ToJsonObject(ByVal d As Object) As String
     Dict_ToJsonObject = s
 End Function
 
+
+
+
+Public Sub ConfigExtra_DebugDumpDictionary(ByVal d As Object, Optional ByVal indent As Long = 0)
+    If d Is Nothing Then
+        Debug.Print Space$(indent) & "<Nothing>"
+        Exit Sub
+    End If
+
+    Dim k As Variant
+    For Each k In d.keys
+        Dim v As Variant
+        If IsObject(d.Item(k)) Then
+            Set v = d.Item(k)
+        Else
+            v = d.Item(k)
+        End If
+
+        If IsObject(v) Then
+            Debug.Print Space$(indent) & CStr(k) & " -> " & TypeName(v)
+            ConfigExtra_DebugDumpDictionary v, indent + 2
+        ElseIf IsArray(v) Then
+            Dim payloadType As String
+            Dim payloadValue As String
+            payloadType = CStr(v(0))
+            payloadValue = CStr(v(1))
+            Debug.Print Space$(indent) & CStr(k) & " -> Variant() [" & payloadType & "] " & payloadValue
+        Else
+            Debug.Print Space$(indent) & CStr(k) & " -> " & TypeName(v) & " = " & CStr(v)
+        End If
+    Next k
+End Sub
 
 Private Function JsonArrayDeStrings(ByVal valores As Collection) As String
     Dim s As String
