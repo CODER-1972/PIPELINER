@@ -8,6 +8,9 @@ Option Explicit
 ' - Encaminhar execução para a orquestração principal preservando compatibilidade.
 '
 ' Atualizações:
+' - 2026-02-16 | Codex | Resolução de API key com prioridade para OPENAI_API_KEY
+'   - Usa resolver central (M14_ConfigApiKey) em vez de leitura direta de Config!B1.
+'   - Emite ALERTA/ERRO no DEBUG para origem/falhas de credencial sem expor segredos.
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
 '   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
 '   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
@@ -27,10 +30,18 @@ Public Sub ExecutarPrompt_PorID()
     Set wsCfg = ThisWorkbook.Worksheets("Config")
 
     Dim apiKey As String
-    apiKey = Trim$(CStr(wsCfg.Range("B1").value))
-    If apiKey = "" Then
-        MsgBox "Falta OPENAI_API_KEY em Config!B1.", vbExclamation
+    Dim apiKeySource As String
+    Dim apiKeyAlert As String
+    Dim apiKeyError As String
+
+    If Not Config_ResolveOpenAIApiKey(apiKey, apiKeySource, apiKeyAlert, apiKeyError) Then
+        Call Debug_Registar(0, promptId, "ERRO", "", "OPENAI_API_KEY", apiKeyError, "Defina OPENAI_API_KEY no ambiente ou fallback válido em Config!B1.")
+        MsgBox "OPENAI_API_KEY ausente. Verifique a variável de ambiente OPENAI_API_KEY ou o fallback em Config!B1.", vbExclamation
         Exit Sub
+    End If
+
+    If Trim$(apiKeyAlert) <> "" Then
+        Call Debug_Registar(0, promptId, "ALERTA", "", "OPENAI_API_KEY", apiKeyAlert, "Sem ação imediata; recomendado migrar para variável de ambiente.")
     End If
 
     Dim modeloDefault As String

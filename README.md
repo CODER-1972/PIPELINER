@@ -269,11 +269,22 @@ Regras essenciais:
 - preservar layout e cabeçalhos estruturais do workbook;
 - mudanças em VBA devem manter fallback/default para templates antigos.
 
+Resolução de `OPENAI_API_KEY` (ordem de precedência atual):
+
+1. variável de ambiente `OPENAI_API_KEY` (recomendado);
+2. fallback em `Config!B1` apenas por compatibilidade retroativa.
+
+Notas operacionais:
+
+- `Config!B1` pode manter uma diretiva como `(Environ("OPENAI_API_KEY"))` para documentar a origem da key;
+- quando o motor usa fallback literal em `Config!B1`, é emitido `ALERTA` no `DEBUG` para incentivar migração;
+- quando não há key válida (nem ambiente nem fallback), é emitido `ERRO` no `DEBUG` e a execução é interrompida.
+
 ---
 
 ## 11. Guia rápido de operação
 
-1. Confirmar `Config` (API key, modelo, limites, opções de files/contexto).
+1. Confirmar `Config` (modelo, limites, opções de files/contexto) e, de preferência, a variável de ambiente `OPENAI_API_KEY`.
 2. Confirmar IDs de catálogo e regras de `Next PROMPT`.
 3. Preparar pipeline no PAINEL (`INPUT/OUTPUT folders` + limites).
 4. Executar via INICIAR.
