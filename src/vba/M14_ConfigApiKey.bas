@@ -8,6 +8,9 @@ Option Explicit
 ' - Fornecer diagnóstico sem exposição de segredos para consumo de DEBUG e self-tests.
 '
 ' Atualizações:
+' - 2026-02-16 | Codex | Correção de parsing da diretiva Environ em Config!B1
+'   - Remove comparação frágil que gerava Type mismatch ao interpretar `(Environ("OPENAI_API_KEY"))`.
+'   - Normaliza aspas e espaços antes da comparação, aceitando variações equivalentes da diretiva.
 ' - 2026-02-16 | Codex | Resolver de API key com prioridade para ambiente
 '   - Adiciona Config_ResolveOpenAIApiKey para uso transversal no motor.
 '   - Mantém fallback retrocompatível para Config!B1 sem obrigar alterações estruturais no Excel.
@@ -113,19 +116,29 @@ End Function
 
 Private Function Config_IsEnvDirective(ByVal cfgValue As String) As Boolean
     Dim s As String
+    Dim target As String
+
     s = LCase$(Trim$(CStr(cfgValue)))
 
     If s = "" Then Exit Function
 
     s = Replace$(s, " ", "")
     s = Replace$(s, "'", "")
+    s = Replace$(s, Chr$(34), "")
 
-    If InStr(1, s, "environ(\"" & LCase$(ENV_OPENAI_API_KEY) & " \ ")", vbTextCompare) > 0 Then
+    target = LCase$(ENV_OPENAI_API_KEY)
+
+    If s = "environ(" & target & ")" Then
         Config_IsEnvDirective = True
         Exit Function
     End If
 
-    If s = "env:" & LCase$(ENV_OPENAI_API_KEY) Or s = "${" & LCase$(ENV_OPENAI_API_KEY) & "}" Then
+    If InStr(1, s, "environ(" & target & ")", vbTextCompare) > 0 Then
+        Config_IsEnvDirective = True
+        Exit Function
+    End If
+
+    If s = "env:" & target Or s = "${" & target & "}" Then
         Config_IsEnvDirective = True
         Exit Function
     End If
