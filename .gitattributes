@@ -1,0 +1,4 @@
+# VBA modules: checkout em Windows-1252 (mais compatível com VBE) e CRLF
+*.bas  text working-tree-encoding=windows-1252 eol=crlf
+*.cls  text working-tree-encoding=windows-1252 eol=crlf
+*.frm  text working-tree-encoding=windows-1252 eol=crlf
