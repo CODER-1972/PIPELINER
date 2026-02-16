@@ -191,7 +191,8 @@ Comportamentos de robustez:
 
 - linhas inválidas são ignoradas com alerta no DEBUG;
 - chaves proibidas (ex.: `model`, `tools`) são ignoradas com alerta;
-- conflitos de parâmetros de encadeamento são resolvidos de forma determinística.
+- conflitos de parâmetros de encadeamento são resolvidos de forma determinística;
+- serialização recursiva de dicionários aninhados usa atribuição segura com `Set` para itens `Object` do `Scripting.Dictionary` (evita erro 450 em estruturas mistas).
 
 ---
 
