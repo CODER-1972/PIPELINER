@@ -82,7 +82,7 @@ Private Function ResolveOpenAIApiKeyCore( _
     End If
 
     If Config_IsEnvDirective(cfgRaw) Then
-        outError = "Config!B1 estÃ¡ configurada para usar Environ(\"OPENAI_API_KEY\"), mas a variÃ¡vel de ambiente OPENAI_API_KEY estÃ¡ vazia/ausente."
+        outError = "Config!B1 estÃ¡ configurada para usar Environ(""OPENAI_API_KEY""), mas a variÃ¡vel de ambiente OPENAI_API_KEY estÃ¡ vazia/ausente."
         ResolveOpenAIApiKeyCore = False
         Exit Function
     End If
@@ -120,7 +120,7 @@ Private Function Config_IsEnvDirective(ByVal cfgValue As String) As Boolean
     s = Replace$(s, " ", "")
     s = Replace$(s, "'", "")
 
-    If InStr(1, s, "environ(\"" & LCase$(ENV_OPENAI_API_KEY) & "\")", vbTextCompare) > 0 Then
+    If InStr(1, s, "environ(""" & LCase$(ENV_OPENAI_API_KEY) & """)", vbTextCompare) > 0 Then
         Config_IsEnvDirective = True
         Exit Function
     End If
@@ -139,7 +139,7 @@ Private Function Config_IsUsableLiteralKey(ByVal cfgValue As String) As Boolean
     If Config_IsEnvDirective(s) Then Exit Function
 
     Select Case LCase$(s)
-        Case "openai_api_key", "your_openai_api_key", "<openai_api_key>", "(environ(\"openai_api_key\"))"
+        Case "openai_api_key", "your_openai_api_key", "<openai_api_key>", "(environ(""openai_api_key""))"
             Exit Function
     End Select
 
