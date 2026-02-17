@@ -664,7 +664,7 @@ Private Function FileOutput_ManifestJsonSchema() As String
         """files"":{""type"":""array"",""items"":{""type"":""object"",""additionalProperties"":false,""properties"":{" & _
             """file_name"":{""type"":""string""}," & _
             """file_type"":{""type"":""string""}," & _
-            """subfolder"":{""type"":""string""}," & _
+            """subfolder"":{""type"":[""string"",""null""]}," & _
             """payload_kind"":{""type"":""string"",""enum"":[""text"",""markdown"",""structure"",""base64""]}," & _
             """payload"":{""type"":""string""}" & _
         "},""required"":[""file_name"",""file_type"",""subfolder"",""payload_kind"",""payload""]}}}" & _
@@ -966,27 +966,61 @@ End Function
 Private Sub FileOutput_DumpSchemaForDebug(ByVal schemaJson As String, ByVal schemaName As String)
     On Error GoTo Falha
 
-    Dim targetPath As String
-    targetPath = "C:\Temp\schema_only.json"
+    Dim baseFolder As String
+    baseFolder = M05_GetDebugBaseFolder()
 
-    Dim ff As Integer
-    ff = FreeFile
-    Open targetPath For Output As #ff
-    Print #ff, schemaJson
-    Close #ff
+    Dim targetPath As String
+    targetPath = baseFolder & "\schema_only.json"
+
+    If Not M05_WriteTextFile(targetPath, schemaJson) Then GoTo Falha
 
     Call Debug_Registar(0, "M10_FILEOUTPUT_SCHEMA", "INFO", "", "M10_SCHEMA_DUMP", _
         "Schema gravado em " & targetPath & " | schema_name=" & schemaName & " | len=" & CStr(Len(schemaJson)), _
-        "Use este ficheiro para inspeção local do text.format.schema.")
+        "Use este ficheiro para inspe??o local do text.format.schema.")
     Exit Sub
 
 Falha:
-    On Error Resume Next
-    If ff > 0 Then Close #ff
     Call Debug_Registar(0, "M10_FILEOUTPUT_SCHEMA", "ALERTA", "", "M10_SCHEMA_DUMP_FAIL", _
-        "Não foi possível gravar C:\Temp\schema_only.json: " & Err.Description, _
-        "Verifique permissões da pasta C:\Temp.")
+        "N?o foi poss?vel gravar schema_only.json: " & Err.Description, _
+        "Verifique permiss?es da pasta de debug resolvida pelo M05.")
 End Sub
+
+Public Function FileOutput_SelfTest_SchemaSummary(ByRef outSummary As String) As Boolean
+    On Error GoTo Falha
+
+    Dim schema As String
+    schema = FileOutput_ManifestJsonSchema()
+
+    Dim rootProps As String
+    Dim rootReq As String
+    Dim rootMissing As String
+    Dim rootExtra As String
+    Dim itemProps As String
+    Dim itemReq As String
+    Dim itemMissing As String
+    Dim itemExtra As String
+    Dim rootHasAP As Boolean
+    Dim itemsHasAP As Boolean
+
+    FileOutput_SelfTest_SchemaSummary = FileOutput_ValidateManifestSchemaStrict( _
+        schema, rootProps, rootReq, rootMissing, rootExtra, rootHasAP, _
+        itemProps, itemReq, itemMissing, itemExtra, itemsHasAP)
+
+    outSummary = "root.properties=" & rootProps & " | root.required=" & rootReq & _
+                 " | missing_required=" & IIf(rootMissing = "", "(none)", rootMissing) & _
+                 " | extra_required=" & IIf(rootExtra = "", "(none)", rootExtra) & _
+                 " | items.properties=" & itemProps & " | items.required=" & itemReq & _
+                 " | items.missing_required=" & IIf(itemMissing = "", "(none)", itemMissing) & _
+                 " | items.extra_required=" & IIf(itemExtra = "", "(none)", itemExtra) & _
+                 " | root.additionalProperties=false=" & IIf(rootHasAP, "yes", "no") & _
+                 " | items.additionalProperties=false=" & IIf(itemsHasAP, "yes", "no")
+
+    Exit Function
+
+Falha:
+    outSummary = "schema_summary_error=" & Err.Number & " - " & Err.Description
+    FileOutput_SelfTest_SchemaSummary = False
+End Function
 
 Private Sub ExtraFragment_Append(ByRef extraFragment As String, ByVal fragmentSemChavesExternas As String)
     Dim f As String

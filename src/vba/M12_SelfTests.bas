@@ -77,6 +77,15 @@ Public Sub SelfTest_RunAll()
     ' 7) File Output json_schema strict (required alinhado com properties)
     SELFTEST_FILEOUTPUT_SCHEMA
 
+    ' 8) Builder de payload + validação sintática detalhada (sem API)
+    SelfTest_PayloadBuild_FileOutput
+
+    ' 9) Validação detalhada do schema manifest
+    SelfTest_Schema_FileManifest
+
+    ' 10) Parser de Config extra (linhas/listas/objectos/input)
+    SelfTest_ConfigExtra_Parser
+
     SelfTest_Log SEV_INFO, "SELFTEST_RUN", "Fim dos testes internos.", "OK"
     Exit Sub
 
@@ -643,6 +652,109 @@ Private Function TrimChars(ByVal s As String, ByVal chars As String) As String
 End Function
 
 ' =============================================================================
+Public Sub SelfTest_PayloadBuild_FileOutput()
+    On Error GoTo EH
+
+    Dim modos As String
+    Dim extraFragment As String
+    modos = ""
+    extraFragment = ""
+
+    Call FileOutput_PrepareRequest("file", "metadata", "json_schema", modos, extraFragment)
+
+    Dim payload As String
+    payload = "{""model"":""gpt-4.1-mini"",""input"":""SELFTEST_FILEOUTPUT"",""temperature"":0,""max_output_tokens"":128,""store"":false"
+    If Trim$(extraFragment) <> "" Then payload = payload & "," & extraFragment
+    payload = payload & "}"
+
+    Dim errTxt As String
+    Dim errPos As Long, errLine As Long, errCol As Long
+    Dim errChar As String
+    Dim objDepth As Long, arrDepth As Long
+    Dim inString As Boolean
+
+    Dim ok As Boolean
+    ok = M05_ValidateJsonSyntaxBasic(payload, errTxt, errPos, errLine, errCol, errChar, objDepth, arrDepth, inString)
+
+    Dim baseFolder As String
+    baseFolder = M05_GetDebugBaseFolder() & "\_raw"
+    CreateFolderIfMissing baseFolder
+
+    Call M05_WriteTextFile(baseFolder & "\payload_invalid.json", payload)
+    Call M05_WriteTextFile(baseFolder & "\payload_tail.txt", Mid$(payload, IIf(Len(payload) > 600, Len(payload) - 599, 1)))
+    Call M05_WriteTextFile(baseFolder & "\payload_slice_" & CStr(IIf(errPos <= 0, 1, errPos)) & ".txt", SelfTest_SliceAround(payload, IIf(errPos <= 0, 1, errPos), 120))
+
+    If ok Then
+        SelfTest_Log SEV_INFO, "SELFTEST_PAYLOAD_BUILD", "PASS: payload sintaticamente válido (len=" & CStr(Len(payload)) & ").", "Artifactos atualizados em " & baseFolder
+    Else
+        SelfTest_Log SEV_ERRO, "SELFTEST_PAYLOAD_BUILD", "FAIL: pos=" & CStr(errPos) & " line=" & CStr(errLine) & " col=" & CStr(errCol) & " char='" & errChar & "' | " & errTxt, "Ver payload_invalid.json/payload_tail.txt/payload_slice_*.txt em " & baseFolder
+    End If
+    Exit Sub
+EH:
+    SelfTest_Log SEV_ERRO, "SELFTEST_PAYLOAD_BUILD", "Exceção no SelfTest_PayloadBuild_FileOutput: " & Err.Number & " - " & Err.Description, "Verificar M05_ValidateJsonSyntaxBasic e FileOutput_PrepareRequest."
+End Sub
+
+Public Sub SelfTest_Schema_FileManifest()
+    On Error GoTo EH
+
+    Dim summary As String
+    Dim ok As Boolean
+    ok = FileOutput_SelfTest_SchemaSummary(summary)
+
+    If ok Then
+        SelfTest_Log SEV_INFO, "M10_SCHEMA_SUMMARY", "PASS: " & summary, "OK"
+    Else
+        SelfTest_Log SEV_ERRO, "M10_SCHEMA_SUMMARY", "FAIL: " & summary, "Alinhar required/properties e additionalProperties:false em root/items."
+    End If
+    Exit Sub
+EH:
+    SelfTest_Log SEV_ERRO, "M10_SCHEMA_SUMMARY", "Exceção no SelfTest_Schema_FileManifest: " & Err.Number & " - " & Err.Description, "Verificar geração do schema no M10_FileOutput1."
+End Sub
+
+Public Sub SelfTest_ConfigExtra_Parser()
+    On Error GoTo EH
+
+    Dim cfg As String
+    cfg = "output_kind: file" & vbLf & _
+          "process_mode: metadata" & vbLf & _
+          "structured_outputs_mode: json_schema" & vbLf & _
+          "response.include: [web_search_call.action.sources]" & vbLf & _
+          "metadata: {projeto: AvalCap, versao: A}" & vbLf & _
+          "input:" & vbLf & _
+          "  role: user" & vbLf & _
+          "  content: teste parser"
+
+    Dim auditJson As String, inputJson As String, extraFragment As String
+    Call ConfigExtra_Converter(cfg, "fallback", 0, "SELFTEST", auditJson, inputJson, extraFragment)
+
+    Dim ok As Boolean
+    ok = (InStr(1, inputJson, """role"":""user""", vbTextCompare) > 0) And _
+         (InStr(1, extraFragment, """response"":{""include"":[""web_search_call.action.sources""]}", vbTextCompare) > 0) And _
+         (InStr(1, auditJson, """metadata"":{""projeto"":""AvalCap"",""versao"":""A""}", vbTextCompare) > 0)
+
+    If ok Then
+        SelfTest_Log SEV_INFO, "SELFTEST_CONFIG_EXTRA", "PASS: parser converteu blocos/lists/objectos conforme esperado.", "OK"
+    Else
+        SelfTest_Log SEV_ERRO, "SELFTEST_CONFIG_EXTRA", "FAIL: parser devolveu resultado inesperado. audit=" & Left$(auditJson, 260) & " | input_len=" & CStr(Len(inputJson)) & " | extra_len=" & CStr(Len(extraFragment)), "Validar parsing de linhas vazias, listas, objectos e bloco input."
+    End If
+    Exit Sub
+EH:
+    SelfTest_Log SEV_ERRO, "SELFTEST_CONFIG_EXTRA", "Exceção no SelfTest_ConfigExtra_Parser: " & Err.Number & " - " & Err.Description, "Verificar ConfigExtra_Converter."
+End Sub
+
+Private Function SelfTest_SliceAround(ByVal s As String, ByVal pos As Long, ByVal radius As Long) As String
+    Dim p As Long
+    p = pos
+    If p < 1 Then p = 1
+    If p > Len(s) Then p = Len(s)
+
+    Dim startPos As Long, endPos As Long
+    startPos = p - radius: If startPos < 1 Then startPos = 1
+    endPos = p + radius: If endPos > Len(s) Then endPos = Len(s)
+
+    SelfTest_SliceAround = "pos=" & CStr(pos) & vbCrLf & Mid$(s, startPos, endPos - startPos + 1)
+End Function
+
 ' Helpers: multipart LOCAL em bytes
 ' =============================================================================
 

@@ -12,6 +12,9 @@ Private Const PAYLOAD_DEBUG_VERBOSE As String = "verbose"
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Diagnóstico profundo de payload e dumps resilientes
+'   - Remove heurística frágil por substring e adiciona posição/linha/coluna na pré-validação JSON.
+'   - Grava payload_invalid/payload_tail/payload_slice em pasta de debug com fallback para Documents.
 ' - 2026-02-17 | Codex | Guard rails de payload para invalid_json + debug por nível
 '   - Adiciona pré-validação JSON antes de http.Send e bloqueia envio em caso de payload inválido.
 '   - Introduz DEBUG_PAYLOAD_LEVEL (OFF|BASIC|VERBOSE), hash e slices contextuais no DEBUG.
@@ -27,6 +30,53 @@ Private Const PAYLOAD_DEBUG_VERBOSE As String = "verbose"
 ' =============================================================================
 
 Private Const OPENAI_ENDPOINT As String = "https://api.openai.com/v1/responses"
+Private Const M05_DEBUG_FOLDER_DEFAULT As String = "C:\Temp"
+
+Public Sub CreateFolderIfMissing(ByVal folderPath As String)
+    On Error GoTo EH
+
+    Dim cleanPath As String
+    cleanPath = Trim$(folderPath)
+    If cleanPath = "" Then Exit Sub
+
+    If Dir(cleanPath, vbDirectory) <> "" Then Exit Sub
+
+    Dim parentPath As String
+    parentPath = Left$(cleanPath, InStrRev(cleanPath, "\") - 1)
+    If parentPath <> "" And Dir(parentPath, vbDirectory) = "" Then
+        CreateFolderIfMissing parentPath
+    End If
+
+    MkDir cleanPath
+    Exit Sub
+EH:
+    ' Best-effort: não bloquear fluxo por falha de mkdir.
+End Sub
+
+Public Function M05_GetDebugBaseFolder() As String
+    M05_GetDebugBaseFolder = M05_ResolveDebugBaseFolder()
+End Function
+
+Public Function M05_WriteTextFile(ByVal targetPath As String, ByVal content As String) As Boolean
+    On Error GoTo EH
+
+    Dim folderPath As String
+    folderPath = Left$(targetPath, InStrRev(targetPath, "\") - 1)
+    If folderPath <> "" Then CreateFolderIfMissing folderPath
+
+    Dim ff As Integer
+    ff = FreeFile
+    Open targetPath For Output As #ff
+    Print #ff, content
+    Close #ff
+    M05_WriteTextFile = True
+    Exit Function
+EH:
+    On Error Resume Next
+    If ff > 0 Then Close #ff
+    M05_WriteTextFile = False
+End Function
+
 
 ' ============================================================
 ' JSON helpers (escape / unescape / parsing simples)
@@ -430,14 +480,20 @@ Public Function OpenAI_Executar( _
     payloadDebugLevel = M05_GetPayloadDebugLevel()
 
     Dim payloadErr As String
-    If Not M05_ValidatePayloadBeforeSend(json, payloadErr) Then
-        resultado.Erro = "Payload JSON inválido (pré-validação): " & payloadErr
+    Dim errPos As Long, errLine As Long, errCol As Long
+    Dim errChar As String
+    Dim errObjDepth As Long, errArrDepth As Long
+    Dim errInString As Boolean
+    If Not M05_ValidatePayloadBeforeSend(json, payloadErr, errPos, errLine, errCol, errChar, errObjDepth, errArrDepth, errInString) Then
+        resultado.Erro = "Payload JSON inv?lido (pr?-valida??o): " & payloadErr
         Call Debug_Registar(0, dbgPromptId, "ERRO", "", "M05_PAYLOAD_INVALID", _
-            "Request bloqueado antes de http.Send. motivo=" & payloadErr, _
-            "Corrija a montagem do payload (text.format/schema/extraFragment) e repita.")
-        If payloadDebugLevel <> PAYLOAD_DEBUG_OFF Then
-            Call M05_DumpPayloadForDebug(json, dbgPromptId, payloadDebugLevel)
-        End If
+            "Request bloqueado antes de http.Send. pos=" & CStr(errPos) & _
+            " | line=" & CStr(errLine) & " | col=" & CStr(errCol) & _
+            " | char='" & errChar & "' | depth_at_error=" & CStr(errObjDepth + errArrDepth) & _
+            " | inString=" & IIf(errInString, "true", "false") & _
+            " | motivo=" & payloadErr, _
+            "Ver ficheiros payload_invalid.json, payload_tail.txt e payload_slice_*.txt na pasta de debug.")
+        Call M05_DumpPayloadFailureArtifacts(json, dbgPromptId, errPos, payloadErr, payloadDebugLevel)
         OpenAI_Executar = resultado
         Exit Function
     End If
@@ -632,19 +688,13 @@ End Function
 Private Sub M05_DumpPayloadForDebug(ByVal payloadJson As String, ByVal dbgPromptId As String, ByVal debugLevel As String)
     On Error GoTo Falha
 
+    Dim baseFolder As String
+    baseFolder = M05_ResolveDebugBaseFolder()
+
     Dim targetPath As String
-    targetPath = "C:\Temp\payload.json"
+    targetPath = baseFolder & "\payload.json"
 
-    Dim folderPath As String
-    folderPath = Left$(targetPath, InStrRev(targetPath, "\") - 1)
-
-    If Dir(folderPath, vbDirectory) = "" Then MkDir folderPath
-
-    Dim ff As Integer
-    ff = FreeFile
-    Open targetPath For Output As #ff
-    Print #ff, payloadJson
-    Close #ff
+    If Not M05_WriteTextFile(targetPath, payloadJson) Then GoTo Falha
 
     Call Debug_Registar(0, dbgPromptId, "INFO", "", "M05_PAYLOAD_DUMP", _
         "Payload final gravado em " & targetPath & " | len=" & CStr(Len(payloadJson)) & " | hash=" & M05_PayloadHash(payloadJson), _
@@ -656,13 +706,89 @@ Private Sub M05_DumpPayloadForDebug(ByVal payloadJson As String, ByVal dbgPrompt
     Exit Sub
 
 Falha:
-    On Error Resume Next
-    If ff > 0 Then Close #ff
     Call Debug_Registar(0, dbgPromptId, "ALERTA", "", "M05_PAYLOAD_DUMP_FAIL", _
-        "Não foi possível gravar payload em C:\Temp\payload.json: " & Err.Description, _
-        "Verifique permissões locais e existência da pasta C:\Temp.")
+        "N?o foi poss?vel gravar payload para debug: " & Err.Description, _
+        "Verifique permiss?es locais da pasta de debug.")
 End Sub
 
+Private Sub M05_DumpPayloadFailureArtifacts(ByVal payloadJson As String, ByVal dbgPromptId As String, ByVal errPos As Long, ByVal payloadErr As String, ByVal debugLevel As String)
+    On Error Resume Next
+
+    Dim baseFolder As String
+    baseFolder = M05_ResolveDebugBaseFolder()
+    Dim rawFolder As String
+    rawFolder = baseFolder & "\_raw"
+    CreateFolderIfMissing rawFolder
+
+    Dim invalidPath As String
+    invalidPath = rawFolder & "\payload_invalid.json"
+    Call M05_WriteTextFile(invalidPath, payloadJson)
+
+    Dim tailTxt As String
+    tailTxt = M05_GetTail(payloadJson, 600)
+    Call M05_WriteTextFile(rawFolder & "\payload_tail.txt", tailTxt)
+
+    Dim sliceTxt As String
+    sliceTxt = M05_GetSliceAround(payloadJson, errPos, 120)
+    Call M05_WriteTextFile(rawFolder & "\payload_slice_" & CStr(errPos) & ".txt", sliceTxt)
+
+    Call Debug_Registar(0, dbgPromptId, "ERRO", "", "M05_PAYLOAD_INVALID_FILES", _
+        "payload_err=" & payloadErr & " | base_folder=" & baseFolder & " | invalid=" & invalidPath, _
+        "Abra payload_invalid.json + payload_slice_*.txt para localizar o fragmento quebrado.")
+
+    If debugLevel = PAYLOAD_DEBUG_VERBOSE Then
+        Call M05_LogPayloadSlices(payloadJson, dbgPromptId)
+    End If
+End Sub
+
+Private Function M05_ResolveDebugBaseFolder() As String
+    On Error GoTo Fallback
+
+    Dim preferred As String
+    preferred = M05_DEBUG_FOLDER_DEFAULT
+
+    CreateFolderIfMissing preferred
+    CreateFolderIfMissing preferred & "\_raw"
+
+    If Dir(preferred, vbDirectory) <> "" Then
+        M05_ResolveDebugBaseFolder = preferred
+        Exit Function
+    End If
+
+Fallback:
+    On Error Resume Next
+    Dim docPath As String
+    docPath = Environ$("USERPROFILE") & "\Documents\PIPELINER_DEBUG"
+    CreateFolderIfMissing docPath
+    CreateFolderIfMissing docPath & "\_raw"
+    M05_ResolveDebugBaseFolder = docPath
+End Function
+
+Private Function M05_GetTail(ByVal s As String, ByVal maxLen As Long) As String
+    If Len(s) <= maxLen Then
+        M05_GetTail = s
+    Else
+        M05_GetTail = Mid$(s, Len(s) - maxLen + 1)
+    End If
+End Function
+
+Private Function M05_GetSliceAround(ByVal s As String, ByVal pos As Long, ByVal radius As Long) As String
+    Dim p As Long
+    p = pos
+    If p < 1 Then p = 1
+    If p > Len(s) Then p = Len(s)
+
+    Dim startPos As Long
+    Dim endPos As Long
+
+    startPos = p - radius
+    If startPos < 1 Then startPos = 1
+
+    endPos = p + radius
+    If endPos > Len(s) Then endPos = Len(s)
+
+    M05_GetSliceAround = "pos=" & CStr(pos) & vbCrLf & Mid$(s, startPos, endPos - startPos + 1)
+End Function
 
 Private Function M05_GetPayloadDebugLevel() As String
     On Error GoTo Fallback
@@ -692,7 +818,17 @@ Fallback:
     M05_GetPayloadDebugLevel = PAYLOAD_DEBUG_BASIC
 End Function
 
-Private Function M05_ValidatePayloadBeforeSend(ByVal payloadJson As String, ByRef outErr As String) As Boolean
+Private Function M05_ValidatePayloadBeforeSend( _
+    ByVal payloadJson As String, _
+    ByRef outErr As String, _
+    Optional ByRef outErrPos As Long = 0, _
+    Optional ByRef outErrLine As Long = 0, _
+    Optional ByRef outErrCol As Long = 0, _
+    Optional ByRef outErrChar As String = "", _
+    Optional ByRef outObjDepth As Long = 0, _
+    Optional ByRef outArrDepth As Long = 0, _
+    Optional ByRef outInString As Boolean = False _
+) As Boolean
     outErr = ""
 
     If Trim$(payloadJson) = "" Then
@@ -701,23 +837,20 @@ Private Function M05_ValidatePayloadBeforeSend(ByVal payloadJson As String, ByRe
         Exit Function
     End If
 
-    Dim syntaxErr As String
-    If Not M05_ValidateJsonSyntaxBasic(payloadJson, syntaxErr) Then
-        outErr = syntaxErr
-        M05_ValidatePayloadBeforeSend = False
-        Exit Function
-    End If
-
-    If InStr(1, payloadJson, """strict"":true}}}", vbTextCompare) > 0 Then
-        outErr = "detetado padrão de fecho extra em text.format (strict=true}}})"
-        M05_ValidatePayloadBeforeSend = False
-        Exit Function
-    End If
-
-    M05_ValidatePayloadBeforeSend = True
+    M05_ValidatePayloadBeforeSend = M05_ValidateJsonSyntaxBasic(payloadJson, outErr, outErrPos, outErrLine, outErrCol, outErrChar, outObjDepth, outArrDepth, outInString)
 End Function
 
-Private Function M05_ValidateJsonSyntaxBasic(ByVal s As String, ByRef outErr As String) As Boolean
+Public Function M05_ValidateJsonSyntaxBasic( _
+    ByVal s As String, _
+    ByRef outErr As String, _
+    Optional ByRef outErrPos As Long = 0, _
+    Optional ByRef outErrLine As Long = 0, _
+    Optional ByRef outErrCol As Long = 0, _
+    Optional ByRef outErrChar As String = "", _
+    Optional ByRef outObjDepth As Long = 0, _
+    Optional ByRef outArrDepth As Long = 0, _
+    Optional ByRef outInString As Boolean = False _
+) As Boolean
     On Error GoTo Falha
 
     Dim i As Long
@@ -726,14 +859,25 @@ Private Function M05_ValidateJsonSyntaxBasic(ByVal s As String, ByRef outErr As 
     Dim escaped As Boolean
     Dim objDepth As Long
     Dim arrDepth As Long
+    Dim lineN As Long
+    Dim colN As Long
 
     inString = False
     escaped = False
     objDepth = 0
     arrDepth = 0
+    lineN = 1
+    colN = 0
 
     For i = 1 To Len(s)
         ch = Mid$(s, i, 1)
+
+        If ch = vbLf Then
+            lineN = lineN + 1
+            colN = 0
+        Else
+            colN = colN + 1
+        End If
 
         If inString Then
             If escaped Then
@@ -752,7 +896,9 @@ Private Function M05_ValidateJsonSyntaxBasic(ByVal s As String, ByRef outErr As 
                 Case "}"
                     objDepth = objDepth - 1
                     If objDepth < 0 Then
-                        outErr = "fecho de objeto sem abertura na posição " & CStr(i)
+                        outErr = "fecho de objeto sem abertura na posi??o " & CStr(i)
+                        outErrPos = i: outErrLine = lineN: outErrCol = colN: outErrChar = ch
+                        outObjDepth = objDepth: outArrDepth = arrDepth: outInString = inString
                         M05_ValidateJsonSyntaxBasic = False
                         Exit Function
                     End If
@@ -761,7 +907,9 @@ Private Function M05_ValidateJsonSyntaxBasic(ByVal s As String, ByRef outErr As 
                 Case "]"
                     arrDepth = arrDepth - 1
                     If arrDepth < 0 Then
-                        outErr = "fecho de array sem abertura na posição " & CStr(i)
+                        outErr = "fecho de array sem abertura na posi??o " & CStr(i)
+                        outErrPos = i: outErrLine = lineN: outErrCol = colN: outErrChar = ch
+                        outObjDepth = objDepth: outArrDepth = arrDepth: outInString = inString
                         M05_ValidateJsonSyntaxBasic = False
                         Exit Function
                     End If
@@ -770,22 +918,33 @@ Private Function M05_ValidateJsonSyntaxBasic(ByVal s As String, ByRef outErr As 
     Next i
 
     If inString Then
-        outErr = "aspas não terminadas"
+        outErr = "aspas n?o terminadas"
+        outErrPos = Len(s): outErrLine = lineN: outErrCol = colN: outErrChar = """"
+        outObjDepth = objDepth: outArrDepth = arrDepth: outInString = inString
         M05_ValidateJsonSyntaxBasic = False
         Exit Function
     End If
 
     If objDepth <> 0 Or arrDepth <> 0 Then
         outErr = "delimitadores desbalanceados (obj=" & CStr(objDepth) & ", arr=" & CStr(arrDepth) & ")"
+        outErrPos = Len(s): outErrLine = lineN: outErrCol = colN
+        outObjDepth = objDepth: outArrDepth = arrDepth: outInString = inString
         M05_ValidateJsonSyntaxBasic = False
         Exit Function
     End If
 
+    outErrPos = 0
+    outErrLine = 0
+    outErrCol = 0
+    outErrChar = ""
+    outObjDepth = objDepth
+    outArrDepth = arrDepth
+    outInString = False
     M05_ValidateJsonSyntaxBasic = True
     Exit Function
 
 Falha:
-    outErr = "falha na validação sintática: " & Err.Description
+    outErr = "falha na valida??o sint?tica: " & Err.Description
     M05_ValidateJsonSyntaxBasic = False
 End Function
 
@@ -802,14 +961,14 @@ Private Sub M05_LogPayloadSlices(ByVal payloadJson As String, ByVal dbgPromptId 
     If tailLen > 0 Then
         Call Debug_Registar(0, dbgPromptId, "INFO", "", "M05_PAYLOAD_TAIL", _
             "tail_last_" & CStr(tailLen) & "=" & Mid$(payloadJson, Len(payloadJson) - tailLen + 1), _
-            "Inspecione os últimos carateres para detetar fechos/vírgulas indevidos.")
+            "Inspecione os ?ltimos carateres para detetar fechos/v?rgulas indevidos.")
     End If
     Exit Sub
 
 Falha:
     Call Debug_Registar(0, dbgPromptId, "ALERTA", "", "M05_PAYLOAD_SLICE_FAIL", _
-        "Não foi possível gerar slices do payload: " & Err.Description, _
-        "Verifique o formato do payload em C:\Temp\payload.json.")
+        "N?o foi poss?vel gerar slices do payload: " & Err.Description, _
+        "Verifique o formato do payload em pasta de debug local.")
 End Sub
 
 Private Sub M05_LogSliceNear(ByVal payloadJson As String, ByVal token As String, ByVal debugTag As String, ByVal dbgPromptId As String)
