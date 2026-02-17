@@ -8,9 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
-' - 2026-02-17 | Codex | Injecao explicita de INPUTS nao-FILES no texto enviado ao modelo
-'   - Adiciona normalizacao de INPUTS do catalogo (ex.: URLS_ENTRADA) para evitar perda de contexto.
-'   - Mantem FILES/FICHEIROS fora do bloco textual (continuam no fluxo M09).
+' - 2026-02-17 | Codex | Injecao explicita de INPUTS (incluindo FILES/FICHEIROS) no texto enviado ao modelo
+'   - Anexa ao prompt final as linhas operacionais do INPUTS (URLS_ENTRADA, MODO_DE_VERIFICACAO e FILES/FICHEIROS).
+'   - Mantem o anexo tecnico dos ficheiros no fluxo M09; bloco textual passa a ser informativo para o modelo.
 ' - 2026-02-16 | Codex | Resolução de API key via ambiente com fallback compatível
 '   - Substitui leitura direta de Config!B1 por resolver central (M14_ConfigApiKey).
 '   - Regista ALERTA/ERRO no DEBUG para origem/falhas da credencial sem expor segredo.
@@ -685,8 +685,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             GoTo SaidaLimpa
         End If
 
-        ' INPUTS textuais (ex.: URLS_ENTRADA) tambem devem seguir para o modelo.
-        ' FILES/FICHEIROS ficam excluidos deste bloco porque sao tratados em M09.
+        ' INPUTS declarados no catalogo (incluindo FILES/FICHEIROS) seguem para o modelo.
+        ' O bloco textual e informativo; o anexo tecnico de ficheiros continua em M09.
         Call Painel_AnexarInputsTextuaisAoPrompt(prompt.Id, promptTextFinal)
 
         ' Converter Config extra (amigavel) -> JSON (audit) / input override / extra fragment
@@ -1085,10 +1085,8 @@ Private Function Painel_ExtrairInputsTextuais(ByVal promptId As String) As Strin
         linha = Trim$(CStr(linhas(i)))
 
         If linha <> "" Then
-            If Not Painel_IsLinhaFilesDirective(linha) Then
-                If acc <> "" Then acc = acc & vbCrLf
-                acc = acc & linha
-            End If
+            If acc <> "" Then acc = acc & vbCrLf
+            acc = acc & linha
         End If
     Next i
 
@@ -1097,17 +1095,6 @@ Private Function Painel_ExtrairInputsTextuais(ByVal promptId As String) As Strin
 
 Falha:
     Painel_ExtrairInputsTextuais = ""
-End Function
-
-Private Function Painel_IsLinhaFilesDirective(ByVal linha As String) As Boolean
-    Dim t As String
-    t = UCase$(Trim$(linha))
-
-    Painel_IsLinhaFilesDirective = _
-        (Left$(t, 6) = "FILES:") Or _
-        (Left$(t, 7) = "FILES :") Or _
-        (Left$(t, 10) = "FICHEIROS:") Or _
-        (Left$(t, 11) = "FICHEIROS :")
 End Function
 
 Private Sub Painel_DeterminarFlagsFiles(ByVal promptId As String, ByRef outTemFiles As Boolean, ByRef outTemRequired As Boolean, ByRef outListaFiles As String)

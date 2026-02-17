@@ -200,7 +200,7 @@ Comportamentos de robustez:
 
 Na linha de `INPUTS` do prompt é possível declarar `FILES:`/`FICHEIROS:`.
 
-Além das diretivas de ficheiros, as linhas textuais de `INPUTS` (por exemplo `URLS_ENTRADA: ...` e `MODO_DE_VERIFICACAO: ...`) são anexadas ao prompt final enviado ao modelo, num bloco dedicado `INPUTS_DECLARADOS_NO_CATALOGO`. Isto evita perda de contexto quando os valores operacionais ficam apenas na área `INPUTS` do catálogo.
+As linhas de `INPUTS` são anexadas ao prompt final enviado ao modelo num bloco dedicado `INPUTS_DECLARADOS_NO_CATALOGO`, incluindo `URLS_ENTRADA`, `MODO_DE_VERIFICACAO` e também a própria declaração `FILES:`/`FICHEIROS:` como contexto textual. O anexo técnico dos ficheiros continua a ser tratado pelo módulo M09.
 
 Capacidades principais:
 
