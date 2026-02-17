@@ -8,6 +8,9 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Validação strict multi-nível do schema
+'   - Valida root/items em `required` vs `properties` e `additionalProperties:false` antes do envio.
+'   - Em modo VERBOSE, grava `C:\Temp\schema_only.json` para inspeção rápida.
 ' - 2026-02-16 | Codex | Hardening de Structured Outputs (json_schema) para File Output
 '   - Corrige schema strict: inclui `subfolder` em `required` quando presente em `properties`.
 '   - Adiciona validação preventiva (properties vs required) e logs de diagnóstico no DEBUG.
@@ -671,24 +674,39 @@ End Function
 Private Sub FileOutput_LogSchemaDiagnostics(ByVal schemaJson As String, ByVal schemaName As String, ByVal strictMode As Boolean)
     On Error GoTo Falha
 
-    Dim propCount As Long
-    Dim reqCount As Long
-    Dim missing As String
-    Dim extraReq As String
-    Dim ok As Boolean
+    Dim rootProps As String
+    Dim rootReq As String
+    Dim rootMissing As String
+    Dim rootExtra As String
 
-    ok = FileOutput_ValidateManifestSchemaStrict(schemaJson, propCount, reqCount, missing, extraReq)
+    Dim itemProps As String
+    Dim itemReq As String
+    Dim itemMissing As String
+    Dim itemExtra As String
 
-    If ok Then
-        Call Debug_Registar(0, "M10_FILEOUTPUT_SCHEMA", "INFO", "", "M10_SCHEMA_SUMMARY", _
-            "schema_name=" & schemaName & " | strict=" & IIf(strictMode, "true", "false") & _
-            " | properties=" & CStr(propCount) & " | required=" & CStr(reqCount) & " | check=OK", "")
-    Else
-        Call Debug_Registar(0, "M10_FILEOUTPUT_SCHEMA", "ERRO", "", "M10_SCHEMA_INVALID", _
-            "schema_name=" & schemaName & " | strict=" & IIf(strictMode, "true", "false") & _
-            " | missing_required=" & IIf(missing = "", "(none)", missing) & _
-            " | extra_required=" & IIf(extraReq = "", "(none)", extraReq), _
-            "Alinhe required com as chaves em properties quando strict=true.")
+    Dim rootHasAP As Boolean
+    Dim itemsHasAP As Boolean
+    Dim strictOk As Boolean
+
+    strictOk = FileOutput_ValidateManifestSchemaStrict( _
+        schemaJson, _
+        rootProps, rootReq, rootMissing, rootExtra, rootHasAP, _
+        itemProps, itemReq, itemMissing, itemExtra, itemsHasAP)
+
+    Call Debug_Registar(0, "M10_FILEOUTPUT_SCHEMA", IIf(strictOk, "INFO", "ERRO"), "", IIf(strictOk, "M10_SCHEMA_SUMMARY", "M10_SCHEMA_INVALID"), _
+        "schema_name=" & schemaName & " | strict=" & IIf(strictMode, "true", "false") & _
+        " | root.properties=" & rootProps & " | root.required=" & rootReq & _
+        " | items.properties=" & itemProps & " | items.required=" & itemReq & _
+        " | root.additionalProperties=false=" & IIf(rootHasAP, "yes", "no") & _
+        " | items.additionalProperties=false=" & IIf(itemsHasAP, "yes", "no") & _
+        " | root.missing=" & IIf(rootMissing = "", "(none)", rootMissing) & _
+        " | root.extra=" & IIf(rootExtra = "", "(none)", rootExtra) & _
+        " | items.missing=" & IIf(itemMissing = "", "(none)", itemMissing) & _
+        " | items.extra=" & IIf(itemExtra = "", "(none)", itemExtra), _
+        IIf(strictOk, "Schema strict validado antes do envio.", "Alinhe required/properties e additionalProperties:false (root/items)."))
+
+    If LCase$(Config_Get("DEBUG_PAYLOAD_LEVEL", "basic")) = "verbose" Then
+        Call FileOutput_DumpSchemaForDebug(schemaJson, schemaName)
     End If
     Exit Sub
 
@@ -701,81 +719,274 @@ End Sub
 
 Private Function FileOutput_ValidateManifestSchemaStrict( _
     ByVal schemaJson As String, _
-    ByRef outPropertiesCount As Long, _
-    ByRef outRequiredCount As Long, _
-    ByRef outMissingRequired As String, _
-    ByRef outExtraRequired As String _
+    ByRef outRootProperties As String, _
+    ByRef outRootRequired As String, _
+    ByRef outRootMissing As String, _
+    ByRef outRootExtra As String, _
+    ByRef outRootAdditionalPropertiesFalse As Boolean, _
+    ByRef outItemsProperties As String, _
+    ByRef outItemsRequired As String, _
+    ByRef outItemsMissing As String, _
+    ByRef outItemsExtra As String, _
+    ByRef outItemsAdditionalPropertiesFalse As Boolean _
 ) As Boolean
     On Error GoTo Falha
 
-    Dim props As Object
-    Dim reqs As Object
-    Set props = CreateObject("Scripting.Dictionary")
-    Set reqs = CreateObject("Scripting.Dictionary")
-    props.CompareMode = vbTextCompare
-    reqs.CompareMode = vbTextCompare
+    Dim rootObj As String
+    rootObj = schemaJson
 
-    Dim re As Object
-    Dim matches As Object
-    Dim m As Object
+    Dim itemsObj As String
+    itemsObj = FileOutput_ExtractItemsObject(schemaJson)
 
-    Set re = CreateObject("VBScript.RegExp")
-    re.Global = True
-    re.IgnoreCase = True
+    outRootAdditionalPropertiesFalse = FileOutput_ObjectHasAdditionalPropertiesFalse(rootObj)
+    outItemsAdditionalPropertiesFalse = FileOutput_ObjectHasAdditionalPropertiesFalse(itemsObj)
 
-    re.Pattern = """(file_name|file_type|subfolder|payload_kind|payload)""\s*:\s*\{"
-    Set matches = re.Execute(schemaJson)
-    For Each m In matches
-        props(LCase$(CStr(m.SubMatches(0)))) = True
-    Next m
+    Dim rootProps As Object, rootReq As Object
+    Dim itemsProps As Object, itemsReq As Object
 
-    re.Pattern = """required""\s*:\s*\[(.*?)\]"
-    Set matches = re.Execute(schemaJson)
-    If matches.Count = 0 Then
-        outMissingRequired = "required=(em falta)"
-        FileOutput_ValidateManifestSchemaStrict = False
-        Exit Function
-    End If
+    Set rootProps = FileOutput_ExtractKeysFromObjectMap(rootObj, "properties")
+    Set rootReq = FileOutput_ExtractKeysFromArray(rootObj, "required")
 
-    Dim reqBlock As String
-    reqBlock = CStr(matches(matches.Count - 1).SubMatches(0))
+    Set itemsProps = FileOutput_ExtractKeysFromObjectMap(itemsObj, "properties")
+    Set itemsReq = FileOutput_ExtractKeysFromArray(itemsObj, "required")
 
-    re.Pattern = """([^"]+)"""
-    Set matches = re.Execute(reqBlock)
-    For Each m In matches
-        reqs(LCase$(CStr(m.SubMatches(0)))) = True
-    Next m
+    outRootProperties = FileOutput_JoinDictKeys(rootProps)
+    outRootRequired = FileOutput_JoinDictKeys(rootReq)
+    outItemsProperties = FileOutput_JoinDictKeys(itemsProps)
+    outItemsRequired = FileOutput_JoinDictKeys(itemsReq)
 
-    Dim k As Variant
-    outMissingRequired = ""
-    outExtraRequired = ""
+    outRootMissing = FileOutput_DictMissingKeys(rootProps, rootReq)
+    outRootExtra = FileOutput_DictMissingKeys(rootReq, rootProps)
+    outItemsMissing = FileOutput_DictMissingKeys(itemsProps, itemsReq)
+    outItemsExtra = FileOutput_DictMissingKeys(itemsReq, itemsProps)
 
-    For Each k In props.Keys
-        If Not reqs.Exists(CStr(k)) Then
-            If outMissingRequired <> "" Then outMissingRequired = outMissingRequired & ";"
-            outMissingRequired = outMissingRequired & CStr(k)
-        End If
-    Next k
-
-    For Each k In reqs.Keys
-        If Not props.Exists(CStr(k)) Then
-            If outExtraRequired <> "" Then outExtraRequired = outExtraRequired & ";"
-            outExtraRequired = outExtraRequired & CStr(k)
-        End If
-    Next k
-
-    outPropertiesCount = props.Count
-    outRequiredCount = reqs.Count
-    FileOutput_ValidateManifestSchemaStrict = (outMissingRequired = "" And outExtraRequired = "")
+    FileOutput_ValidateManifestSchemaStrict = ( _
+        outRootAdditionalPropertiesFalse And outItemsAdditionalPropertiesFalse And _
+        outRootMissing = "" And outRootExtra = "" And _
+        outItemsMissing = "" And outItemsExtra = "")
     Exit Function
 
 Falha:
-    outPropertiesCount = 0
-    outRequiredCount = 0
-    outMissingRequired = "validator_error"
-    outExtraRequired = ""
+    outRootProperties = ""
+    outRootRequired = ""
+    outRootMissing = "validator_error"
+    outRootExtra = ""
+    outRootAdditionalPropertiesFalse = False
+
+    outItemsProperties = ""
+    outItemsRequired = ""
+    outItemsMissing = "validator_error"
+    outItemsExtra = ""
+    outItemsAdditionalPropertiesFalse = False
+
     FileOutput_ValidateManifestSchemaStrict = False
 End Function
+
+Private Function FileOutput_ExtractItemsObject(ByVal schemaJson As String) As String
+    Dim anchor As String
+    anchor = """items"":"
+
+    Dim p As Long
+    p = InStr(1, schemaJson, anchor, vbTextCompare)
+    If p = 0 Then Exit Function
+
+    Dim objStart As Long
+    objStart = InStr(p + Len(anchor), schemaJson, "{")
+    If objStart = 0 Then Exit Function
+
+    Dim objEnd As Long
+    objEnd = FileOutput_FindMatchingCloser(schemaJson, objStart, "{", "}")
+    If objEnd = 0 Then Exit Function
+
+    FileOutput_ExtractItemsObject = Mid$(schemaJson, objStart, objEnd - objStart + 1)
+End Function
+
+Private Function FileOutput_ObjectHasAdditionalPropertiesFalse(ByVal objectJson As String) As Boolean
+    If objectJson = "" Then
+        FileOutput_ObjectHasAdditionalPropertiesFalse = False
+    Else
+        FileOutput_ObjectHasAdditionalPropertiesFalse = (InStr(1, objectJson, """additionalProperties"":false", vbTextCompare) > 0)
+    End If
+End Function
+
+Private Function FileOutput_ExtractKeysFromObjectMap(ByVal objectJson As String, ByVal mapName As String) As Object
+    Dim d As Object
+    Set d = CreateObject("Scripting.Dictionary")
+    d.CompareMode = vbTextCompare
+
+    Dim anchor As String
+    anchor = """" & mapName & """:"
+
+    Dim p As Long
+    p = InStr(1, objectJson, anchor, vbTextCompare)
+    If p = 0 Then
+        Set FileOutput_ExtractKeysFromObjectMap = d
+        Exit Function
+    End If
+
+    Dim mapStart As Long
+    mapStart = InStr(p + Len(anchor), objectJson, "{")
+    If mapStart = 0 Then
+        Set FileOutput_ExtractKeysFromObjectMap = d
+        Exit Function
+    End If
+
+    Dim mapEnd As Long
+    mapEnd = FileOutput_FindMatchingCloser(objectJson, mapStart, "{", "}")
+    If mapEnd = 0 Then
+        Set FileOutput_ExtractKeysFromObjectMap = d
+        Exit Function
+    End If
+
+    Dim mapBody As String
+    mapBody = Mid$(objectJson, mapStart + 1, mapEnd - mapStart - 1)
+
+    Dim re As Object, m As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = True
+    re.IgnoreCase = True
+    re.Pattern = """([^""]+)""\s*:"
+
+    For Each m In re.Execute(mapBody)
+        If Not d.Exists(LCase$(CStr(m.SubMatches(0)))) Then
+            d(LCase$(CStr(m.SubMatches(0)))) = True
+        End If
+    Next m
+
+    Set FileOutput_ExtractKeysFromObjectMap = d
+End Function
+
+Private Function FileOutput_ExtractKeysFromArray(ByVal objectJson As String, ByVal arrayName As String) As Object
+    Dim d As Object
+    Set d = CreateObject("Scripting.Dictionary")
+    d.CompareMode = vbTextCompare
+
+    Dim anchor As String
+    anchor = """" & arrayName & """:"
+
+    Dim p As Long
+    p = InStr(1, objectJson, anchor, vbTextCompare)
+    If p = 0 Then
+        Set FileOutput_ExtractKeysFromArray = d
+        Exit Function
+    End If
+
+    Dim arrStart As Long
+    arrStart = InStr(p + Len(anchor), objectJson, "[")
+    If arrStart = 0 Then
+        Set FileOutput_ExtractKeysFromArray = d
+        Exit Function
+    End If
+
+    Dim arrEnd As Long
+    arrEnd = FileOutput_FindMatchingCloser(objectJson, arrStart, "[", "]")
+    If arrEnd = 0 Then
+        Set FileOutput_ExtractKeysFromArray = d
+        Exit Function
+    End If
+
+    Dim arrBody As String
+    arrBody = Mid$(objectJson, arrStart + 1, arrEnd - arrStart - 1)
+
+    Dim re As Object, m As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = True
+    re.IgnoreCase = True
+    re.Pattern = """([^""]+)"""
+
+    For Each m In re.Execute(arrBody)
+        If Not d.Exists(LCase$(CStr(m.SubMatches(0)))) Then
+            d(LCase$(CStr(m.SubMatches(0)))) = True
+        End If
+    Next m
+
+    Set FileOutput_ExtractKeysFromArray = d
+End Function
+
+Private Function FileOutput_DictMissingKeys(ByVal expectedDict As Object, ByVal actualDict As Object) As String
+    Dim k As Variant
+    For Each k In expectedDict.Keys
+        If Not actualDict.Exists(CStr(k)) Then
+            If FileOutput_DictMissingKeys <> "" Then FileOutput_DictMissingKeys = FileOutput_DictMissingKeys & ";"
+            FileOutput_DictMissingKeys = FileOutput_DictMissingKeys & CStr(k)
+        End If
+    Next k
+End Function
+
+Private Function FileOutput_JoinDictKeys(ByVal d As Object) As String
+    If d Is Nothing Then Exit Function
+
+    Dim k As Variant
+    For Each k In d.Keys
+        If FileOutput_JoinDictKeys <> "" Then FileOutput_JoinDictKeys = FileOutput_JoinDictKeys & ";"
+        FileOutput_JoinDictKeys = FileOutput_JoinDictKeys & CStr(k)
+    Next k
+End Function
+
+Private Function FileOutput_FindMatchingCloser(ByVal s As String, ByVal startPos As Long, ByVal openCh As String, ByVal closeCh As String) As Long
+    Dim i As Long
+    Dim depth As Long
+    Dim inString As Boolean
+    Dim esc As Boolean
+
+    If startPos <= 0 Or startPos > Len(s) Then Exit Function
+
+    depth = 0
+    inString = False
+    esc = False
+
+    For i = startPos To Len(s)
+        Dim ch As String
+        ch = Mid$(s, i, 1)
+
+        If inString Then
+            If esc Then
+                esc = False
+            ElseIf ch = "\" Then
+                esc = True
+            ElseIf ch = """" Then
+                inString = False
+            End If
+        Else
+            If ch = """" Then
+                inString = True
+            ElseIf ch = openCh Then
+                depth = depth + 1
+            ElseIf ch = closeCh Then
+                depth = depth - 1
+                If depth = 0 Then
+                    FileOutput_FindMatchingCloser = i
+                    Exit Function
+                End If
+            End If
+        End If
+    Next i
+End Function
+
+Private Sub FileOutput_DumpSchemaForDebug(ByVal schemaJson As String, ByVal schemaName As String)
+    On Error GoTo Falha
+
+    Dim targetPath As String
+    targetPath = "C:\Temp\schema_only.json"
+
+    Dim ff As Integer
+    ff = FreeFile
+    Open targetPath For Output As #ff
+    Print #ff, schemaJson
+    Close #ff
+
+    Call Debug_Registar(0, "M10_FILEOUTPUT_SCHEMA", "INFO", "", "M10_SCHEMA_DUMP", _
+        "Schema gravado em " & targetPath & " | schema_name=" & schemaName & " | len=" & CStr(Len(schemaJson)), _
+        "Use este ficheiro para inspeção local do text.format.schema.")
+    Exit Sub
+
+Falha:
+    On Error Resume Next
+    If ff > 0 Then Close #ff
+    Call Debug_Registar(0, "M10_FILEOUTPUT_SCHEMA", "ALERTA", "", "M10_SCHEMA_DUMP_FAIL", _
+        "Não foi possível gravar C:\Temp\schema_only.json: " & Err.Description, _
+        "Verifique permissões da pasta C:\Temp.")
+End Sub
 
 Private Sub ExtraFragment_Append(ByRef extraFragment As String, ByVal fragmentSemChavesExternas As String)
     Dim f As String

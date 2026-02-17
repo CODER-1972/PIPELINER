@@ -257,6 +257,9 @@ Notas adicionais para File Output + Structured Outputs (`json_schema`):
 - quando `structured_outputs_mode=json_schema` e `strict=true`, o schema do manifest deve manter `required` alinhado com todas as chaves definidas em `properties` (incluindo chaves como `subfolder` quando existirem);
 - o motor passa a emitir diagnóstico resumido do schema no DEBUG (`schema_name`, `strict`, contagem de `properties` e `required`), para reduzir tempo de troubleshooting de erros `invalid_json_schema`;
 - durante construção do request, o payload final pode ser gravado em `C:\Temp\payload.json` para inspeção local antes de nova execução.
+- existe pré-validação local do payload JSON antes de `http.Send` (delimitadores/aspas e padrão de fecho extra em `"strict":true}}}`), bloqueando envio inválido com erro acionável no DEBUG;
+- `DEBUG_PAYLOAD_LEVEL` (Config) controla o nível de diagnóstico (`OFF`/`BASIC`/`VERBOSE`), incluindo slices de payload e hash para correlação;
+- em `VERBOSE`, o schema também pode ser gravado em `C:\Temp\schema_only.json` para troubleshooting de `invalid_json_schema`.
 
 Recomendação operacional:
 
