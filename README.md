@@ -207,6 +207,13 @@ Capacidades principais:
 - upload para `/v1/files` com reutilização por hash (quando configurado);
 - fallback entre engines/perfis de upload.
 
+Política de tools com anexos (gating automático):
+
+- quando o modo do prompt inclui `Web search`, o motor **só auto-adiciona** a tool se não houver anexos (`input_file`/`input_image`) e se o `Config extra` não trouxer `tools` explícitas;
+- se existirem anexos, o DEBUG regista `web_search=NAO_AUTO (ha anexos)` no check de payload;
+- esta regra é uma decisão do PIPELINER para previsibilidade operacional (menos chamadas externas desnecessárias quando já há contexto documental anexado), não uma limitação rígida da API;
+- se for necessário combinar anexos + pesquisa web no mesmo passo, definir `tools` explicitamente no `Config extra` (nessa situação o log esperado é `web_search=NAO_AUTO (tools no extra)`).
+
 Nota de compatibilidade importante:
 
 - nem todos os formatos aceites no upload são aceites como `input_file` no `/v1/responses`;
@@ -221,6 +228,11 @@ O módulo ContextKV permite:
 - **capturar** blocos estruturados do output de um passo (`captured_vars`, `captured_vars_meta`);
 - **injetar** variáveis em passos seguintes via `{{VAR:...}}`, `VARS:` e `{@OUTPUT: ...}`;
 - registar eventos operacionais no DEBUG (`INJECT_*`, `CAPTURE_*`).
+
+Rótulos reservados de captura (output do modelo):
+
+- `RESULTS_JSON`, `REGISTO_PESQUISAS`, `NEXT_PROMPT_ID`, `DECISION`, `MEMORY_SHORT`, `MEMORY_OVERALL`, `LESSONS`, `VARIABLES`, `CRITERIA`, `RATIONALE`.
+- sem pelo menos um destes rótulos no output, o comportamento esperado é `CAPTURE_MISS`.
 
 É útil para pipelines multi-etapa onde uma resposta precisa ser reutilizada de forma controlada no passo seguinte.
 
