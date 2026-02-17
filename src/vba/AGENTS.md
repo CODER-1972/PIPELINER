@@ -487,4 +487,6 @@ Se começar a ficar demasiado grande:
 
 
 - Em validação de payload JSON, **não usar heurísticas por substring** (ex.: procurar `strict=true}}}`) como critério de invalidez; preferir parser/sanity-check com posição, linha/coluna e contexto (slice) para evitar falsos positivos em payloads válidos.
+- Em chamadas internas entre módulos para testes (ex.: SelfTests), evitar `Application.Run` quando dependemos de parâmetros `ByRef` de saída; preferir chamada direta ao procedimento para não perder valores retornados em `String/Long/Boolean`.
+- Na leitura de JSON por string (schema/diagnósticos), ao extrair `required`/`properties` de um objeto, procurar chaves apenas no nível de profundidade alvo (top-level do objeto) para não confundir blocos aninhados (`root` vs `items`).
 - Sempre que adicionar/chamar um helper novo (ex.: `*_DictMissingKeys`), garantir que a função existe no projeto com o mesmo nome exato e correr `Debug > Compile VBAProject` para evitar regressões `Sub or Function not defined`.
