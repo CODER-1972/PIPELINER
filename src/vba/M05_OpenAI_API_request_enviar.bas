@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Correção de sintaxe VBA em validação de JSON preflight
+'   - Corrige literais com aspas duplas em Select Case e comparações de string para evitar erro de compilação.
+'   - Mantém validação de escapes JSON com mensagem de diagnóstico preservada no DEBUG.
 ' - 2026-02-17 | Codex | Validação preventiva para escape inválido com backslash no JSON
 '   - Adiciona deteção de sequências de escape inválidas (ex.: \x) em strings JSON no preflight.
 '   - Bloqueia envio com erro acionável no DEBUG e indica escapes válidos após \ (" \\ / b f n r t uXXXX).
@@ -311,7 +314,7 @@ Private Function M05_JsonEscapeIsValid(ByVal jsonText As String, ByVal slashPos 
     nxt = Mid$(jsonText, slashPos + 1, 1)
 
     Select Case nxt
-        Case """, "\", "/", "b", "f", "n", "r", "t"
+        Case """", "\", "/", "b", "f", "n", "r", "t"
             M05_JsonEscapeIsValid = True
             Exit Function
         Case "u"
@@ -332,7 +335,7 @@ Private Function M05_JsonEscapeIsValid(ByVal jsonText As String, ByVal slashPos 
             M05_JsonEscapeIsValid = True
             Exit Function
         Case Else
-            outDetail = "escape_invalido=\" & nxt & " @pos=" & CStr(slashPos)
+            outDetail = "escape_invalido=" & Chr$(34) & nxt & Chr$(34) & " @pos=" & CStr(slashPos)
             M05_JsonEscapeIsValid = False
             Exit Function
     End Select
@@ -365,7 +368,7 @@ Private Function M05_JsonHasRawControlInString(ByVal jsonText As String, ByRef o
                 escaped = False
             ElseIf ch = "\" Then
                 escaped = True
-            ElseIf ch = """ Then
+            ElseIf ch = """" Then
                 inString = False
             ElseIf code >= 0 And code <= 31 Then
                 escapeHint = M05_EscapeHintForControlChar(code)
@@ -374,7 +377,7 @@ Private Function M05_JsonHasRawControlInString(ByVal jsonText As String, ByRef o
                 Exit Function
             End If
         Else
-            If ch = """ Then inString = True
+            If ch = """" Then inString = True
         End If
     Next i
 
