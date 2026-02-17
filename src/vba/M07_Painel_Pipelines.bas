@@ -8,6 +8,12 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Corrige fonte do texto enviado ao M09
+'   - Passa promptTextFinal (com INPUTS_DECLARADOS_NO_CATALOGO) para Files_PrepararContextoDaPrompt.
+'   - Evita perda de URLS_ENTRADA/FILES no input_text quando há anexos.
+' - 2026-02-17 | Codex | Injecao explicita de INPUTS (incluindo FILES/FICHEIROS) no texto enviado ao modelo
+'   - Anexa ao prompt final as linhas operacionais do INPUTS (URLS_ENTRADA, MODO_DE_VERIFICACAO e FILES/FICHEIROS).
+'   - Mantem o anexo tecnico dos ficheiros no fluxo M09; bloco textual passa a ser informativo para o modelo.
 ' - 2026-02-16 | Codex | Resolução de API key via ambiente com fallback compatível
 '   - Substitui leitura direta de Config!B1 por resolver central (M14_ConfigApiKey).
 '   - Regista ALERTA/ERRO no DEBUG para origem/falhas da credencial sem expor segredo.
@@ -682,9 +688,13 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             GoTo SaidaLimpa
         End If
 
+        ' INPUTS declarados no catalogo (incluindo FILES/FICHEIROS) seguem para o modelo.
+        ' O bloco textual e informativo; o anexo tecnico de ficheiros continua em M09.
+        Call Painel_AnexarInputsTextuaisAoPrompt(prompt.Id, promptTextFinal)
+
         ' Converter Config extra (amigavel) -> JSON (audit) / input override / extra fragment
         Dim auditJson As String, inputJsonLiteral As String, extraFragment As String
-        Call ConfigExtra_Converter(prompt.ConfigExtra, prompt.textoPrompt, passo, prompt.Id, auditJson, inputJsonLiteral, extraFragment)
+        Call ConfigExtra_Converter(prompt.ConfigExtra, promptTextFinal, passo, prompt.Id, auditJson, inputJsonLiteral, extraFragment)
 
         ' Encadear previous_response_id, apenas se o config extra nao tiver conversation/previous_response_id
         If prevResponseId <> "" Then
@@ -727,7 +737,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 pipelineNome, _
                 inputFolder, _
                 prompt.Id, _
-                prompt.textoPrompt, _
+                promptTextFinal, _
                 inputJsonLiteral, _
                 inputJsonFinal, _
                 filesUsed, _
@@ -1038,6 +1048,57 @@ Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long
     Application.StatusBar = "(" & inicioHHMM & ") Step: " & passoTxt & " of " & CStr(total) & "  |  Retry: " & CStr(execCount)
     On Error GoTo 0
 End Sub
+
+Private Sub Painel_AnexarInputsTextuaisAoPrompt(ByVal promptId As String, ByRef ioPromptText As String)
+    On Error GoTo Falha
+
+    Dim blocoInputs As String
+    blocoInputs = Painel_ExtrairInputsTextuais(promptId)
+
+    If Trim$(blocoInputs) = "" Then Exit Sub
+
+    ioPromptText = RTrim$(CStr(ioPromptText)) & vbCrLf & vbCrLf & _
+                   "INPUTS_DECLARADOS_NO_CATALOGO:" & vbCrLf & blocoInputs
+    Exit Sub
+
+Falha:
+    ' Silencioso por compatibilidade retroativa.
+End Sub
+
+Private Function Painel_ExtrairInputsTextuais(ByVal promptId As String) As String
+    On Error GoTo Falha
+
+    Dim celId As Range
+    Set celId = Catalogo_EncontrarCelulaID(promptId)
+    If celId Is Nothing Then Exit Function
+
+    Dim textoInputs As String
+    textoInputs = CStr(celId.Offset(2, 3).value)
+    If Trim$(textoInputs) = "" Then Exit Function
+
+    Dim linhas() As String
+    linhas = Split(Replace(textoInputs, vbCrLf, vbLf), vbLf)
+
+    Dim i As Long
+    Dim acc As String
+    acc = ""
+
+    For i = LBound(linhas) To UBound(linhas)
+        Dim linha As String
+        linha = Trim$(CStr(linhas(i)))
+
+        If linha <> "" Then
+            If acc <> "" Then acc = acc & vbCrLf
+            acc = acc & linha
+        End If
+    Next i
+
+    Painel_ExtrairInputsTextuais = acc
+    Exit Function
+
+Falha:
+    Painel_ExtrairInputsTextuais = ""
+End Function
 
 Private Sub Painel_DeterminarFlagsFiles(ByVal promptId As String, ByRef outTemFiles As Boolean, ByRef outTemRequired As Boolean, ByRef outListaFiles As String)
     outTemFiles = False
