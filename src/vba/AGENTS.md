@@ -484,3 +484,6 @@ Se começar a ficar demasiado grande:
 - Em detecção de diretivas via `InStr`, normalize primeiro o texto (espaços/aspas) e compare também por igualdade canónica (`s = "environ(openai_api_key)"`) para evitar `Type mismatch` por string mal escapada.
 - Em schemas de Structured Outputs com `strict=true`, qualquer chave adicionada em `properties` deve ser adicionada também a `required`; tratar este alinhamento como check obrigatório de revisão para evitar `invalid_json_schema`.
 - Em montagem de payload JSON por concatenação (`extraFragment`, `text.format`, etc.), adicionar obrigatoriamente pré-validação sintática antes de `http.Send` e logar slice final para prevenir regressões `invalid_json` por fechos extra (ex.: `}}}`).
+
+
+- Em validação de payload JSON, **não usar heurísticas por substring** (ex.: procurar `strict=true}}}`) como critério de invalidez; preferir parser/sanity-check com posição, linha/coluna e contexto (slice) para evitar falsos positivos em payloads válidos.

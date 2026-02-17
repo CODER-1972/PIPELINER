@@ -228,6 +228,27 @@ O módulo ContextKV permite:
 
 ## 9. Logs, troubleshooting e validação operacional
 
+### Diagnóstico de payload e schema (sem chamada API)
+
+Para troubleshooting de `invalid_json` antes de `http.Send`, o motor inclui:
+
+- pré-validação sintática do payload com posição, linha/coluna, char e estado de profundidade/string;
+- dumps automáticos em pasta de debug (`C:\Temp` com fallback para `Documents\PIPELINER_DEBUG`):
+  - `_raw/payload_invalid.json`
+  - `_raw/payload_tail.txt`
+  - `_raw/payload_slice_<pos>.txt`
+- validação do schema `file_manifest` (strict) com resumo `properties` vs `required` e `additionalProperties:false` em root/items.
+
+Self-tests recomendados no VBA:
+- `SelfTest_PayloadBuild_FileOutput`
+- `SelfTest_Schema_FileManifest`
+- `SelfTest_ConfigExtra_Parser`
+
+Scripts externos em `scripts/` (PowerShell):
+- `Validate-Payload.ps1`
+- `Extract-Schema.ps1`
+
+
 Boas práticas de manutenção VBA (preventivas):
 
 - em literais de string com aspas duplas, usar escaping válido do VBA (ex.: `""""`) ou `Chr$(34)`;

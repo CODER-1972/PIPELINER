@@ -664,7 +664,7 @@ Private Function FileOutput_ManifestJsonSchema() As String
         """files"":{""type"":""array"",""items"":{""type"":""object"",""additionalProperties"":false,""properties"":{" & _
             """file_name"":{""type"":""string""}," & _
             """file_type"":{""type"":""string""}," & _
-            """subfolder"":{""type"":""string""}," & _
+            """subfolder"":{""type"":[""string"",""null""]}," & _
             """payload_kind"":{""type"":""string"",""enum"":[""text"",""markdown"",""structure"",""base64""]}," & _
             """payload"":{""type"":""string""}" & _
         "},""required"":[""file_name"",""file_type"",""subfolder"",""payload_kind"",""payload""]}}}" & _
@@ -841,17 +841,64 @@ Private Function FileOutput_ExtractKeysFromObjectMap(ByVal objectJson As String,
     Dim mapBody As String
     mapBody = Mid$(objectJson, mapStart + 1, mapEnd - mapStart - 1)
 
-    Dim re As Object, m As Object
-    Set re = CreateObject("VBScript.RegExp")
-    re.Global = True
-    re.IgnoreCase = True
-    re.Pattern = """([^""]+)""\s*:"
+    Dim i As Long
+    Dim inString As Boolean
+    Dim esc As Boolean
+    Dim depthObj As Long
+    Dim depthArr As Long
 
-    For Each m In re.Execute(mapBody)
-        If Not d.Exists(LCase$(CStr(m.SubMatches(0)))) Then
-            d(LCase$(CStr(m.SubMatches(0)))) = True
+    i = 1
+    Do While i <= Len(mapBody)
+        Dim ch As String
+        ch = Mid$(mapBody, i, 1)
+
+        If inString Then
+            If esc Then
+                esc = False
+            ElseIf ch = "\" Then
+                esc = True
+            ElseIf ch = """" Then
+                inString = False
+            End If
+            i = i + 1
+            GoTo ContinueLoop
         End If
-    Next m
+
+        If ch = """" Then
+            Dim keyEnd As Long
+            keyEnd = FileOutput_FindStringEnd(mapBody, i)
+            If keyEnd = 0 Then Exit Do
+
+            Dim j As Long
+            j = keyEnd + 1
+            Do While j <= Len(mapBody) And (Mid$(mapBody, j, 1) = " " Or Mid$(mapBody, j, 1) = vbTab)
+                j = j + 1
+            Loop
+
+            If j <= Len(mapBody) And Mid$(mapBody, j, 1) = ":" Then
+                If depthObj = 0 And depthArr = 0 Then
+                    Dim keyName As String
+                    keyName = LCase$(Mid$(mapBody, i + 1, keyEnd - i - 1))
+                    If keyName <> "" Then
+                        If Not d.Exists(keyName) Then d(keyName) = True
+                    End If
+                End If
+            End If
+
+            i = keyEnd + 1
+            GoTo ContinueLoop
+        End If
+
+        Select Case ch
+            Case "{": depthObj = depthObj + 1
+            Case "}": If depthObj > 0 Then depthObj = depthObj - 1
+            Case "[": depthArr = depthArr + 1
+            Case "]": If depthArr > 0 Then depthArr = depthArr - 1
+        End Select
+
+        i = i + 1
+ContinueLoop:
+    Loop
 
     Set FileOutput_ExtractKeysFromObjectMap = d
 End Function
@@ -888,29 +935,49 @@ Private Function FileOutput_ExtractKeysFromArray(ByVal objectJson As String, ByV
     Dim arrBody As String
     arrBody = Mid$(objectJson, arrStart + 1, arrEnd - arrStart - 1)
 
-    Dim re As Object, m As Object
-    Set re = CreateObject("VBScript.RegExp")
-    re.Global = True
-    re.IgnoreCase = True
-    re.Pattern = """([^""]+)"""
+    Dim i As Long
+    i = 1
+    Do While i <= Len(arrBody)
+        If Mid$(arrBody, i, 1) = """" Then
+            Dim valEnd As Long
+            valEnd = FileOutput_FindStringEnd(arrBody, i)
+            If valEnd = 0 Then Exit Do
 
-    For Each m In re.Execute(arrBody)
-        If Not d.Exists(LCase$(CStr(m.SubMatches(0)))) Then
-            d(LCase$(CStr(m.SubMatches(0)))) = True
+            Dim keyName As String
+            keyName = LCase$(Mid$(arrBody, i + 1, valEnd - i - 1))
+            If keyName <> "" Then
+                If Not d.Exists(keyName) Then d(keyName) = True
+            End If
+
+            i = valEnd + 1
+        Else
+            i = i + 1
         End If
-    Next m
+    Loop
 
     Set FileOutput_ExtractKeysFromArray = d
 End Function
 
-Private Function FileOutput_DictMissingKeys(ByVal expectedDict As Object, ByVal actualDict As Object) As String
-    Dim k As Variant
-    For Each k In expectedDict.Keys
-        If Not actualDict.Exists(CStr(k)) Then
-            If FileOutput_DictMissingKeys <> "" Then FileOutput_DictMissingKeys = FileOutput_DictMissingKeys & ";"
-            FileOutput_DictMissingKeys = FileOutput_DictMissingKeys & CStr(k)
+Private Function FileOutput_FindStringEnd(ByVal s As String, ByVal quoteStart As Long) As Long
+    Dim i As Long
+    Dim esc As Boolean
+    esc = False
+
+    For i = quoteStart + 1 To Len(s)
+        Dim ch As String
+        ch = Mid$(s, i, 1)
+
+        If esc Then
+            esc = False
+        ElseIf ch = "\" Then
+            esc = True
+        ElseIf ch = """" Then
+            FileOutput_FindStringEnd = i
+            Exit Function
         End If
-    Next k
+    Next i
+
+    FileOutput_FindStringEnd = 0
 End Function
 
 Private Function FileOutput_JoinDictKeys(ByVal d As Object) As String
@@ -966,27 +1033,61 @@ End Function
 Private Sub FileOutput_DumpSchemaForDebug(ByVal schemaJson As String, ByVal schemaName As String)
     On Error GoTo Falha
 
-    Dim targetPath As String
-    targetPath = "C:\Temp\schema_only.json"
+    Dim baseFolder As String
+    baseFolder = M05_GetDebugBaseFolder()
 
-    Dim ff As Integer
-    ff = FreeFile
-    Open targetPath For Output As #ff
-    Print #ff, schemaJson
-    Close #ff
+    Dim targetPath As String
+    targetPath = baseFolder & "\schema_only.json"
+
+    If Not M05_WriteTextFile(targetPath, schemaJson) Then GoTo Falha
 
     Call Debug_Registar(0, "M10_FILEOUTPUT_SCHEMA", "INFO", "", "M10_SCHEMA_DUMP", _
         "Schema gravado em " & targetPath & " | schema_name=" & schemaName & " | len=" & CStr(Len(schemaJson)), _
-        "Use este ficheiro para inspeção local do text.format.schema.")
+        "Use este ficheiro para inspe??o local do text.format.schema.")
     Exit Sub
 
 Falha:
-    On Error Resume Next
-    If ff > 0 Then Close #ff
     Call Debug_Registar(0, "M10_FILEOUTPUT_SCHEMA", "ALERTA", "", "M10_SCHEMA_DUMP_FAIL", _
-        "Não foi possível gravar C:\Temp\schema_only.json: " & Err.Description, _
-        "Verifique permissões da pasta C:\Temp.")
+        "N?o foi poss?vel gravar schema_only.json: " & Err.Description, _
+        "Verifique permiss?es da pasta de debug resolvida pelo M05.")
 End Sub
+
+Public Function FileOutput_SelfTest_SchemaSummary(ByRef outSummary As String) As Boolean
+    On Error GoTo Falha
+
+    Dim schema As String
+    schema = FileOutput_ManifestJsonSchema()
+
+    Dim rootProps As String
+    Dim rootReq As String
+    Dim rootMissing As String
+    Dim rootExtra As String
+    Dim itemProps As String
+    Dim itemReq As String
+    Dim itemMissing As String
+    Dim itemExtra As String
+    Dim rootHasAP As Boolean
+    Dim itemsHasAP As Boolean
+
+    FileOutput_SelfTest_SchemaSummary = FileOutput_ValidateManifestSchemaStrict( _
+        schema, rootProps, rootReq, rootMissing, rootExtra, rootHasAP, _
+        itemProps, itemReq, itemMissing, itemExtra, itemsHasAP)
+
+    outSummary = "root.properties=" & rootProps & " | root.required=" & rootReq & _
+                 " | missing_required=" & IIf(rootMissing = "", "(none)", rootMissing) & _
+                 " | extra_required=" & IIf(rootExtra = "", "(none)", rootExtra) & _
+                 " | items.properties=" & itemProps & " | items.required=" & itemReq & _
+                 " | items.missing_required=" & IIf(itemMissing = "", "(none)", itemMissing) & _
+                 " | items.extra_required=" & IIf(itemExtra = "", "(none)", itemExtra) & _
+                 " | root.additionalProperties=false=" & IIf(rootHasAP, "yes", "no") & _
+                 " | items.additionalProperties=false=" & IIf(itemsHasAP, "yes", "no")
+
+    Exit Function
+
+Falha:
+    outSummary = "schema_summary_error=" & Err.Number & " - " & Err.Description
+    FileOutput_SelfTest_SchemaSummary = False
+End Function
 
 Private Sub ExtraFragment_Append(ByRef extraFragment As String, ByVal fragmentSemChavesExternas As String)
     Dim f As String
