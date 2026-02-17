@@ -231,7 +231,9 @@ O módulo ContextKV permite:
 Boas práticas de manutenção VBA (preventivas):
 
 - em literais de string com aspas duplas, usar escaping válido do VBA (ex.: `""""`) ou `Chr$(34)`;
+- em comparações `If ... = "` e listas `Select Case` para aspas, confirmar literal completo (`""""`) para evitar `Syntax error`;
 - em padrões regex com aspas dentro de classe de caracteres (ex.: `[^\"]`), duplicar aspas no literal VBA (ex.: `"""([^""]+)"""`) para evitar erro de compilação;
+- em rotinas de escape/unescape JSON, validar o par inverso de `Replace` (escape: `\ -> \\`, `" -> \"`; unescape: `\\ -> \`, `\" -> "`) para não corromper conteúdo silenciosamente;
 - após alterações em módulos `.bas`, correr compilação do projeto (`Debug > Compile VBAProject`) para apanhar erros de sintaxe antes de execução.
 
 
@@ -266,6 +268,12 @@ SelfTests recomendados para este cenário:
 - `SelfTest_ContextKV_CaptureOkMiss` (2 outputs sintéticos: um capturável e outro livre);
 - `SelfTest_InputsKvExtraction` (linhas `CHAVE: valor` e `CHAVE=valor`, com exclusão de `FILES:`).
 
+Macros utilitárias para troubleshooting rápido de catálogo + Config extra:
+
+- `TOOL_CreateCatalogTemplateSheet` (M15): cria uma nova folha de catálogo com layout compatível (headers A:K, bloco de 5 linhas, `Next PROMPT` e secções `Descrição textual/INPUTS/OUTPUTS`).
+- `TOOL_RunConfigExtraSequentialDiagnostics` (M15): executa uma bateria sequencial de casos de `Config extra`, converte via parser oficial (`ConfigExtra_Converter`), injeta fragmento de File Output (`json_schema`) e valida a estrutura JSON final antes do HTTP.
+- Resultado do diagnóstico fica em `CONFIG_EXTRA_TESTS` + linhas `INFO/ERRO` no `DEBUG` (`M15_CONFIG_EXTRA_DIAG`), com detalhe de causa (ex.: `fecho_sem_abertura`).
+
 ### Seguimento
 
 Usar para auditar:
@@ -290,6 +298,8 @@ Notas adicionais para File Output + Structured Outputs (`json_schema`):
 - quando `structured_outputs_mode=json_schema` e `strict=true`, o schema do manifest deve manter `required` alinhado com todas as chaves definidas em `properties` (incluindo chaves como `subfolder` quando existirem);
 - o motor passa a emitir diagnóstico resumido do schema no DEBUG (`schema_name`, `strict`, contagem de `properties` e `required`), para reduzir tempo de troubleshooting de erros `invalid_json_schema`;
 - antes do envio HTTP, o motor executa um preflight de JSON para detetar caracteres de controlo não escapados **e** escapes inválidos com backslash dentro de strings (causas comuns de `invalid_json`), bloqueando o envio e registando posição aproximada + escape sugerido no DEBUG (ex.: `\n`, `\r`, `\t`, `\u00XX`, e escapes após `\`: `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uXXXX`);
+- além disso, valida estrutura mínima de JSON antes do HTTP (aspas/chaves/arrays e vírgula final inválida como `,}`/`,]`), para reduzir tentativas cegas quando há fusão de fragments (`Config extra` + `File Output`).
+- ao editar o fragmento `text.format` de File Output, confirmar balanceamento de chaves no schema concatenado (`properties`/`items`/`required`) para evitar `fecho_sem_abertura` no preflight estrutural.
 - durante construção do request, o payload final pode ser gravado em `C:\Temp\payload.json` para inspeção local antes de nova execução.
 
 Recomendação operacional:

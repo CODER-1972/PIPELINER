@@ -483,9 +483,14 @@ Se começar a ficar demasiado grande:
 
 ## Checklist anti-erros de sintaxe em strings VBA
 - Ao remover aspas duplas em `Replace`, usar literal válido de VBA (`""""`) ou `Chr$(34)`; nunca usar `"""` porque gera erro de compilação.
+- Em comparações/`Select Case` para o carácter `"`, usar sempre literal completo `""""` (ou `Chr$(34)`), incluindo em listas `Case`, para evitar linhas sintaticamente inválidas.
 - Em regexs com classe de caracteres que contenha aspas (ex.: `[^\"]`), duplicar as aspas dentro do literal VBA (ex.: `"""([^""]+)"""`) para evitar `Syntax error` em compilação.
 - Em mensagens de troubleshooting/documentação com exemplos JSON, nunca usar `\"` para tentar escapar aspas do literal VBA; em VBA as aspas literais devem ser `""` (ou `Chr$(34)`).
 - Sempre que editar strings com escape (JSON, regex-like, Replace), executar verificação rápida no VBE (Debug > Compile VBAProject) antes de fechar a alteração.
 - Em detecção de diretivas via `InStr`, normalize primeiro o texto (espaços/aspas) e compare também por igualdade canónica (`s = "environ(openai_api_key)"`) para evitar `Type mismatch` por string mal escapada.
 - Em schemas de Structured Outputs com `strict=true`, qualquer chave adicionada em `properties` deve ser adicionada também a `required`; tratar este alinhamento como check obrigatório de revisão para evitar `invalid_json_schema`.
 - Antes de enviar payload para `/v1/responses`, executar preflight de JSON para detetar caracteres de controlo não escapados e escapes inválidos com backslash dentro de strings (causas típicas de `invalid_json`) e registar posição + escape sugerido no DEBUG (`\n`, `\r`, `\t`, `\u00XX`; e após `\`: `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uXXXX`).
+- Em rotinas de `JsonEscape/JsonUnescape`, validar sempre o par inverso de `Replace` (ex.: `\ -> \\` no escape e `\\ -> \` no unescape; `" -> \"` no escape e `\" -> "` no unescape) para evitar corrupção silenciosa de payload/contexto.
+- Em troubleshooting de `invalid_json`, validar também estrutura mínima (aspas/chaves/arrays balanceados e deteção de vírgula final inválida `,}`/`,]`) antes do HTTP e reportar no DEBUG com causa curta e acionável.
+- Quando o erro envolver fusão `Config extra` + File Output, correr uma bateria sequencial de casos (parser + merge + preflight estrutural) e guardar evidência em folha dedicada, para isolar rapidamente se a quebra vem do input amigável, da conversão JSON ou da concatenação final.
+- Em construção de JSON por concatenação multi-linha (`& _`), validar contagem de abertura/fecho por bloco (`properties`/`items`/`required`) e comparar com um payload exemplo para evitar `}` excedente (causa comum de `fecho_sem_abertura`).
