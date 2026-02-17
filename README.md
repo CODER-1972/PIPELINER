@@ -244,6 +244,7 @@ Self-tests recomendados no VBA:
 - `SelfTest_PayloadBuild_FileOutput`
 - `SelfTest_Schema_FileManifest`
 - `SelfTest_ConfigExtra_Parser`
+- `Files_RegressionTests` (inclui checks de heurística para path longo e lock probe)
 
 Scripts externos em `scripts/` (PowerShell):
 - `Validate-Payload.ps1`
@@ -274,6 +275,11 @@ Usar para diagnosticar:
 - erros de anexos/upload;
 - limites de execução;
 - eventos de captura/injeção.
+
+Diagnóstico adicional para anexos (`FILES`):
+
+- em falhas de leitura local antes do upload, o erro passa a incluir `path_len`, `LONG_PATH_CANDIDATE` e `LOCKED_CANDIDATE` para acelerar a triagem de caminhos longos e ficheiros bloqueados;
+- o módulo disponibiliza a rotina manual `Files_Diag_CorridaCompleta(apiKey, fullPath)` para validar, em sequência, leitura local, conectividade API e upload `/v1/files`.
 
 Notas adicionais para File Output + Structured Outputs (`json_schema`):
 

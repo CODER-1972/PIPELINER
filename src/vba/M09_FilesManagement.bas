@@ -8,6 +8,9 @@ Option Explicit
 ' - Aplicar effective_mode, robustez multipart e utilitários de ficheiros para pipeline.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Diagnóstico de leitura de ficheiros (path longo/bloqueio)
+'   - Enriquece erros de upload com diagnóstico objetivo para path longo, lock e permissões.
+'   - Adiciona testes de regressão para detetar heurística de path longo e lock de ficheiro.
 ' - 2026-02-15 | Codex | Correção de sintaxe na normalização de nome de ficheiro
 '   - Corrige escaping de aspas em Replace para evitar erro de compilação no VBA.
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
@@ -145,6 +148,7 @@ Private Const USED_PROMPTS_SEP As String = ";  "
 
 
 Private Const PDF_CACHE_FOLDER_NAME As String = "_pdf_cache"
+Private Const FILES_LONG_PATH_WARN As Long = 240
 Private Const EXT_PDF As String = "pdf"
 Private Const IMG_EXTS As String = "png;jpg;jpeg;webp"
 
@@ -2837,7 +2841,7 @@ Public Function Files_UploadFile_OpenAI( _
     Dim fileBytes() As Byte
     fileBytes = Files_ReadAllBytesEx(resolvedPath, errRead)
     If Files_ByteLen(fileBytes) = 0 Then
-        outErro = "Leitura de ficheiro falhou: " & errRead
+        outErro = "Leitura de ficheiro falhou: " & errRead & " | " & Files_BuildReadFailureDiagnosis(resolvedPath)
         Exit Function
     End If
 
@@ -4455,6 +4459,33 @@ SubOk = isSep
 Call Files_TestWrite(wsT, rowT, "Separador por run (linha separadora)", SubOk, IIf(isSep, "OK", "Não encontrado/formatado como esperado"))
 rowT = rowT + 1
 
+
+' --- Teste 8: heurística de path longo
+Dim longPath As String
+longPath = "C:\Temp\" & String$(245, "a") & ".pdf"
+SubOk = Files_IsLikelyLongPath(longPath)
+Call Files_TestWrite(wsT, rowT, "Deteção de path longo", SubOk, "len=" & CStr(Len(longPath)))
+rowT = rowT + 1
+
+' --- Teste 9: lock probe (ficheiro aberto com lock)
+Dim lockPath As String
+lockPath = Environ$("TEMP") & "\pipeliner_lock_probe.txt"
+Call Files_WriteTextUtf8(lockPath, "lock-probe")
+
+Dim ffLock As Integer
+ffLock = FreeFile
+Open lockPath For Binary Access Read Write Lock Read Write As #ffLock
+
+Dim lockDiag As String
+SubOk = Files_IsFileLockedByAnotherProcess(lockPath, lockDiag)
+Call Files_TestWrite(wsT, rowT, "Deteção de ficheiro bloqueado", SubOk, lockDiag)
+rowT = rowT + 1
+
+Close #ffLock
+On Error Resume Next
+Kill lockPath
+On Error GoTo Falha
+
 ' --- Limpeza: remover registos inseridos pelo teste
 Dim added As Long
 added = (lo.ListRows.Count - initialRows)
@@ -4590,6 +4621,65 @@ Falha:
     ' devolve array vazio
     Dim b() As Byte
     Files_ReadAllBytesEx = b
+End Function
+
+Private Function Files_BuildReadFailureDiagnosis(ByVal fullPath As String) As String
+    On Error Resume Next
+
+    Dim details As String
+    details = "path_len=" & CStr(Len(fullPath))
+
+    If Files_IsLikelyLongPath(fullPath) Then
+        details = details & "|LONG_PATH_CANDIDATE=SIM"
+    Else
+        details = details & "|LONG_PATH_CANDIDATE=NAO"
+    End If
+
+    Dim lockErr As String
+    Dim isLocked As Boolean
+    isLocked = Files_IsFileLockedByAnotherProcess(fullPath, lockErr)
+    details = details & "|LOCKED_CANDIDATE=" & IIf(isLocked, "SIM", "NAO")
+    If Trim$(lockErr) <> "" Then details = details & "|lock_diag=" & lockErr
+
+    Dim attrs As Long
+    attrs = GetAttr(fullPath)
+    details = details & "|attrs=" & CStr(attrs)
+
+    Files_BuildReadFailureDiagnosis = details
+End Function
+
+Private Function Files_IsLikelyLongPath(ByVal fullPath As String) As Boolean
+    Files_IsLikelyLongPath = (Len(Trim$(fullPath)) >= FILES_LONG_PATH_WARN)
+End Function
+
+Private Function Files_IsFileLockedByAnotherProcess(ByVal fullPath As String, ByRef outErr As String) As Boolean
+    On Error GoTo LockFail
+
+    Dim ff As Integer
+    ff = FreeFile
+    Open fullPath For Binary Access Read Write Lock Read Write As #ff
+    Close #ff
+
+    outErr = ""
+    Files_IsFileLockedByAnotherProcess = False
+    Exit Function
+
+LockFail:
+    Dim errNum As Long
+    Dim errDesc As String
+    errNum = Err.Number
+    errDesc = Err.Description
+
+    outErr = "Err " & CStr(errNum) & ": " & errDesc
+    On Error Resume Next
+    If ff > 0 Then Close #ff
+
+    Select Case errNum
+        Case 70, 75, 55
+            Files_IsFileLockedByAnotherProcess = True
+        Case Else
+            Files_IsFileLockedByAnotherProcess = False
+    End Select
 End Function
 
 Private Function Files_ByteLen(ByRef arr() As Byte) As Long
