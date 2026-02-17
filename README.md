@@ -200,6 +200,8 @@ Comportamentos de robustez:
 
 Na linha de `INPUTS` do prompt é possível declarar `FILES:`/`FICHEIROS:`.
 
+Além das diretivas de ficheiros, as linhas textuais de `INPUTS` (por exemplo `URLS_ENTRADA: ...` e `MODO_DE_VERIFICACAO: ...`) são anexadas ao prompt final enviado ao modelo, num bloco dedicado `INPUTS_DECLARADOS_NO_CATALOGO`. Isto evita perda de contexto quando os valores operacionais ficam apenas na área `INPUTS` do catálogo.
+
 Capacidades principais:
 
 - resolução de ficheiros no `INPUT Folder` da pipeline;
