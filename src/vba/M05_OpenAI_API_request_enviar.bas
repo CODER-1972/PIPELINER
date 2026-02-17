@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Corrige literal de troubleshooting do preflight para compilar em VBA
+'   - Substitui montagem ambígua de escapes na mensagem do DEBUG por literal seguro com aspas duplicadas.
+'   - Mantém orientações de escapes JSON sem depender de barras invertidas como pseudo-escape de aspas no VBA.
 ' - 2026-02-17 | Codex | Preflight estrutural de JSON para reduzir 400 invalid_json
 '   - Adiciona verificação de aspas/chaves/arrays e deteção de vírgula final inválida (`,}`/`,]`).
 '   - Regista diagnóstico acionável no DEBUG antes do HTTP quando o payload não fecha estruturalmente.
@@ -682,7 +685,7 @@ Public Function OpenAI_Executar( _
         On Error Resume Next
         Call Debug_Registar(0, dbgPromptId, "ERRO", "", "M05_JSON_PREFLIGHT", _
             "Payload bloqueado antes do envio: possivel controlo nao escapado dentro de string JSON (" & preflightDetail & ")", _
-            "Revise input_json/extraFragment. Escapes validos em JSON incluem \n, \r, \t, \u00XX e, apos \\, apenas " & Chr$(92) & Chr$(34) & " " & Chr$(92) & Chr$(92) & " / b f n r t uXXXX.")
+            "Revise input_json/extraFragment. Escapes validos em JSON incluem \n, \r, \t, \u00XX e, apos \\, apenas " & Chr$(92) & Chr$(34) & ", " & Chr$(92) & Chr$(92) & ", \/, \b, \f, \n, \r, \t e \uXXXX.")
         On Error GoTo TrataErro
 
         resultado.Erro = "Payload invalido (preflight): controlo nao escapado em string JSON. " & preflightDetail
