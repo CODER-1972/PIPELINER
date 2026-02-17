@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Indicador de passo major pendente no DEBUG
+'   - Antes de cada passo, escreve linha "[A executar:] ..." na próxima linha livre do DEBUG.
+'   - Ao concluir/falhar o passo, preenche a mesma linha com INFO/ALERTA/ERRO e remove estado pendente.
 ' - 2026-02-16 | Codex | Resolução de API key via ambiente com fallback compatível
 '   - Substitui leitura direta de Config!B1 por resolver central (M14_ConfigApiKey).
 '   - Regista ALERTA/ERRO no DEBUG para origem/falhas da credencial sem expor segredo.
@@ -614,7 +617,12 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     cursorRow = LIST_START_ROW
 
     Dim passo As Long
+    Dim majorStepRow As Long
+    Dim majorStepResolved As Boolean
     For passo = 1 To maxSteps
+
+        majorStepResolved = False
+        majorStepRow = Debug_IniciarPassoMajor(passo, atual, "Prompt ID " & atual & " | Preparar contexto, chamar API e resolver Next PROMPT")
 
         Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount)
         DoEvents
@@ -632,6 +640,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 "Max Repetitions excedido para o ID: " & atual, _
                 "Sugestao: reduza ciclos, ajuste Next PROMPT, ou aumente Max Repetitions no PAINEL.")
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+            Call Debug_ConcluirPassoMajor(majorStepRow, "ALERTA", "MaxRepetitions", "Max Repetitions excedido para o ID: " & atual, "Sugestao: reduza ciclos, ajuste Next PROMPT, ou aumente Max Repetitions no PAINEL.")
+            majorStepResolved = True
             GoTo SaidaLimpa
         End If
 
@@ -644,6 +654,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 "Prompt ID nao encontrado no catalogo: " & atual, _
                 "Sugestao: confirme se existe uma linha com este ID e se o nome da folha coincide com o prefixo do ID.")
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+            Call Debug_ConcluirPassoMajor(majorStepRow, "ERRO", "Catalogo", "Prompt ID nao encontrado no catalogo: " & atual, "Sugestao: confirme se existe uma linha com este ID e se o nome da folha coincide com o prefixo do ID.")
+            majorStepResolved = True
             GoTo SaidaLimpa
         End If
 
@@ -679,6 +691,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         If injectOk = False Then
             Call Debug_Registar(passo, prompt.Id, "ERRO", "", "CONTEXT_KV", injectErro, "")
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+            Call Debug_ConcluirPassoMajor(majorStepRow, "ERRO", "CONTEXT_KV", injectErro, "")
+            majorStepResolved = True
             GoTo SaidaLimpa
         End If
 
@@ -715,6 +729,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                     Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, 0, "", _
                         "[ERRO FILES] INPUT Folder invalido: " & inputFolder)
                     wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+                    Call Debug_ConcluirPassoMajor(majorStepRow, "ERRO", "INPUT Folder", "Prompt tem FILES mas INPUT Folder nao existe/esta vazio. inputFolder=[" & inputFolder & "]", "Sugestao: preencha INPUT Folder no PAINEL (linha 2) para esta pipeline.")
+                    majorStepResolved = True
                     GoTo SaidaLimpa
                 End If
             End If
@@ -756,6 +772,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, 0, "", _
                 "[ERRO FILES] " & erroFiles)
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+            Call Debug_ConcluirPassoMajor(majorStepRow, "ERRO", "FILES", "Falha critica a preparar contexto de ficheiros. inputFolder=[" & inputFolder & "] erro=[" & erroFiles & "]", "Sugestao: confirme INPUT Folder e declaracoes FILES: no catalogo.")
+            majorStepResolved = True
             GoTo SaidaLimpa
         End If
 
@@ -769,6 +787,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, 0, "", _
                     "[ERRO FILES] Prompt tem (required) mas nenhum ficheiro/imagem foi anexado.")
                 wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+                Call Debug_ConcluirPassoMajor(majorStepRow, "ERRO", "FILES_REQUIRED", "Prompt tem (required) mas nenhum ficheiro/imagem foi anexado.", "")
+                majorStepResolved = True
                 GoTo SaidaLimpa
             End If
         End If
@@ -787,6 +807,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, 0, "", _
                 "[ERRO INPUT] Prompt com FILES sem input JSON válido.")
             wsPainel.Cells(cursorRow + 1, colIniciar).Value = "STOP"
+            Call Debug_ConcluirPassoMajor(majorStepRow, "ERRO", "REQ_INPUT_JSON_EMPTY", "Prompt com FILES mas inputJsonFinal ficou vazio (len=0).", "Validar parser de Config extra/input e BuildInputWithFiles (M09).")
+            majorStepResolved = True
             GoTo SaidaLimpa
         End If
 
@@ -869,6 +891,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 resultado.Erro, _
                 "Sugestao: verifique modelo, quota, payload e configuracao.")
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+            Call Debug_ConcluirPassoMajor(majorStepRow, "ERRO", "API", resultado.Erro, "Sugestao: verifique modelo, quota, payload e configuracao.")
+            majorStepResolved = True
             GoTo SaidaLimpa
         End If
 
@@ -885,6 +909,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         If proximoEsperado = "" Or Painel_EhSTOP(proximoEsperado) Then
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+            Call Debug_ConcluirPassoMajor(majorStepRow, "INFO", "NextPrompt", "Next PROMPT terminou em STOP para o passo atual.", "")
+            majorStepResolved = True
             GoTo SaidaLimpa
         End If
 
@@ -917,6 +943,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                         "ID na linha seguinte nao permitido e Next PROMPT default esta vazio.", _
                         "Sugestao: defina Next PROMPT default na folha do catalogo.")
                     wsPainel.Cells(nextRow + 1, colIniciar).value = "STOP"
+                    Call Debug_ConcluirPassoMajor(majorStepRow, "ALERTA", "NextDefault", "ID na linha seguinte nao permitido e Next PROMPT default esta vazio.", "Sugestao: defina Next PROMPT default na folha do catalogo.")
+                    majorStepResolved = True
                     GoTo SaidaLimpa
                 End If
 
@@ -934,6 +962,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                     "Linha seguinte vazia e Next PROMPT default esta vazio.", _
                     "Sugestao: defina Next PROMPT default na folha do catalogo.")
                 wsPainel.Cells(nextRow, colIniciar).value = "STOP"
+                Call Debug_ConcluirPassoMajor(majorStepRow, "ALERTA", "NextDefault", "Linha seguinte vazia e Next PROMPT default esta vazio.", "Sugestao: defina Next PROMPT default na folha do catalogo.")
+                majorStepResolved = True
                 GoTo SaidaLimpa
             End If
 
@@ -947,6 +977,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         proximoFinal = Painel_ValidarAllowedEExistencia(proximoFinal, nextDefault, nextAllowed, passo, atual)
         If proximoFinal = "" Or Painel_EhSTOP(proximoFinal) Then
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+            Call Debug_ConcluirPassoMajor(majorStepRow, "ALERTA", "NextPrompt", "Proximo prompt invalido apos validacao de allowed/existencia.", "")
+            majorStepResolved = True
             GoTo SaidaLimpa
         End If
 
@@ -957,6 +989,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 "Detetada alternancia A-B-A-B. Pipeline interrompida.", _
                 "Sugestao: adicione condicao de saida, restrinja allowed, ou introduza STOP.")
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+            Call Debug_ConcluirPassoMajor(majorStepRow, "ALERTA", "Ciclos", "Detetada alternancia A-B-A-B. Pipeline interrompida.", "Sugestao: adicione condicao de saida, restrinja allowed, ou introduza STOP.")
+            majorStepResolved = True
             GoTo SaidaLimpa
         End If
 
@@ -965,6 +999,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         If Painel_EhSTOP(atual) Then
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+            Call Debug_ConcluirPassoMajor(majorStepRow, "INFO", "NextPrompt", "Pipeline terminou com STOP.", "")
+            majorStepResolved = True
             GoTo SaidaLimpa
         End If
 
@@ -973,8 +1009,13 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 "A lista INICIAR excedeu o limite de linhas do PAINEL.", _
                 "Sugestao: aumente LIST_MAX_ROWS no codigo ou reduza a pipeline.")
             wsPainel.Cells(LIST_START_ROW + LIST_MAX_ROWS - 1, colIniciar).value = "STOP"
+            Call Debug_ConcluirPassoMajor(majorStepRow, "ALERTA", "LimiteLista", "A lista INICIAR excedeu o limite de linhas do PAINEL.", "Sugestao: aumente LIST_MAX_ROWS no codigo ou reduza a pipeline.")
+            majorStepResolved = True
             GoTo SaidaLimpa
         End If
+
+        Call Debug_ConcluirPassoMajor(majorStepRow, "INFO", "PassoMajor", "Passo executado com sucesso. Next PROMPT: " & proximoFinal, "")
+        majorStepResolved = True
 
     Next passo
 
@@ -984,6 +1025,9 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
 
 SaidaLimpa:
+    If (majorStepRow > 1) And (majorStepResolved = False) Then
+        Call Debug_ConcluirPassoMajor(majorStepRow, "ALERTA", "PassoMajor", "Passo interrompido antes da conclusao completa.", "Ver entradas de DEBUG imediatamente acima para o detalhe.")
+    End If
     Application.StatusBar = False
     Application.DisplayStatusBar = oldDisplayStatusBar
     Application.EnableEvents = oldEnableEvents

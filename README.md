@@ -103,6 +103,8 @@ Auditoria por passo: prompt executado, configuração usada, status HTTP, output
 
 Registo curto e acionável de erros/alertas/info de parsing, validação de encadeamento, limites e troubleshooting técnico.
 
+Durante a execução, cada passo major é anunciado numa nova linha com o prefixo `[A executar:] ...`; quando o passo termina, essa mesma linha é atualizada com `INFO`/`ALERTA`/`ERRO` final (sem manter o marcador pendente).
+
 ## 3.5 Folhas de catálogo
 
 Cada folha contém prompts executáveis. O prefixo do ID deve corresponder ao nome da folha.
@@ -274,7 +276,8 @@ Usar para diagnosticar:
 - encadeamento inconsistente (`Next PROMPT`);
 - erros de anexos/upload;
 - limites de execução;
-- eventos de captura/injeção.
+- eventos de captura/injeção;
+- progresso por passo major com linha pendente `[A executar:] ...` que é concluída no próprio registo.
 
 Diagnóstico adicional para anexos (`FILES`):
 

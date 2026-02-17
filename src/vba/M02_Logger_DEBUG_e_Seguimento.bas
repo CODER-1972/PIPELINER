@@ -8,12 +8,17 @@ Option Explicit
 ' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Suporte a "passo em execução" no DEBUG
+'   - Adiciona Debug_IniciarPassoMajor para registar linha pendente "[A executar:] ...".
+'   - Adiciona Debug_ConcluirPassoMajor para preencher a mesma linha com INFO/ALERTA/ERRO.
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
 '   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
 '   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
 '
 ' Funções e procedimentos (inventário público):
 ' - Debug_Registar (Sub): rotina pública do módulo.
+' - Debug_IniciarPassoMajor (Function): cria linha "A executar" e devolve o row id.
+' - Debug_ConcluirPassoMajor (Sub): conclui a linha pendente com resultado final do passo.
 ' - Seguimento_Registar (Sub): rotina pública do módulo.
 ' - Seguimento_ArquivarLimpar (Sub): rotina pública do módulo.
 ' =============================================================================
@@ -55,6 +60,55 @@ Public Sub Debug_Registar( _
     Debug_SetValue ws, mapa, novaLinha, "Parametro", parametro          ' aceita "Parâmetro" no Excel
     Debug_SetValue ws, mapa, novaLinha, "Problema", problema
     Debug_SetValue ws, mapa, novaLinha, "Sugestao", sugestao            ' aceita "Sugestão" no Excel
+End Sub
+
+Public Function Debug_IniciarPassoMajor( _
+    ByVal passo As Long, _
+    ByVal promptId As String, _
+    ByVal descricao As String _
+) As Long
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(SHEET_DEBUG)
+
+    Dim mapa As Object
+    Set mapa = Debug_MapaCabecalhos(ws)
+
+    Dim novaLinha As Long
+    novaLinha = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row + 1
+
+    Debug_SetValue ws, mapa, novaLinha, "Timestamp", Now
+    Debug_SetValue ws, mapa, novaLinha, "Passo", passo
+    Debug_SetValue ws, mapa, novaLinha, "Prompt ID", promptId
+    Debug_SetValue ws, mapa, novaLinha, "Severidade", "A EXECUTAR"
+    Debug_SetValue ws, mapa, novaLinha, "Parametro", "PassoMajor"
+    Debug_SetValue ws, mapa, novaLinha, "Problema", "[A executar:] " & descricao
+    Debug_SetValue ws, mapa, novaLinha, "Sugestao", "Aguardar conclusao do passo"
+
+    Debug_IniciarPassoMajor = novaLinha
+End Function
+
+Public Sub Debug_ConcluirPassoMajor( _
+    ByVal linhaDebug As Long, _
+    ByVal severidade As String, _
+    ByVal parametro As String, _
+    ByVal problema As String, _
+    ByVal sugestao As String _
+)
+    If linhaDebug <= 1 Then Exit Sub
+
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(SHEET_DEBUG)
+
+    If linhaDebug > ws.Rows.Count Then Exit Sub
+
+    Dim mapa As Object
+    Set mapa = Debug_MapaCabecalhos(ws)
+
+    Debug_SetValue ws, mapa, linhaDebug, "Timestamp", Now
+    Debug_SetValue ws, mapa, linhaDebug, "Severidade", severidade
+    Debug_SetValue ws, mapa, linhaDebug, "Parametro", parametro
+    Debug_SetValue ws, mapa, linhaDebug, "Problema", problema
+    Debug_SetValue ws, mapa, linhaDebug, "Sugestao", sugestao
 End Sub
 
 
