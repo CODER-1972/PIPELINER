@@ -8,6 +8,8 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | file_manifest strict fix (root/items)
+'   - Fix root required JSON tail and top-level extraction for required/properties.
 ' - 2026-02-17 | Codex | Correção de compile error no validador strict do manifest
 '   - Adiciona helper `FileOutput_DictMissingKeys` usado por `FileOutput_ValidateManifestSchemaStrict`.
 '   - Evita erro "Sub or Function not defined" ao correr self-tests/compile completo.
@@ -671,7 +673,7 @@ Private Function FileOutput_ManifestJsonSchema() As String
             """payload_kind"":{""type"":""string"",""enum"":[""text"",""markdown"",""structure"",""base64""]}," & _
             """payload"":{""type"":""string""}" & _
         "},""required"":[""file_name"",""file_type"",""subfolder"",""payload_kind"",""payload""]}}}" & _
-        "},""required"":[""output_kind"",""files""]}"
+        ",""required"":[""output_kind"",""files""]}"
 End Function
 
 Private Sub FileOutput_LogSchemaDiagnostics(ByVal schemaJson As String, ByVal schemaName As String, ByVal strictMode As Boolean)
@@ -817,18 +819,8 @@ Private Function FileOutput_ExtractKeysFromObjectMap(ByVal objectJson As String,
     Set d = CreateObject("Scripting.Dictionary")
     d.CompareMode = vbTextCompare
 
-    Dim anchor As String
-    anchor = """" & mapName & """:"
-
-    Dim p As Long
-    p = InStr(1, objectJson, anchor, vbTextCompare)
-    If p = 0 Then
-        Set FileOutput_ExtractKeysFromObjectMap = d
-        Exit Function
-    End If
-
     Dim mapStart As Long
-    mapStart = InStr(p + Len(anchor), objectJson, "{")
+    mapStart = FileOutput_FindTopLevelValueStart(objectJson, mapName, "{")
     If mapStart = 0 Then
         Set FileOutput_ExtractKeysFromObjectMap = d
         Exit Function
@@ -911,18 +903,8 @@ Private Function FileOutput_ExtractKeysFromArray(ByVal objectJson As String, ByV
     Set d = CreateObject("Scripting.Dictionary")
     d.CompareMode = vbTextCompare
 
-    Dim anchor As String
-    anchor = """" & arrayName & """:"
-
-    Dim p As Long
-    p = InStr(1, objectJson, anchor, vbTextCompare)
-    If p = 0 Then
-        Set FileOutput_ExtractKeysFromArray = d
-        Exit Function
-    End If
-
     Dim arrStart As Long
-    arrStart = InStr(p + Len(anchor), objectJson, "[")
+    arrStart = FileOutput_FindTopLevelValueStart(objectJson, arrayName, "[")
     If arrStart = 0 Then
         Set FileOutput_ExtractKeysFromArray = d
         Exit Function
@@ -959,6 +941,55 @@ Private Function FileOutput_ExtractKeysFromArray(ByVal objectJson As String, ByV
     Loop
 
     Set FileOutput_ExtractKeysFromArray = d
+End Function
+
+Private Function FileOutput_FindTopLevelValueStart(ByVal objectJson As String, ByVal keyName As String, ByVal expectedOpenChar As String) As Long
+    Dim i As Long
+    Dim depthObj As Long
+    Dim depthArr As Long
+
+    For i = 1 To Len(objectJson)
+        Dim ch As String
+        ch = Mid$(objectJson, i, 1)
+
+        Select Case ch
+            Case """"
+                Dim keyEnd As Long
+                keyEnd = FileOutput_FindStringEnd(objectJson, i)
+                If keyEnd = 0 Then Exit For
+
+                If depthObj = 1 And depthArr = 0 Then
+                    Dim k As String
+                    k = LCase$(Mid$(objectJson, i + 1, keyEnd - i - 1))
+                    If k = LCase$(Trim$(keyName)) Then
+                        Dim p As Long
+                        p = keyEnd + 1
+                        Do While p <= Len(objectJson) And (Mid$(objectJson, p, 1) = " " Or Mid$(objectJson, p, 1) = vbTab Or Mid$(objectJson, p, 1) = vbCr Or Mid$(objectJson, p, 1) = vbLf)
+                            p = p + 1
+                        Loop
+                        If p <= Len(objectJson) And Mid$(objectJson, p, 1) = ":" Then
+                            p = p + 1
+                            Do While p <= Len(objectJson) And (Mid$(objectJson, p, 1) = " " Or Mid$(objectJson, p, 1) = vbTab Or Mid$(objectJson, p, 1) = vbCr Or Mid$(objectJson, p, 1) = vbLf)
+                                p = p + 1
+                            Loop
+                            If p <= Len(objectJson) And Mid$(objectJson, p, 1) = expectedOpenChar Then
+                                FileOutput_FindTopLevelValueStart = p
+                                Exit Function
+                            End If
+                        End If
+                    End If
+                End If
+                i = keyEnd
+            Case "{"
+                depthObj = depthObj + 1
+            Case "}"
+                If depthObj > 0 Then depthObj = depthObj - 1
+            Case "["
+                depthArr = depthArr + 1
+            Case "]"
+                If depthArr > 0 Then depthArr = depthArr - 1
+        End Select
+    Next i
 End Function
 
 Private Function FileOutput_FindStringEnd(ByVal s As String, ByVal quoteStart As Long) As Long

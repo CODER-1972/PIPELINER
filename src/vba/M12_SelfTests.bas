@@ -8,6 +8,9 @@ Option Explicit
 ' - Registar resultados PASS/FAIL/ALERTA no DEBUG para diagnóstico rápido.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | SELFTEST_OUTPUT_CHAIN ByRef fix
+'   - Replace Application.Run with direct Files_ResolverOutputToken call.
+'   - Avoid false FAIL with empty status in output-chain selftest.
 ' - 2026-02-16 | Codex | SelfTest de schema strict para File Output (required vs properties)
 '   - Adiciona macro pública SELFTEST_FILEOUTPUT_SCHEMA para validar alinhamento entre properties e required.
 '   - Integra o teste no SelfTest_RunAll com registo PASS/FAIL no DEBUG.
@@ -392,7 +395,7 @@ End Sub
 
 Private Sub SelfTest_InvokeResolve(ByVal token As String, ByVal stepN As Long, ByRef resolvedPath As String, ByRef resolvedName As String, ByRef status As String, ByRef candidatos As String)
     On Error GoTo EH
-    Application.Run "Files_ResolverOutputToken", "SELFTEST_PIPE", "SELFTEST", stepN, token, resolvedPath, resolvedName, status, candidatos
+    Call Files_ResolverOutputToken("SELFTEST_PIPE", "SELFTEST", stepN, token, resolvedPath, resolvedName, status, candidatos)
     Exit Sub
 EH:
     status = "NOT_FOUND"

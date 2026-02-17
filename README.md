@@ -27,6 +27,7 @@ Template Excel + VBA para execução de pipelines de prompts com auditoria opera
 - [9. Logs, troubleshooting e validação operacional](#9-logs-troubleshooting-e-validação-operacional)
 - [10. Segurança e compatibilidade retroativa](#10-segurança-e-compatibilidade-retroativa)
 - [11. Guia rápido de operação](#11-guia-rápido-de-operação)
+- [12. Notas de robustez dos SelfTests (output chain e schema strict)](#12-notas-de-robustez-dos-selftests-output-chain-e-schema-strict)
 
 ---
 
@@ -326,3 +327,11 @@ Notas operacionais:
 ---
 
 > Este README é a referência de funcionamento do projeto. Guias de teste específicos (ex.: T3) devem viver como subseções operacionais ou documentação complementar, sem substituir a visão global do sistema.
+
+
+## 12. Notas de robustez dos SelfTests (output chain e schema strict)
+
+- O self-test de output chain (`SELFTEST_OUTPUT_CHAIN`) deve chamar `Files_ResolverOutputToken` de forma direta para preservar parâmetros de saída `ByRef` (status, nome e path resolvidos).
+- O schema de File Output (`file_manifest`) em `structured_outputs_mode=json_schema` deve manter `required` alinhado com `properties` tanto em **root** como em **items**.
+- A validação interna de schema deve extrair chaves no nível correto do objeto JSON para não confundir `required` de `items` com `required` de `root`.
+- Em caso de erro de payload, os artefactos em `C:\Temp\_raw` continuam a ser a referência de troubleshooting (`payload_invalid.json`, `payload_tail.txt`, `payload_slice_*.txt`).
