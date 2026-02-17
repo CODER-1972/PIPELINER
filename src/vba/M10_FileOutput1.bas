@@ -8,6 +8,9 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Correção de compile error no validador strict do manifest
+'   - Adiciona helper `FileOutput_DictMissingKeys` usado por `FileOutput_ValidateManifestSchemaStrict`.
+'   - Evita erro "Sub or Function not defined" ao correr self-tests/compile completo.
 ' - 2026-02-17 | Codex | Validação strict multi-nível do schema
 '   - Valida root/items em `required` vs `properties` e `additionalProperties:false` antes do envio.
 '   - Em modo VERBOSE, grava `C:\Temp\schema_only.json` para inspeção rápida.
@@ -987,6 +990,18 @@ Private Function FileOutput_JoinDictKeys(ByVal d As Object) As String
     For Each k In d.Keys
         If FileOutput_JoinDictKeys <> "" Then FileOutput_JoinDictKeys = FileOutput_JoinDictKeys & ";"
         FileOutput_JoinDictKeys = FileOutput_JoinDictKeys & CStr(k)
+    Next k
+End Function
+
+Private Function FileOutput_DictMissingKeys(ByVal sourceDict As Object, ByVal requiredDict As Object) As String
+    Dim k As Variant
+    If requiredDict Is Nothing Then Exit Function
+
+    For Each k In requiredDict.Keys
+        If sourceDict Is Nothing Or (Not sourceDict.Exists(k)) Then
+            If FileOutput_DictMissingKeys <> "" Then FileOutput_DictMissingKeys = FileOutput_DictMissingKeys & ";"
+            FileOutput_DictMissingKeys = FileOutput_DictMissingKeys & CStr(k)
+        End If
     Next k
 End Function
 
