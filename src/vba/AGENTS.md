@@ -270,6 +270,9 @@ Chaves proibidas em Config extra (devem ser ignoradas com alerta):
 - `model`, `temperature`, `max_output_tokens`, `store`, `tools`
 (Estas chaves têm colunas dedicadas / lógica própria.)
 
+Princípio de revisão (evitar regressões de documentação):
+- Não documentar `tools` via Config extra como mecanismo suportado de override; como `tools` é chave proibida no parser, qualquer controlo desta política deve ser feito por flag dedicada em Config/VBA.
+
 Regras de coerência:
 - Não usar `conversation` e `previous_response_id` em simultâneo; se ambos aparecerem, manter `conversation` e ignorar `previous_response_id` (com alerta).
 
