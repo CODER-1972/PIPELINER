@@ -270,6 +270,9 @@ Chaves proibidas em Config extra (devem ser ignoradas com alerta):
 - `model`, `temperature`, `max_output_tokens`, `store`, `tools`
 (Estas chaves têm colunas dedicadas / lógica própria.)
 
+Princípio de revisão (evitar regressões de documentação):
+- Não documentar `tools` via Config extra como mecanismo suportado de override; como `tools` é chave proibida no parser, qualquer controlo desta política deve ser feito por flag dedicada em Config/VBA.
+
 Regras de coerência:
 - Não usar `conversation` e `previous_response_id` em simultâneo; se ambos aparecerem, manter `conversation` e ignorar `previous_response_id` (com alerta).
 
@@ -480,8 +483,10 @@ Se começar a ficar demasiado grande:
 
 ## Checklist anti-erros de sintaxe em strings VBA
 - Ao remover aspas duplas em `Replace`, usar literal válido de VBA (`""""`) ou `Chr$(34)`; nunca usar `"""` porque gera erro de compilação.
+- Em regexs com classe de caracteres que contenha aspas (ex.: `[^\"]`), duplicar as aspas dentro do literal VBA (ex.: `"""([^""]+)"""`) para evitar `Syntax error` em compilação.
 - Sempre que editar strings com escape (JSON, regex-like, Replace), executar verificação rápida no VBE (Debug > Compile VBAProject) antes de fechar a alteração.
 - Em detecção de diretivas via `InStr`, normalize primeiro o texto (espaços/aspas) e compare também por igualdade canónica (`s = "environ(openai_api_key)"`) para evitar `Type mismatch` por string mal escapada.
 - Em schemas de Structured Outputs com `strict=true`, qualquer chave adicionada em `properties` deve ser adicionada também a `required`; tratar este alinhamento como check obrigatório de revisão para evitar `invalid_json_schema`.
 - Em prompts com secção `INPUTS`, tratar explicitamente a política de anexação ao prompt final (`INPUTS_APPEND_MODE`) e extração de pares chave/valor (`AUTO_INJECT_INPUT_VARS`); sem isso, campos como `URLS_ENTRADA` ficam apenas documentais e não operacionais.
 
+- Antes de enviar payload para `/v1/responses`, executar preflight de JSON para detetar caracteres de controlo não escapados e escapes inválidos com backslash dentro de strings (causas típicas de `invalid_json`) e registar posição + escape sugerido no DEBUG (`\n`, `\r`, `\t`, `\u00XX`; e após `\`: `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uXXXX`).

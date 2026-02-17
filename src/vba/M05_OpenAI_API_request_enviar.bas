@@ -8,6 +8,15 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Validação preventiva para escape inválido com backslash no JSON
+'   - Adiciona deteção de sequências de escape inválidas (ex.: \x) em strings JSON no preflight.
+'   - Bloqueia envio com erro acionável no DEBUG e indica escapes válidos após \ (" \\ / b f n r t uXXXX).
+' - 2026-02-17 | Codex | Melhoria das sugestões de escaping no preflight de JSON
+'   - Detalha escape recomendado por carácter de controlo detectado (ex.: \n, \r, \t, \u00XX).
+'   - Expande mensagem de troubleshooting no DEBUG para reduzir tentativa/erro em invalid_json.
+' - 2026-02-17 | Codex | Preflight de JSON para diagnosticar invalid_json antes do HTTP
+'   - Adiciona validação leve de controlo bruto em strings JSON (CR/LF/TAB não escapados).
+'   - Em caso de falha, bloqueia envio e regista snippet/contexto no DEBUG para correção rápida.
 ' - 2026-02-16 | Codex | Dump opcional do payload final para troubleshooting local
 '   - Adiciona escrita do JSON final em C:\Temp\payload.json antes do envio HTTP.
 '   - Regista INFO/ALERTA no DEBUG sem expor segredos.
@@ -20,6 +29,53 @@ Option Explicit
 ' =============================================================================
 
 Private Const OPENAI_ENDPOINT As String = "https://api.openai.com/v1/responses"
+Private Const CFG_SHEET As String = "Config"
+
+Private Function M05_ConfigAllowWebSearchWithAttachments() As Boolean
+    ' Retrocompatibilidade: se a chave nao existir, manter comportamento atual (FALSE)
+    M05_ConfigAllowWebSearchWithAttachments = M05_ReadBoolConfigByLabel("TOOLS_WEB_SEARCH_WITH_ATTACHMENTS", False)
+End Function
+
+Private Function M05_ReadBoolConfigByLabel(ByVal labelName As String, ByVal defaultValue As Boolean) As Boolean
+    On Error GoTo FailSafe
+
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(CFG_SHEET)
+
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 1 Then GoTo FailSafe
+
+    Dim target As String
+    target = UCase$(Trim$(labelName))
+
+    Dim r As Long
+    For r = 1 To lastRow
+        Dim lbl As String
+        lbl = UCase$(Trim$(CStr(ws.Cells(r, 1).Value)))
+        If lbl = target Then
+            M05_ReadBoolConfigByLabel = M05_ToBool(CStr(ws.Cells(r, 2).Value), defaultValue)
+            Exit Function
+        End If
+    Next r
+
+FailSafe:
+    M05_ReadBoolConfigByLabel = defaultValue
+End Function
+
+Private Function M05_ToBool(ByVal raw As String, ByVal defaultValue As Boolean) As Boolean
+    Dim v As String
+    v = UCase$(Trim$(raw))
+
+    Select Case v
+        Case "TRUE", "VERDADEIRO", "SIM", "YES", "1", "ON"
+            M05_ToBool = True
+        Case "FALSE", "FALSO", "NAO", "NÃO", "NO", "0", "OFF"
+            M05_ToBool = False
+        Case Else
+            M05_ToBool = defaultValue
+    End Select
+End Function
 
 ' ============================================================
 ' JSON helpers (escape / unescape / parsing simples)
@@ -227,6 +283,110 @@ Private Function NormalizarInputJsonLiteral(ByVal s As String) As String
     NormalizarInputJsonLiteral = Trim$(t)
 End Function
 
+Private Function M05_EscapeHintForControlChar(ByVal charCode As Long) As String
+    Select Case charCode
+        Case 10: M05_EscapeHintForControlChar = "\n"
+        Case 13: M05_EscapeHintForControlChar = "\r"
+        Case 9: M05_EscapeHintForControlChar = "\t"
+        Case Else: M05_EscapeHintForControlChar = "\u" & Right$("000" & Hex$(charCode), 4)
+    End Select
+End Function
+
+Private Function M05_IsHexChar(ByVal ch As String) As Boolean
+    M05_IsHexChar = (InStr(1, "0123456789abcdefABCDEF", ch, vbBinaryCompare) > 0)
+End Function
+
+Private Function M05_JsonEscapeIsValid(ByVal jsonText As String, ByVal slashPos As Long, ByRef outDetail As String) As Boolean
+    Dim nxt As String
+    Dim j As Long
+
+    outDetail = ""
+
+    If slashPos >= Len(jsonText) Then
+        outDetail = "escape=barra_final @pos=" & CStr(slashPos)
+        M05_JsonEscapeIsValid = False
+        Exit Function
+    End If
+
+    nxt = Mid$(jsonText, slashPos + 1, 1)
+
+    Select Case nxt
+        Case """, "\", "/", "b", "f", "n", "r", "t"
+            M05_JsonEscapeIsValid = True
+            Exit Function
+        Case "u"
+            If slashPos + 5 > Len(jsonText) Then
+                outDetail = "escape=unicode_incompleto @pos=" & CStr(slashPos)
+                M05_JsonEscapeIsValid = False
+                Exit Function
+            End If
+
+            For j = slashPos + 2 To slashPos + 5
+                If Not M05_IsHexChar(Mid$(jsonText, j, 1)) Then
+                    outDetail = "escape=unicode_invalido @pos=" & CStr(slashPos)
+                    M05_JsonEscapeIsValid = False
+                    Exit Function
+                End If
+            Next j
+
+            M05_JsonEscapeIsValid = True
+            Exit Function
+        Case Else
+            outDetail = "escape_invalido=\" & nxt & " @pos=" & CStr(slashPos)
+            M05_JsonEscapeIsValid = False
+            Exit Function
+    End Select
+End Function
+
+Private Function M05_JsonHasRawControlInString(ByVal jsonText As String, ByRef outDetail As String) As Boolean
+    Dim i As Long
+    Dim ch As String
+    Dim code As Long
+    Dim inString As Boolean
+    Dim escaped As Boolean
+    Dim escapeHint As String
+
+    inString = False
+    escaped = False
+    outDetail = ""
+
+    For i = 1 To Len(jsonText)
+        ch = Mid$(jsonText, i, 1)
+        code = AscW(ch)
+
+        If inString Then
+            If escaped Then
+                Dim escapeDetail As String
+                If Not M05_JsonEscapeIsValid(jsonText, i - 1, escapeDetail) Then
+                    outDetail = escapeDetail & " | escapes_validos=" & Chr$(92) & Chr$(34) & " " & Chr$(92) & Chr$(92) & " / b f n r t uXXXX"
+                    M05_JsonHasRawControlInString = True
+                    Exit Function
+                End If
+                escaped = False
+            ElseIf ch = "\" Then
+                escaped = True
+            ElseIf ch = """ Then
+                inString = False
+            ElseIf code >= 0 And code <= 31 Then
+                escapeHint = M05_EscapeHintForControlChar(code)
+                outDetail = "char_code=" & CStr(code) & " @pos=" & CStr(i) & " | escape_sugerido=" & escapeHint
+                M05_JsonHasRawControlInString = True
+                Exit Function
+            End If
+        Else
+            If ch = """ Then inString = True
+        End If
+    Next i
+
+    If escaped Then
+        outDetail = "escape=barra_final @pos=" & CStr(Len(jsonText)) & " | escapes_validos=" & Chr$(92) & Chr$(34) & " " & Chr$(92) & Chr$(92) & " / b f n r t uXXXX"
+        M05_JsonHasRawControlInString = True
+        Exit Function
+    End If
+
+    M05_JsonHasRawControlInString = False
+End Function
+
 Private Function ExtraFragment_TemTools(ByVal extraFragmentSemInput As String) As Boolean
     Dim t As String
     t = Trim$(CStr(extraFragmentSemInput))
@@ -372,10 +532,13 @@ Public Function OpenAI_Executar( _
     Dim autoAddWebSearch As Boolean
     autoAddWebSearch = False
 
+    Dim allowWebSearchWithAttachments As Boolean
+    allowWebSearchWithAttachments = M05_ConfigAllowWebSearchWithAttachments()
+
     If modosWebSearch Then
         If extraTemTools Then
             autoAddWebSearch = False
-        ElseIf hasInputFile Or hasInputImage Then
+        ElseIf (hasInputFile Or hasInputImage) And (Not allowWebSearchWithAttachments) Then
             autoAddWebSearch = False
         Else
             autoAddWebSearch = True
@@ -420,6 +583,19 @@ Public Function OpenAI_Executar( _
 
     json = json & "}"
 
+    Dim preflightDetail As String
+    If M05_JsonHasRawControlInString(json, preflightDetail) Then
+        On Error Resume Next
+        Call Debug_Registar(0, dbgPromptId, "ERRO", "", "M05_JSON_PREFLIGHT", _
+            "Payload bloqueado antes do envio: possivel controlo nao escapado dentro de string JSON (" & preflightDetail & ")", _
+            "Revise input_json/extraFragment. Escapes validos em JSON incluem \n, \r, \t, \u00XX e, apos \\, apenas " & Chr$(92) & Chr$(34) & " " & Chr$(92) & Chr$(92) & " / b f n r t uXXXX.")
+        On Error GoTo TrataErro
+
+        resultado.Erro = "Payload invalido (preflight): controlo nao escapado em string JSON. " & preflightDetail
+        OpenAI_Executar = resultado
+        Exit Function
+    End If
+
     Call M05_DumpPayloadForDebug(json, dbgPromptId)
 
     ' -------------------------
@@ -428,11 +604,15 @@ Public Function OpenAI_Executar( _
     Dim toolMsg As String
     If modosWebSearch Then
         If autoAddWebSearch Then
-            toolMsg = "web_search=ADICIONADO_AUTO"
+            If hasInputFile Or hasInputImage Then
+                toolMsg = "web_search=ADICIONADO_AUTO (ha anexos + flag config=TRUE)"
+            Else
+                toolMsg = "web_search=ADICIONADO_AUTO"
+            End If
         ElseIf extraTemTools Then
             toolMsg = "web_search=NAO_AUTO (tools no extra)"
         ElseIf hasInputFile Or hasInputImage Then
-            toolMsg = "web_search=NAO_AUTO (ha anexos)"
+            toolMsg = "web_search=NAO_AUTO (ha anexos + flag config=FALSE)"
         Else
             toolMsg = "web_search=NAO_AUTO"
         End If

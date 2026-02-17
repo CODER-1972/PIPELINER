@@ -8,6 +8,12 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Ajuste do validador strict para schema aninhado de file_manifest
+'   - Corrige leitura de required[] para usar o bloco do item de ficheiro (evita falso erro com required do nível raiz).
+'   - Mantém o diagnóstico strict focado nas chaves file_name/file_type/subfolder/payload_kind/payload.
+' - 2026-02-17 | Codex | Correção de sintaxe no validador strict do manifest
+'   - Corrige escaping de aspas em regex (`"([^"]+)"`) para evitar erro de compilação em VBA.
+'   - Mantém parsing de `required[]` sem alterações adicionais de comportamento.
 ' - 2026-02-16 | Codex | Hardening de Structured Outputs (json_schema) para File Output
 '   - Corrige schema strict: inclui `subfolder` em `required` quando presente em `properties`.
 '   - Adiciona validação preventiva (properties vs required) e logs de diagnóstico no DEBUG.
@@ -729,18 +735,18 @@ Private Function FileOutput_ValidateManifestSchemaStrict( _
         props(LCase$(CStr(m.SubMatches(0)))) = True
     Next m
 
-    re.Pattern = """required""\s*:\s*\[(.*?)\]"
+    re.Pattern = """required""\s*:\s*\[(\s*""file_name"".*?""payload""\s*)\]"
     Set matches = re.Execute(schemaJson)
     If matches.Count = 0 Then
-        outMissingRequired = "required=(em falta)"
+        outMissingRequired = "required=(em falta: bloco files.items.required)"
         FileOutput_ValidateManifestSchemaStrict = False
         Exit Function
     End If
 
     Dim reqBlock As String
-    reqBlock = CStr(matches(matches.Count - 1).SubMatches(0))
+    reqBlock = CStr(matches(0).SubMatches(0))
 
-    re.Pattern = """([^"]+)"""
+    re.Pattern = """([^""]+)"""
     Set matches = re.Execute(reqBlock)
     For Each m In matches
         reqs(LCase$(CStr(m.SubMatches(0)))) = True
