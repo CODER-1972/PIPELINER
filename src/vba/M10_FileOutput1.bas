@@ -8,6 +8,9 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Correção de fecho extra no schema JSON de File Output
+'   - Remove um `}` excedente na montagem de `FileOutput_ManifestJsonSchema`.
+'   - Evita preflight estrutural `fecho_sem_abertura` ao combinar Config Extra + File Output.
 ' - 2026-02-17 | Codex | Ajuste do validador strict para schema aninhado de file_manifest
 '   - Corrige leitura de required[] para usar o bloco do item de ficheiro (evita falso erro com required do nível raiz).
 '   - Mantém o diagnóstico strict focado nas chaves file_name/file_type/subfolder/payload_kind/payload.
@@ -670,7 +673,7 @@ Private Function FileOutput_ManifestJsonSchema() As String
             """subfolder"":{""type"":""string""}," & _
             """payload_kind"":{""type"":""string"",""enum"":[""text"",""markdown"",""structure"",""base64""]}," & _
             """payload"":{""type"":""string""}" & _
-        "},""required"":[""file_name"",""file_type"",""subfolder"",""payload_kind"",""payload""]}}}" & _
+        "},""required"":[""file_name"",""file_type"",""subfolder"",""payload_kind"",""payload""]}}" & _
         "},""required"":[""output_kind"",""files""]}"
 End Function
 
