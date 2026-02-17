@@ -8,6 +8,9 @@ Option Explicit
 ' - Resolver placeholders/directivas de contexto com observabilidade e fallback seguro.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Correcao de escape/unescape JSON no ContextKV
+'   - Corrige Replace com padroes invertidos que removiam barras e neutralizavam aspas no modulo.
+'   - Alinha ContextKV_JsonEscape/ContextKV_JsonUnescape com convencao usada em outros modulos.
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
 '   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
 '   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
@@ -1531,8 +1534,8 @@ End Function
 Private Function ContextKV_JsonEscape(ByVal s As String) As String
 Dim t As String
 t = s
-t = Replace(t, "", "\")
-t = Replace(t, """", """")
+t = Replace(t, "\", "\\")
+t = Replace(t, """", "\""")
 t = Replace(t, vbCrLf, "\n")
 t = Replace(t, vbCr, "\n")
 t = Replace(t, vbLf, "\n")
@@ -1545,8 +1548,8 @@ Dim t As String
 t = s
 t = Replace(t, "\n", vbCrLf)
 t = Replace(t, "\t", vbTab)
-t = Replace(t, """", """")
-t = Replace(t, "\", "")
+t = Replace(t, "\""", """")
+t = Replace(t, "\\", "\")
 ContextKV_JsonUnescape = t
 End Function
 ' -----------------------------
