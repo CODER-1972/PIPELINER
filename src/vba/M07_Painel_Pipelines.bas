@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Corrige fonte do texto enviado ao M09
+'   - Passa promptTextFinal (com INPUTS_DECLARADOS_NO_CATALOGO) para Files_PrepararContextoDaPrompt.
+'   - Evita perda de URLS_ENTRADA/FILES no input_text quando há anexos.
 ' - 2026-02-17 | Codex | Injecao explicita de INPUTS (incluindo FILES/FICHEIROS) no texto enviado ao modelo
 '   - Anexa ao prompt final as linhas operacionais do INPUTS (URLS_ENTRADA, MODO_DE_VERIFICACAO e FILES/FICHEIROS).
 '   - Mantem o anexo tecnico dos ficheiros no fluxo M09; bloco textual passa a ser informativo para o modelo.
@@ -734,7 +737,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 pipelineNome, _
                 inputFolder, _
                 prompt.Id, _
-                prompt.textoPrompt, _
+                promptTextFinal, _
                 inputJsonLiteral, _
                 inputJsonFinal, _
                 filesUsed, _
