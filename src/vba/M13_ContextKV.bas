@@ -8,6 +8,9 @@ Option Explicit
 ' - Resolver placeholders/directivas de contexto com observabilidade e fallback seguro.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Alinhamento de colunas de DEBUG (PromptID/Pipeline)
+'   - Garante escrita de Prompt ID completo em "Prompt ID" e "PromptID".
+'   - Renomeia preferência da coluna de pipeline para "Pipeline" com fallback retrocompatível.
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
 '   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
 '   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
@@ -563,6 +566,7 @@ Private Sub ContextKV_EnsureDebugColumns()
 Dim ws As Worksheet
 Set ws = ContextKV_GetSheet("DEBUG")
 If ws Is Nothing Then Exit Sub
+ContextKV_EnsureHeader ws, "Pipeline"
 ContextKV_EnsureHeader ws, "pipeline_name"
 ContextKV_EnsureHeader ws, "action"
 ContextKV_EnsureHeader ws, "var"
@@ -2060,6 +2064,7 @@ If newRow < 2 Then newRow = 2
 If map.exists(ContextKV_NormalizeHeader("Timestamp")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("Timestamp"))).value = Now
 If map.exists(ContextKV_NormalizeHeader("Passo")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("Passo"))).value = stepN
 If map.exists(ContextKV_NormalizeHeader("Prompt ID")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("Prompt ID"))).value = promptId
+If map.exists(ContextKV_NormalizeHeader("PromptID")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("PromptID"))).value = promptId
 If map.exists(ContextKV_NormalizeHeader("Severidade")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("Severidade"))).value = result
 
 ' usar campos existentes para manter auditabilidade em templates antigos
@@ -2068,6 +2073,7 @@ If map.exists(ContextKV_NormalizeHeader("Problema")) Then ws.Cells(newRow, map(C
 If map.exists(ContextKV_NormalizeHeader("Sugestão")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("Sugestão"))).value = ""
 
 ' novas colunas estruturadas (se existirem)
+If map.exists(ContextKV_NormalizeHeader("Pipeline")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("Pipeline"))).value = pipelineName
 If map.exists(ContextKV_NormalizeHeader("pipeline_name")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("pipeline_name"))).value = pipelineName
 If map.exists(ContextKV_NormalizeHeader("action")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("action"))).value = action
 If map.exists(ContextKV_NormalizeHeader("var")) Then ws.Cells(newRow, map(ContextKV_NormalizeHeader("var"))).value = varName

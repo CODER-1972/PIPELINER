@@ -8,6 +8,8 @@ Option Explicit
 ' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Compatibilidade de cabeçalhos no DEBUG
+'   - Passa a escrever Prompt ID tanto em "Prompt ID" como em "PromptID".
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
 '   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
 '   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
@@ -50,6 +52,7 @@ Public Sub Debug_Registar( _
     Debug_SetValue ws, mapa, novaLinha, "Timestamp", Now
     Debug_SetValue ws, mapa, novaLinha, "Passo", passo
     Debug_SetValue ws, mapa, novaLinha, "Prompt ID", promptId
+    Debug_SetValue ws, mapa, novaLinha, "PromptID", promptId
     Debug_SetValue ws, mapa, novaLinha, "Severidade", severidade
     Debug_SetValue ws, mapa, novaLinha, "Linha (Config extra)", linhaConfigExtra
     Debug_SetValue ws, mapa, novaLinha, "Parametro", parametro          ' aceita "Parâmetro" no Excel

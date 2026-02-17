@@ -278,6 +278,8 @@ Usar para diagnosticar:
 
 Diagnóstico adicional para anexos (`FILES`):
 
+- na folha `DEBUG`, a coluna de identificação da prompt deve manter o ID completo (aceitando `Prompt ID` e `PromptID` para compatibilidade);
+- na folha `DEBUG`, usar `Pipeline` como nome preferencial da coluna de pipeline (com tolerância a `pipeline_name` em templates antigos).
 - em falhas de leitura local antes do upload, o erro passa a incluir `path_len`, `LONG_PATH_CANDIDATE` e `LOCKED_CANDIDATE` para acelerar a triagem de caminhos longos e ficheiros bloqueados;
 - o módulo disponibiliza a rotina manual `Files_Diag_CorridaCompleta(apiKey, fullPath)` para validar, em sequência, leitura local, conectividade API e upload `/v1/files`.
 
