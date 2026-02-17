@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Preflight estrutural de JSON para reduzir 400 invalid_json
+'   - Adiciona verificação de aspas/chaves/arrays e deteção de vírgula final inválida (`,}`/`,]`).
+'   - Regista diagnóstico acionável no DEBUG antes do HTTP quando o payload não fecha estruturalmente.
 ' - 2026-02-17 | Codex | Correção de sintaxe VBA em validação de JSON preflight
 '   - Corrige literais com aspas duplas em Select Case e comparações de string para evitar erro de compilação.
 '   - Mantém validação de escapes JSON com mensagem de diagnóstico preservada no DEBUG.
@@ -390,6 +393,94 @@ Private Function M05_JsonHasRawControlInString(ByVal jsonText As String, ByRef o
     M05_JsonHasRawControlInString = False
 End Function
 
+Private Function M05_JsonStructuralPreflight(ByVal jsonText As String, ByRef outDetail As String) As Boolean
+    Dim i As Long
+    Dim ch As String
+    Dim inString As Boolean
+    Dim escaped As Boolean
+    Dim token As String
+    Dim stack As String
+
+    inString = False
+    escaped = False
+    token = ""
+    stack = ""
+
+    For i = 1 To Len(jsonText)
+        ch = Mid$(jsonText, i, 1)
+
+        If inString Then
+            If escaped Then
+                escaped = False
+            ElseIf ch = "\" Then
+                escaped = True
+            ElseIf ch = """" Then
+                inString = False
+                token = "VALUE"
+            End If
+        Else
+            Select Case ch
+                Case """"
+                    inString = True
+                    token = "VALUE"
+
+                Case "{"
+                    stack = stack & "}"
+                    token = "OPEN"
+
+                Case "["
+                    stack = stack & "]"
+                    token = "OPEN"
+
+                Case "}", "]"
+                    If Len(stack) = 0 Then
+                        outDetail = "fecho_sem_abertura @pos=" & CStr(i) & " char=" & ch
+                        M05_JsonStructuralPreflight = False
+                        Exit Function
+                    End If
+
+                    If Right$(stack, 1) <> ch Then
+                        outDetail = "fecho_incompativel @pos=" & CStr(i) & " esperado=" & Right$(stack, 1) & " recebido=" & ch
+                        M05_JsonStructuralPreflight = False
+                        Exit Function
+                    End If
+
+                    If token = "COMMA" Then
+                        outDetail = "virgula_final_invalida @pos=" & CStr(i) & " sequencia=," & ch
+                        M05_JsonStructuralPreflight = False
+                        Exit Function
+                    End If
+
+                    stack = Left$(stack, Len(stack) - 1)
+                    token = "CLOSE"
+
+                Case ","
+                    token = "COMMA"
+
+                Case " ", vbTab, vbCr, vbLf, ":"
+                    ' Ignorar whitespace e separador de objeto.
+
+                Case Else
+                    token = "VALUE"
+            End Select
+        End If
+    Next i
+
+    If inString Then
+        outDetail = "string_nao_fechada"
+        M05_JsonStructuralPreflight = False
+        Exit Function
+    End If
+
+    If Len(stack) > 0 Then
+        outDetail = "estrutura_nao_fechada esperado=" & Right$(stack, 1)
+        M05_JsonStructuralPreflight = False
+        Exit Function
+    End If
+
+    M05_JsonStructuralPreflight = True
+End Function
+
 Private Function ExtraFragment_TemTools(ByVal extraFragmentSemInput As String) As Boolean
     Dim t As String
     t = Trim$(CStr(extraFragmentSemInput))
@@ -595,6 +686,18 @@ Public Function OpenAI_Executar( _
         On Error GoTo TrataErro
 
         resultado.Erro = "Payload invalido (preflight): controlo nao escapado em string JSON. " & preflightDetail
+        OpenAI_Executar = resultado
+        Exit Function
+    End If
+
+    If Not M05_JsonStructuralPreflight(json, preflightDetail) Then
+        On Error Resume Next
+        Call Debug_Registar(0, dbgPromptId, "ERRO", "", "M05_JSON_PREFLIGHT", _
+            "Payload bloqueado antes do envio: estrutura JSON invalida (" & preflightDetail & ")", _
+            "Revise fusao de fragments (Config extra/File Output) e valide C:\Temp\payload.json num validador JSON.")
+        On Error GoTo TrataErro
+
+        resultado.Erro = "Payload invalido (preflight): estrutura JSON invalida. " & preflightDetail
         OpenAI_Executar = resultado
         Exit Function
     End If
