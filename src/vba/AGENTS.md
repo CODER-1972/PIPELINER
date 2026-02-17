@@ -485,3 +485,5 @@ Se começar a ficar demasiado grande:
 - Em detecção de diretivas via `InStr`, normalize primeiro o texto (espaços/aspas) e compare também por igualdade canónica (`s = "environ(openai_api_key)"`) para evitar `Type mismatch` por string mal escapada.
 - Ao fazer parsing de `VARS:`, normalizar cada token (trim + remoção de `CR/LF/TAB` e espaços residuais) antes do lookup para evitar chaves duplicadas semânticas (`MEMORY_SHORT` vs `MEMORY_SHORT\n`) e falsos `INJECT_MISS`.
 - Em schemas de Structured Outputs com `strict=true`, qualquer chave adicionada em `properties` deve ser adicionada também a `required`; tratar este alinhamento como check obrigatório de revisão para evitar `invalid_json_schema`.
+- Em prompts com secção `INPUTS`, tratar explicitamente a política de anexação ao prompt final (`INPUTS_APPEND_MODE`) e extração de pares chave/valor (`AUTO_INJECT_INPUT_VARS`); sem isso, campos como `URLS_ENTRADA` ficam apenas documentais e não operacionais.
+

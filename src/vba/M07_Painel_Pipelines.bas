@@ -11,6 +11,10 @@ Option Explicit
 ' - 2026-02-17 | Codex | Encadeamento robusto de previous_response_id
 '   - Só encadeia previous_response_id quando a resposta anterior foi persistida (store=TRUE).
 '   - Evita erro HTTP 400 previous_response_not_found em pipelines com prompts store=FALSE.
+' - 2026-02-17 | Codex | INPUTS híbrido (append + extração de variáveis)
+'   - Adiciona INPUTS_APPEND_MODE (OFF|SAFE|RAW; default RAW) para anexar INPUTS ao prompt final.
+'   - Extrai pares chave/valor de INPUTS (":" e "=") para mapa normalizado com logging no DEBUG.
+'   - Grava variáveis extraídas no Seguimento (captured_vars) via ContextKV, sem substituição automática no prompt.
 ' - 2026-02-16 | Codex | Resolução de API key via ambiente com fallback compatível
 '   - Substitui leitura direta de Config!B1 por resolver central (M14_ConfigApiKey).
 '   - Regista ALERTA/ERRO no DEBUG para origem/falhas da credencial sem expor segredo.
@@ -67,6 +71,8 @@ Private Const BTN_INICIAR As String = "BTN_INICIAR_"
 Private Const BTN_REGISTAR As String = "BTN_REGISTAR_"
 Private Const BTN_SETDEFAULT As String = "BTN_SETDEFAULT_"
 Private Const BTN_MAPA As String = "BTN_MAPA_"
+
+Private Const INPUTS_APPEND_HEADER As String = "### INPUTS_RESOLVIDOS"
 
 ' ============================================================
 ' 1) Instalacao / UI
@@ -541,6 +547,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     Dim wsCfg As Worksheet
     Set wsCfg = ThisWorkbook.Worksheets(SHEET_CONFIG)
 
+    Call Painel_EnsureConfigInputsModes(wsCfg)
+
     Dim modeloDefault As String
     modeloDefault = Trim$(CStr(wsCfg.Range("B2").value))
     If modeloDefault = "" Then modeloDefault = "gpt-4.1"
@@ -658,12 +666,25 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         Dim promptTextFinal As String
         Dim injectedVarsJson As String
+        Dim extractedInputVarsJson As String
         Dim injectErro As String
         Dim injectOk As Boolean
         promptTextFinal = prompt.textoPrompt
         injectedVarsJson = ""
+        extractedInputVarsJson = ""
         injectErro = ""
         injectOk = True
+
+        Dim rawInputsText As String
+        rawInputsText = Painel_TryReadInputsTextByPromptId(prompt.Id)
+
+        Dim appendMode As String
+        appendMode = Painel_GetConfigByKey(wsCfg, "INPUTS_APPEND_MODE", "RAW")
+
+        Dim autoExtractInputVars As Boolean
+        autoExtractInputVars = Painel_ConfigBoolByKey(wsCfg, "AUTO_INJECT_INPUT_VARS", True)
+
+        Call Painel_ProcessInputsHybrid(pipelineNome, passo, prompt.Id, rawInputsText, appendMode, autoExtractInputVars, promptTextFinal, extractedInputVarsJson)
 
         ' ================================
         ' CONTEXTKV - INJECAO (ANTES DA API)
@@ -850,10 +871,11 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         ' ================================
         On Error Resume Next
         Call ContextKV_WriteInjectedVars(pipelineNome, passo, prompt.Id, injectedVarsJson, outputFolderBase, runToken)
+        Call Painel_WriteCapturedInputVars(pipelineNome, passo, prompt.Id, extractedInputVarsJson)
         Call ContextKV_CaptureRow(pipelineNome, passo, prompt.Id, outputFolderBase, runToken)
         If Err.Number <> 0 Then
             Call Debug_Registar(passo, prompt.Id, "ALERTA", "", "CONTEXT_KV", _
-                "Erro em WriteInjectedVars/CaptureRow: " & Err.Description, "")
+                "Erro em WriteInjectedVars/WriteCapturedInputVars/CaptureRow: " & Err.Description, "")
             Err.Clear
         End If
         On Error GoTo TrataErro
@@ -1044,6 +1066,421 @@ Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long
     Application.StatusBar = "(" & inicioHHMM & ") Step: " & passoTxt & " of " & CStr(total) & "  |  Retry: " & CStr(execCount)
     On Error GoTo 0
 End Sub
+
+Private Sub Painel_ProcessInputsHybrid( _
+    ByVal pipelineNome As String, _
+    ByVal passo As Long, _
+    ByVal promptId As String, _
+    ByVal rawInputs As String, _
+    ByVal appendModeRaw As String, _
+    ByVal autoExtractVars As Boolean, _
+    ByRef ioPromptText As String, _
+    ByRef outExtractedVarsJson As String _
+)
+    Dim modeNorm As String
+    modeNorm = UCase$(Trim$(appendModeRaw))
+    If modeNorm = "" Then modeNorm = "RAW"
+    If modeNorm <> "OFF" And modeNorm <> "SAFE" And modeNorm <> "RAW" Then
+        Call Debug_Registar(passo, promptId, "ALERTA", "", "INPUTS_APPEND_MODE", _
+            "Valor invalido para INPUTS_APPEND_MODE=['" & appendModeRaw & "']. A aplicar RAW.", _
+            "Use OFF | SAFE | RAW na folha Config (coluna A/B).")
+        modeNorm = "RAW"
+    End If
+
+    outExtractedVarsJson = ""
+    If Trim$(rawInputs) = "" Then Exit Sub
+
+    Dim lines() As String
+    lines = Split(Painel_NormalizarQuebras(rawInputs), vbLf)
+
+    Dim dictExtracted As Object
+    Set dictExtracted = CreateObject("Scripting.Dictionary")
+
+    Dim sbSafe As String
+    Dim sbRaw As String
+    sbSafe = ""
+    sbRaw = ""
+
+    Dim i As Long
+    For i = LBound(lines) To UBound(lines)
+        Dim lnRaw As String
+        lnRaw = CStr(lines(i))
+
+        Dim ln As String
+        ln = Trim$(lnRaw)
+
+        If ln <> "" Then
+            If sbRaw <> "" Then sbRaw = sbRaw & vbCrLf
+            sbRaw = sbRaw & ln
+        End If
+
+        If ln = "" Then GoTo NextLine
+
+        Dim isTechnical As Boolean
+        isTechnical = Painel_IsLinhaTecnicaInputs(ln)
+
+        If Not isTechnical Then
+            If sbSafe <> "" Then sbSafe = sbSafe & vbCrLf
+            sbSafe = sbSafe & ln
+        End If
+
+        If autoExtractVars Then
+            If Not isTechnical Then
+                Call Painel_TryExtractInputVarLine(dictExtracted, pipelineNome, passo, promptId, ln)
+            End If
+        End If
+
+NextLine:
+    Next i
+
+    If autoExtractVars Then
+        outExtractedVarsJson = Painel_DictToJsonString(dictExtracted)
+        If dictExtracted.Count > 0 Then
+            Call Debug_Registar(passo, promptId, "INFO", "", "INPUTS_VARS", _
+                "Variaveis extraidas de INPUTS: " & CStr(dictExtracted.Count) & ".", _
+                "As keys foram normalizadas e guardadas em captured_vars no Seguimento.")
+        Else
+            Call Debug_Registar(passo, promptId, "ALERTA", "", "INPUTS_VARS", _
+                "AUTO_INJECT_INPUT_VARS=TRUE mas nao foram extraidas variaveis de INPUTS.", _
+                "Use linhas no formato CHAVE: valor ou CHAVE=valor.")
+        End If
+    End If
+
+    Dim toAppend As String
+    toAppend = ""
+    If modeNorm = "RAW" Then toAppend = sbRaw
+    If modeNorm = "SAFE" Then toAppend = sbSafe
+
+    If modeNorm <> "OFF" And Trim$(toAppend) <> "" Then
+        ioPromptText = ioPromptText & vbCrLf & vbCrLf & INPUTS_APPEND_HEADER & vbCrLf & toAppend
+        Call Debug_Registar(passo, promptId, "INFO", "", "INPUTS_APPEND", _
+            "INPUTS anexado ao prompt final (modo=" & modeNorm & "; chars=" & CStr(Len(toAppend)) & ").", _
+            "Use INPUTS_APPEND_MODE=OFF para desativar, SAFE para remover linhas tecnicas.")
+    End If
+End Sub
+
+Private Function Painel_TryReadInputsTextByPromptId(ByVal promptId As String) As String
+    On Error GoTo EH
+
+    Dim celId As Range
+    Set celId = Catalogo_EncontrarCelulaID(promptId)
+    If celId Is Nothing Then Exit Function
+
+    Painel_TryReadInputsTextByPromptId = CStr(celId.Offset(2, 3).value)
+    Exit Function
+EH:
+    Painel_TryReadInputsTextByPromptId = ""
+End Function
+
+Private Function Painel_NormalizarQuebras(ByVal s As String) As String
+    Dim t As String
+    t = Replace$(CStr(s), vbCrLf, vbLf)
+    t = Replace$(t, vbCr, vbLf)
+    Painel_NormalizarQuebras = t
+End Function
+
+Private Function Painel_IsLinhaTecnicaInputs(ByVal ln As String) As Boolean
+    Dim u As String
+    u = UCase$(Painel_RemoverAcentos(Trim$(ln)))
+
+    If Left$(u, 6) = "FILES:" Or Left$(u, 7) = "FILES :" Then
+        Painel_IsLinhaTecnicaInputs = True
+        Exit Function
+    End If
+    If Left$(u, 10) = "FICHEIROS:" Or Left$(u, 11) = "FICHEIROS :" Then
+        Painel_IsLinhaTecnicaInputs = True
+        Exit Function
+    End If
+    If Left$(u, 22) = "OPERACOES COM FICHEIROS" Then
+        Painel_IsLinhaTecnicaInputs = True
+        Exit Function
+    End If
+
+    If InStr(1, u, "[PDF_UPLOAD]", vbTextCompare) > 0 Or _
+       InStr(1, u, "[IMAGE_UPLOAD]", vbTextCompare) > 0 Or _
+       InStr(1, u, "[TEXT_EMBED]", vbTextCompare) > 0 Or _
+       InStr(1, u, "[INPUT_FILE]", vbTextCompare) > 0 Then
+        Painel_IsLinhaTecnicaInputs = True
+    End If
+End Function
+
+Private Sub Painel_TryExtractInputVarLine( _
+    ByRef dictExtracted As Object, _
+    ByVal pipelineNome As String, _
+    ByVal passo As Long, _
+    ByVal promptId As String, _
+    ByVal ln As String _
+)
+    Dim pColon As Long, pEq As Long, pSep As Long
+    pColon = InStr(1, ln, ":", vbTextCompare)
+    pEq = InStr(1, ln, "=", vbTextCompare)
+
+    If pColon > 0 And pEq > 0 Then
+        pSep = IIf(pColon < pEq, pColon, pEq)
+    ElseIf pColon > 0 Then
+        pSep = pColon
+    ElseIf pEq > 0 Then
+        pSep = pEq
+    Else
+        Call Debug_Registar(passo, promptId, "ALERTA", "", "INPUTS_VARS", _
+            "Linha de INPUTS ignorada (sem ':' ou '='): " & Left$(ln, 180), _
+            "Use CHAVE: valor ou CHAVE=valor para extracao automatica.")
+        Exit Sub
+    End If
+
+    Dim kRaw As String, vRaw As String
+    kRaw = Trim$(Left$(ln, pSep - 1))
+    vRaw = Trim$(Mid$(ln, pSep + 1))
+
+    If kRaw = "" Then
+        Call Debug_Registar(passo, promptId, "ALERTA", "", "INPUTS_VARS", _
+            "Linha de INPUTS ignorada (chave vazia): " & Left$(ln, 180), _
+            "Defina a chave antes de ':' ou '='.")
+        Exit Sub
+    End If
+
+    Dim keyNorm As String
+    keyNorm = Painel_NormalizarInputKey(kRaw)
+    If keyNorm = "" Then
+        Call Debug_Registar(passo, promptId, "ALERTA", "", "INPUTS_VARS", _
+            "Linha de INPUTS ignorada (chave invalida): " & Left$(ln, 180), _
+            "Use caracteres alfanumericos/underscore na chave.")
+        Exit Sub
+    End If
+
+    If dictExtracted.exists(keyNorm) Then
+        If CStr(dictExtracted(keyNorm)) <> vRaw Then
+            Call Debug_Registar(passo, promptId, "ALERTA", "", "INPUTS_VARS", _
+                "Conflito para chave '" & keyNorm & "' em INPUTS. Mantido primeiro valor.", _
+                "Valor antigo=['" & Left$(CStr(dictExtracted(keyNorm)), 100) & "']; novo=['" & Left$(vRaw, 100) & "']")
+        End If
+        Exit Sub
+    End If
+
+    dictExtracted.Add keyNorm, vRaw
+    Call Debug_Registar(passo, promptId, "INFO", "", "INPUTS_VARS", _
+        "INPUTS extraido: " & keyNorm & "=['" & Left$(vRaw, 120) & "']", _
+        "Disponivel em captured_vars deste passo.")
+End Sub
+
+Private Function Painel_NormalizarInputKey(ByVal k As String) As String
+    Dim t As String
+    t = UCase$(Trim$(Painel_RemoverAcentos(k)))
+    t = Replace$(t, " ", "_")
+    t = Replace$(t, "-", "_")
+    t = Replace$(t, "/", "_")
+
+    Dim i As Long, ch As String, sb As String
+    sb = ""
+    For i = 1 To Len(t)
+        ch = Mid$(t, i, 1)
+        If (ch >= "A" And ch <= "Z") Or (ch >= "0" And ch <= "9") Or ch = "_" Then
+            sb = sb & ch
+        End If
+    Next i
+
+    Do While InStr(1, sb, "__", vbTextCompare) > 0
+        sb = Replace$(sb, "__", "_")
+    Loop
+
+    sb = Trim$(sb)
+    If Len(sb) > 0 Then
+        If Left$(sb, 1) = "_" Then sb = Mid$(sb, 2)
+        If Len(sb) > 0 And Right$(sb, 1) = "_" Then sb = Left$(sb, Len(sb) - 1)
+    End If
+
+    Painel_NormalizarInputKey = sb
+End Function
+
+Private Function Painel_DictToJsonString(ByVal d As Object) As String
+    On Error GoTo EH
+
+    If d Is Nothing Then
+        Painel_DictToJsonString = "{}"
+        Exit Function
+    End If
+
+    Dim k As Variant
+    Dim sb As String
+    sb = "{"
+
+    For Each k In d.keys
+        If Len(sb) > 1 Then sb = sb & ","
+        sb = sb & """" & JsonEscapar(CStr(k)) & """:""" & JsonEscapar(CStr(d(k))) & """"
+    Next k
+
+    sb = sb & "}"
+    Painel_DictToJsonString = sb
+    Exit Function
+EH:
+    Painel_DictToJsonString = "{}"
+End Function
+
+Private Function Painel_RemoverAcentos(ByVal s As String) As String
+    Dim t As String
+    t = s
+
+    t = Replace$(t, ChrW(225), "a"): t = Replace$(t, ChrW(224), "a"): t = Replace$(t, ChrW(226), "a")
+    t = Replace$(t, ChrW(227), "a"): t = Replace$(t, ChrW(228), "a")
+    t = Replace$(t, ChrW(193), "A"): t = Replace$(t, ChrW(192), "A"): t = Replace$(t, ChrW(194), "A")
+    t = Replace$(t, ChrW(195), "A"): t = Replace$(t, ChrW(196), "A")
+
+    t = Replace$(t, ChrW(233), "e"): t = Replace$(t, ChrW(232), "e"): t = Replace$(t, ChrW(234), "e")
+    t = Replace$(t, ChrW(235), "e"): t = Replace$(t, ChrW(201), "E"): t = Replace$(t, ChrW(200), "E")
+    t = Replace$(t, ChrW(202), "E"): t = Replace$(t, ChrW(203), "E")
+
+    t = Replace$(t, ChrW(237), "i"): t = Replace$(t, ChrW(236), "i"): t = Replace$(t, ChrW(238), "i")
+    t = Replace$(t, ChrW(239), "i"): t = Replace$(t, ChrW(205), "I"): t = Replace$(t, ChrW(204), "I")
+    t = Replace$(t, ChrW(206), "I"): t = Replace$(t, ChrW(207), "I")
+
+    t = Replace$(t, ChrW(243), "o"): t = Replace$(t, ChrW(242), "o"): t = Replace$(t, ChrW(244), "o")
+    t = Replace$(t, ChrW(245), "o"): t = Replace$(t, ChrW(246), "o")
+    t = Replace$(t, ChrW(211), "O"): t = Replace$(t, ChrW(210), "O"): t = Replace$(t, ChrW(212), "O")
+    t = Replace$(t, ChrW(213), "O"): t = Replace$(t, ChrW(214), "O")
+
+    t = Replace$(t, ChrW(250), "u"): t = Replace$(t, ChrW(249), "u"): t = Replace$(t, ChrW(251), "u")
+    t = Replace$(t, ChrW(252), "u"): t = Replace$(t, ChrW(218), "U"): t = Replace$(t, ChrW(217), "U")
+    t = Replace$(t, ChrW(219), "U"): t = Replace$(t, ChrW(220), "U")
+
+    t = Replace$(t, ChrW(231), "c"): t = Replace$(t, ChrW(199), "C")
+
+    Painel_RemoverAcentos = t
+End Function
+
+Private Function Painel_GetConfigByKey(ByVal ws As Worksheet, ByVal keyName As String, ByVal defaultValue As String) As String
+    On Error GoTo EH
+    Dim lastR As Long
+    lastR = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+
+    Dim i As Long
+    For i = 1 To lastR
+        If StrComp(Trim$(CStr(ws.Cells(i, 1).value)), keyName, vbTextCompare) = 0 Then
+            Dim v As String
+            v = Trim$(CStr(ws.Cells(i, 2).value))
+            If v = "" Then v = defaultValue
+            Painel_GetConfigByKey = v
+            Exit Function
+        End If
+    Next i
+
+    Painel_GetConfigByKey = defaultValue
+    Exit Function
+EH:
+    Painel_GetConfigByKey = defaultValue
+End Function
+
+Private Function Painel_ConfigBoolByKey(ByVal ws As Worksheet, ByVal keyName As String, ByVal defaultValue As Boolean) As Boolean
+    Dim t As String
+    t = UCase$(Painel_GetConfigByKey(ws, keyName, IIf(defaultValue, "TRUE", "FALSE")))
+    If t = "TRUE" Or t = "VERDADEIRO" Or t = "SIM" Or t = "1" Then
+        Painel_ConfigBoolByKey = True
+    ElseIf t = "FALSE" Or t = "FALSO" Or t = "NAO" Or t = "NÃO" Or t = "0" Then
+        Painel_ConfigBoolByKey = False
+    Else
+        Painel_ConfigBoolByKey = defaultValue
+    End If
+End Function
+
+Private Sub Painel_EnsureConfigInputsModes(ByVal ws As Worksheet)
+    On Error Resume Next
+    Call Painel_EnsureConfigKey(ws, "INPUTS_APPEND_MODE", "RAW", "Controla como o texto de INPUTS e anexado ao prompt final: OFF=nao anexa; SAFE=remove linhas tecnicas (FILES/FICHEIROS/metadados internos); RAW=anexa integralmente. Default: RAW.")
+    Call Painel_EnsureConfigKey(ws, "AUTO_INJECT_INPUT_VARS", "TRUE", "Quando TRUE, extrai pares CHAVE:valor ou CHAVE=valor da secao INPUTS para captured_vars (Seguimento) e logs no DEBUG. Nao substitui placeholders automaticamente no prompt.")
+    On Error GoTo 0
+End Sub
+
+Private Sub Painel_EnsureConfigKey(ByVal ws As Worksheet, ByVal keyName As String, ByVal defaultValue As String, ByVal descriptionText As String)
+    Dim lastR As Long, i As Long, r As Long
+    lastR = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    If lastR < 8 Then lastR = 8
+    r = 0
+
+    For i = 1 To lastR
+        If StrComp(Trim$(CStr(ws.Cells(i, 1).value)), keyName, vbTextCompare) = 0 Then
+            r = i
+            Exit For
+        End If
+    Next i
+
+    If r = 0 Then r = lastR + 1
+
+    ws.Cells(r, 1).value = keyName
+    If Trim$(CStr(ws.Cells(r, 2).value)) = "" Then ws.Cells(r, 2).value = defaultValue
+    If Trim$(CStr(ws.Cells(r, 3).value)) = "" Then ws.Cells(r, 3).value = descriptionText
+End Sub
+
+Private Sub Painel_WriteCapturedInputVars(ByVal pipelineNome As String, ByVal passo As Long, ByVal promptId As String, ByVal capturedVarsJson As String)
+    On Error GoTo EH
+
+    If Trim$(capturedVarsJson) = "" Then Exit Sub
+
+    Dim wsS As Worksheet
+    Set wsS = ThisWorkbook.Worksheets(SHEET_SEGUIMENTO)
+    If wsS Is Nothing Then Exit Sub
+
+    Dim rowS As Long
+    rowS = Painel_FindSeguimentoRow(wsS, pipelineNome, passo, promptId)
+    If rowS = 0 Then Exit Sub
+
+    Dim colCap As Long, colMeta As Long
+    colCap = Painel_FindColumnByHeader(wsS, "captured_vars")
+    colMeta = Painel_FindColumnByHeader(wsS, "captured_vars_meta")
+    If colCap = 0 Then Exit Sub
+
+    wsS.Cells(rowS, colCap).value = capturedVarsJson
+    If colMeta > 0 Then wsS.Cells(rowS, colMeta).value = "{""source"":""inputs_extract"",""mode"":""normalized_kv""}"
+
+    Exit Sub
+EH:
+    Call Debug_Registar(passo, promptId, "ALERTA", "", "INPUTS_VARS", "Falha a gravar captured_vars no Seguimento: " & Err.Description, "")
+End Sub
+
+Private Function Painel_FindSeguimentoRow(ByVal wsS As Worksheet, ByVal pipelineNome As String, ByVal passo As Long, ByVal promptId As String) As Long
+    On Error GoTo EH
+
+    Dim colPasso As Long, colPrompt As Long, colPipe As Long
+    colPasso = Painel_FindColumnByHeader(wsS, "Passo")
+    colPrompt = Painel_FindColumnByHeader(wsS, "Prompt ID")
+    colPipe = Painel_FindColumnByHeader(wsS, "Pipeline")
+
+    If colPasso = 0 Or colPrompt = 0 Then Exit Function
+
+    Dim lastR As Long, r As Long
+    lastR = wsS.Cells(wsS.Rows.Count, 1).End(xlUp).Row
+    For r = 2 To lastR
+        If CLng(Val(CStr(wsS.Cells(r, colPasso).value))) = passo Then
+            If StrComp(Trim$(CStr(wsS.Cells(r, colPrompt).value)), Trim$(promptId), vbTextCompare) = 0 Then
+                If colPipe > 0 Then
+                    If StrComp(Trim$(CStr(wsS.Cells(r, colPipe).value)), Trim$(pipelineNome), vbTextCompare) <> 0 Then GoTo NextR
+                End If
+                Painel_FindSeguimentoRow = r
+                Exit Function
+            End If
+        End If
+NextR:
+    Next r
+    Exit Function
+EH:
+    Painel_FindSeguimentoRow = 0
+End Function
+
+Private Function Painel_FindColumnByHeader(ByVal ws As Worksheet, ByVal headerName As String) As Long
+    On Error GoTo EH
+
+    Dim lastCol As Long, c As Long
+    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+
+    For c = 1 To lastCol
+        If StrComp(Trim$(CStr(ws.Cells(1, c).value)), headerName, vbTextCompare) = 0 Then
+            Painel_FindColumnByHeader = c
+            Exit Function
+        End If
+    Next c
+
+    Painel_FindColumnByHeader = 0
+    Exit Function
+EH:
+    Painel_FindColumnByHeader = 0
+End Function
 
 Private Sub Painel_DeterminarFlagsFiles(ByVal promptId As String, ByRef outTemFiles As Boolean, ByRef outTemRequired As Boolean, ByRef outListaFiles As String)
     outTemFiles = False
