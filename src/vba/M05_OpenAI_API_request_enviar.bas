@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Remove gating de web_search por anexos
+'   - Garante que `Modos=Web search` injeta sempre `tools:[{"type":"web_search"}]` quando não existem tools explícitas no extra.
+'   - Elimina a dependência de configuração por anexos para evitar execuções sem acesso web neste cenário.
 ' - 2026-02-17 | Codex | Corrige literal de troubleshooting do preflight para compilar em VBA
 '   - Substitui montagem ambígua de escapes na mensagem do DEBUG por literal seguro com aspas duplicadas.
 '   - Mantém orientações de escapes JSON sem depender de barras invertidas como pseudo-escape de aspas no VBA.
@@ -38,54 +41,6 @@ Option Explicit
 ' =============================================================================
 
 Private Const OPENAI_ENDPOINT As String = "https://api.openai.com/v1/responses"
-Private Const CFG_SHEET As String = "Config"
-
-Private Function M05_ConfigAllowWebSearchWithAttachments() As Boolean
-    ' Retrocompatibilidade: se a chave nao existir, manter comportamento atual (FALSE)
-    M05_ConfigAllowWebSearchWithAttachments = M05_ReadBoolConfigByLabel("TOOLS_WEB_SEARCH_WITH_ATTACHMENTS", False)
-End Function
-
-Private Function M05_ReadBoolConfigByLabel(ByVal labelName As String, ByVal defaultValue As Boolean) As Boolean
-    On Error GoTo FailSafe
-
-    Dim ws As Worksheet
-    Set ws = ThisWorkbook.Worksheets(CFG_SHEET)
-
-    Dim lastRow As Long
-    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    If lastRow < 1 Then GoTo FailSafe
-
-    Dim target As String
-    target = UCase$(Trim$(labelName))
-
-    Dim r As Long
-    For r = 1 To lastRow
-        Dim lbl As String
-        lbl = UCase$(Trim$(CStr(ws.Cells(r, 1).Value)))
-        If lbl = target Then
-            M05_ReadBoolConfigByLabel = M05_ToBool(CStr(ws.Cells(r, 2).Value), defaultValue)
-            Exit Function
-        End If
-    Next r
-
-FailSafe:
-    M05_ReadBoolConfigByLabel = defaultValue
-End Function
-
-Private Function M05_ToBool(ByVal raw As String, ByVal defaultValue As Boolean) As Boolean
-    Dim v As String
-    v = UCase$(Trim$(raw))
-
-    Select Case v
-        Case "TRUE", "VERDADEIRO", "SIM", "YES", "1", "ON"
-            M05_ToBool = True
-        Case "FALSE", "FALSO", "NAO", "NÃO", "NO", "0", "OFF"
-            M05_ToBool = False
-        Case Else
-            M05_ToBool = defaultValue
-    End Select
-End Function
-
 ' ============================================================
 ' JSON helpers (escape / unescape / parsing simples)
 ' ============================================================
@@ -614,8 +569,8 @@ Public Function OpenAI_Executar( _
 
     ' -------------------------
     ' Tools: web_search
-    '  - Regra: nao auto-adicionar web_search quando ha ficheiro/imagem
-    '  - Se quiseres web_search com ficheiros, define tools explicitamente em extraFragmentSemInput
+    '  - Regra: se Modos incluir Web search, auto-adicionar sempre (inclusive com anexos).
+    '  - Excecao: quando o extra ja traz "tools", evita duplicar chave no JSON final.
     ' -------------------------
     Dim modosWebSearch As Boolean
     modosWebSearch = Modos_Contem(modos, "Web search")
@@ -629,13 +584,8 @@ Public Function OpenAI_Executar( _
     Dim autoAddWebSearch As Boolean
     autoAddWebSearch = False
 
-    Dim allowWebSearchWithAttachments As Boolean
-    allowWebSearchWithAttachments = M05_ConfigAllowWebSearchWithAttachments()
-
     If modosWebSearch Then
         If extraTemTools Then
-            autoAddWebSearch = False
-        ElseIf (hasInputFile Or hasInputImage) And (Not allowWebSearchWithAttachments) Then
             autoAddWebSearch = False
         Else
             autoAddWebSearch = True
@@ -713,15 +663,9 @@ Public Function OpenAI_Executar( _
     Dim toolMsg As String
     If modosWebSearch Then
         If autoAddWebSearch Then
-            If hasInputFile Or hasInputImage Then
-                toolMsg = "web_search=ADICIONADO_AUTO (ha anexos + flag config=TRUE)"
-            Else
-                toolMsg = "web_search=ADICIONADO_AUTO"
-            End If
+            toolMsg = "web_search=ADICIONADO_AUTO"
         ElseIf extraTemTools Then
             toolMsg = "web_search=NAO_AUTO (tools no extra)"
-        ElseIf hasInputFile Or hasInputImage Then
-            toolMsg = "web_search=NAO_AUTO (ha anexos + flag config=FALSE)"
         Else
             toolMsg = "web_search=NAO_AUTO"
         End If
