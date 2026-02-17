@@ -383,6 +383,7 @@ Invariantes:
 - NUNCA commitar API keys reais (Config!B1 deve ser placeholder).
 - NUNCA escrever segredos em DEBUG/Seguimento.
 - Minimizar exposição de dados sensíveis nos logs (mascarar quando necessário).
+- Qualquer dump de payload/request para disco deve ser estritamente **opt-in** por configuração explícita (default seguro = desativado).
 - Quando falhar, preferir logs “curtos e acionáveis” a dumps extensos.
 
 ---

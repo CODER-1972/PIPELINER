@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Proteção de privacidade no dump de payload
+'   - Passa a gravar payload em disco apenas com opt-in explícito (Config: PAYLOAD_DEBUG_DUMP_ENABLED=TRUE).
+'   - Mantém comportamento retrocompatível com default seguro (FALSE) sem exigir mudanças estruturais.
 ' - 2026-02-16 | Codex | Dump opcional do payload final para troubleshooting local
 '   - Adiciona escrita do JSON final em C:\Temp\payload.json antes do envio HTTP.
 '   - Regista INFO/ALERTA no DEBUG sem expor segredos.
@@ -20,6 +23,9 @@ Option Explicit
 ' =============================================================================
 
 Private Const OPENAI_ENDPOINT As String = "https://api.openai.com/v1/responses"
+Private Const M05_CFG_KEY_PAYLOAD_DUMP_ENABLED As String = "PAYLOAD_DEBUG_DUMP_ENABLED"
+Private Const M05_CFG_SHEET As String = "Config"
+Private Const M05_PAYLOAD_DUMP_PATH As String = "C:\\Temp\\payload.json"
 
 ' ============================================================
 ' JSON helpers (escape / unescape / parsing simples)
@@ -420,7 +426,9 @@ Public Function OpenAI_Executar( _
 
     json = json & "}"
 
-    Call M05_DumpPayloadForDebug(json, dbgPromptId)
+    If M05_IsPayloadDumpEnabled() Then
+        Call M05_DumpPayloadForDebug(json, dbgPromptId)
+    End If
 
     ' -------------------------
     ' Log diagnostico (sem despejar base64)
@@ -605,11 +613,54 @@ End Function
 
 
 
+Private Function M05_IsPayloadDumpEnabled() As Boolean
+    Dim rawValue As String
+    rawValue = M05_ConfigGetByKey(M05_CFG_KEY_PAYLOAD_DUMP_ENABLED, "FALSE")
+    M05_IsPayloadDumpEnabled = M05_ValueToBool(rawValue, False)
+End Function
+
+Private Function M05_ConfigGetByKey(ByVal keyName As String, ByVal defaultValue As String) As String
+    On Error GoTo EH
+
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(M05_CFG_SHEET)
+
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+
+    Dim i As Long
+    Dim keyValue As String
+    For i = 1 To lastRow
+        keyValue = Trim$(CStr(ws.Cells(i, 1).Value))
+        If keyValue <> "" Then
+            If StrComp(keyValue, keyName, vbTextCompare) = 0 Then
+                M05_ConfigGetByKey = Trim$(CStr(ws.Cells(i, 2).Value))
+                Exit Function
+            End If
+        End If
+    Next i
+
+EH:
+    If M05_ConfigGetByKey = "" Then M05_ConfigGetByKey = defaultValue
+End Function
+
+Private Function M05_ValueToBool(ByVal rawValue As String, ByVal defaultValue As Boolean) As Boolean
+    Select Case UCase$(Trim$(CStr(rawValue)))
+        Case "TRUE", "VERDADEIRO", "1", "SIM", "YES", "Y", "ON"
+            M05_ValueToBool = True
+        Case "FALSE", "FALSO", "0", "NAO", "N", "NO", "OFF", ""
+            M05_ValueToBool = False
+        Case Else
+            M05_ValueToBool = defaultValue
+    End Select
+End Function
+
+
 Private Sub M05_DumpPayloadForDebug(ByVal payloadJson As String, ByVal dbgPromptId As String)
     On Error GoTo Falha
 
     Dim targetPath As String
-    targetPath = "C:\Temp\payload.json"
+    targetPath = M05_PAYLOAD_DUMP_PATH
 
     Dim folderPath As String
     folderPath = Left$(targetPath, InStrRev(targetPath, "\") - 1)
@@ -631,6 +682,6 @@ Falha:
     On Error Resume Next
     If ff > 0 Then Close #ff
     Call Debug_Registar(0, dbgPromptId, "ALERTA", "", "M05_PAYLOAD_DUMP_FAIL", _
-        "Não foi possível gravar payload em C:\Temp\payload.json: " & Err.Description, _
-        "Verifique permissões locais e existência da pasta C:\Temp.")
+        "Não foi possível gravar payload em " & M05_PAYLOAD_DUMP_PATH & ": " & Err.Description, _
+        "Verifique permissões locais e existência da pasta de destino.")
 End Sub
