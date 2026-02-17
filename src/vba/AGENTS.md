@@ -483,6 +483,7 @@ Se começar a ficar demasiado grande:
 
 ## Checklist anti-erros de sintaxe em strings VBA
 - Ao remover aspas duplas em `Replace`, usar literal válido de VBA (`""""`) ou `Chr$(34)`; nunca usar `"""` porque gera erro de compilação.
+- Em comparações/`Select Case` para o carácter `"`, usar sempre literal completo `""""` (ou `Chr$(34)`), incluindo em listas `Case`, para evitar linhas sintaticamente inválidas.
 - Em regexs com classe de caracteres que contenha aspas (ex.: `[^\"]`), duplicar as aspas dentro do literal VBA (ex.: `"""([^""]+)"""`) para evitar `Syntax error` em compilação.
 - Sempre que editar strings com escape (JSON, regex-like, Replace), executar verificação rápida no VBE (Debug > Compile VBAProject) antes de fechar a alteração.
 - Em detecção de diretivas via `InStr`, normalize primeiro o texto (espaços/aspas) e compare também por igualdade canónica (`s = "environ(openai_api_key)"`) para evitar `Type mismatch` por string mal escapada.
