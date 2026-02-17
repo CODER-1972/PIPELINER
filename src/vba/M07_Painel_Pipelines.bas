@@ -780,6 +780,16 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             " | preview=" & Left$(inputJsonFinal, 350), _
             "Se has_input_file=NAO, o modelo nao pode receber PDF.")
 
+        If promptTemFiles And Len(Trim$(inputJsonFinal)) = 0 Then
+            Call Debug_Registar(passo, prompt.Id, "ERRO", "", "REQ_INPUT_JSON_EMPTY", _
+                "Prompt com FILES mas inputJsonFinal ficou vazio (len=0).", _
+                "Validar parser de Config extra/input e BuildInputWithFiles (M09).")
+            Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, 0, "", _
+                "[ERRO INPUT] Prompt com FILES sem input JSON válido.")
+            wsPainel.Cells(cursorRow + 1, colIniciar).Value = "STOP"
+            GoTo SaidaLimpa
+        End If
+
         ' -------------------------------
         ' Chamada a API (1 chamada / passo)
         ' -------------------------------
