@@ -253,6 +253,7 @@ Boas práticas de manutenção VBA (preventivas):
 
 - em literais de string com aspas duplas, usar escaping válido do VBA (ex.: `""""`) ou `Chr$(34)`;
 - após alterações em módulos `.bas`, correr compilação do projeto (`Debug > Compile VBAProject`) para apanhar erros de sintaxe antes de execução.
+- ao introduzir novos helpers, confirmar que chamadas e declaração usam o mesmo nome exato (evita erro de compilação `Sub or Function not defined`).
 
 ### Seguimento
 
