@@ -1,22 +1,22 @@
-ï»¿Attribute VB_Name = "M15_Catalog_ConfigExtraTools"
+Attribute VB_Name = "M15_Catalog_ConfigExtraTools"
 Option Explicit
 
 ' =============================================================================
-' MÃ³dulo: M15_Catalog_ConfigExtraTools
-' PropÃ³sito:
-' - Criar folha de catÃ¡logo compatÃ­vel com o layout do PIPELINER (blocos de 5 linhas).
-' - Executar diagnÃ³stico sequencial de Config Extra para troubleshooting de payload JSON.
-' - Gerar evidÃªncia auditÃ¡vel numa folha dedicada sem alterar layout estrutural de folhas core.
+' Módulo: M15_Catalog_ConfigExtraTools
+' Propósito:
+' - Criar folha de catálogo compatível com o layout do PIPELINER (blocos de 5 linhas).
+' - Executar diagnóstico sequencial de Config Extra para troubleshooting de payload JSON.
+' - Gerar evidência auditável numa folha dedicada sem alterar layout estrutural de folhas core.
 '
-' AtualizaÃ§Ãµes:
-' - 2026-02-17 | Codex | CriaÃ§Ã£o de toolkit de catÃ¡logo + diagnÃ³stico de Config Extra
-'   - Adiciona macro para criar folha catÃ¡logo modelo (headers + bloco base + instruÃ§Ãµes Next PROMPT).
-'   - Adiciona macro de testes sequenciais de Config Extra com relatÃ³rio em CONFIG_EXTRA_TESTS.
-'   - Inclui prÃ©-validaÃ§Ã£o estrutural de JSON para detetar fecho sem abertura e outras quebras.
+' Atualizações:
+' - 2026-02-17 | Codex | Criação de toolkit de catálogo + diagnóstico de Config Extra
+'   - Adiciona macro para criar folha catálogo modelo (headers + bloco base + instruções Next PROMPT).
+'   - Adiciona macro de testes sequenciais de Config Extra com relatório em CONFIG_EXTRA_TESTS.
+'   - Inclui pré-validação estrutural de JSON para detetar fecho sem abertura e outras quebras.
 '
-' FunÃ§Ãµes e procedimentos:
+' Funções e procedimentos:
 ' - TOOL_CreateCatalogTemplateSheet()
-'   - Cria uma folha de catÃ¡logo pronta para uso no formato esperado pelo PIPELINER.
+'   - Cria uma folha de catálogo pronta para uso no formato esperado pelo PIPELINER.
 ' - TOOL_RunConfigExtraSequentialDiagnostics()
 '   - Corre bateria de casos de Config Extra e regista resultados na folha CONFIG_EXTRA_TESTS + DEBUG.
 ' =============================================================================
@@ -30,11 +30,11 @@ Public Sub TOOL_CreateCatalogTemplateSheet()
     Dim ws As Worksheet
     Dim nome As String
 
-    nome = Trim$(InputBox("Nome da nova folha de catÃ¡logo:", "PIPELINER - Criar CatÃ¡logo", DEFAULT_TEMPLATE_SHEET))
+    nome = Trim$(InputBox("Nome da nova folha de catálogo:", "PIPELINER - Criar Catálogo", DEFAULT_TEMPLATE_SHEET))
     If nome = "" Then Exit Sub
 
     If WorksheetExists(nome) Then
-        MsgBox "JÃ¡ existe uma folha com o nome '" & nome & "'.", vbExclamation
+        MsgBox "Já existe uma folha com o nome '" & nome & "'.", vbExclamation
         Exit Sub
     End If
 
@@ -52,7 +52,7 @@ Public Sub TOOL_CreateCatalogTemplateSheet()
     ws.Columns("I:K").ColumnWidth = 28
     ws.Rows("1:6").EntireRow.AutoFit
 
-    MsgBox "Folha de catÃ¡logo criada: " & nome, vbInformation
+    MsgBox "Folha de catálogo criada: " & nome, vbInformation
     Exit Sub
 
 EH:
@@ -113,10 +113,10 @@ Public Sub TOOL_RunConfigExtraSequentialDiagnostics()
 
         If okJson Then
             Call Debug_Registar(0, "M15_CONFIG_EXTRA_DIAG", "INFO", "", "CONFIG_EXTRA_CASE_OK", _
-                "Caso " & CStr(i) & " vÃ¡lido: " & CStr(item("nome")), "Folha " & DIAG_SHEET & " contÃ©m detalhes.")
+                "Caso " & CStr(i) & " válido: " & CStr(item("nome")), "Folha " & DIAG_SHEET & " contém detalhes.")
         Else
             Call Debug_Registar(0, "M15_CONFIG_EXTRA_DIAG", "ERRO", "", "CONFIG_EXTRA_CASE_FAIL", _
-                "Caso " & CStr(i) & " invÃ¡lido: " & CStr(item("nome")) & " | " & detail, _
+                "Caso " & CStr(i) & " inválido: " & CStr(item("nome")) & " | " & detail, _
                 "Rever Config extra e fragment merge (Config extra + File Output).")
         End If
 
@@ -125,7 +125,7 @@ Public Sub TOOL_RunConfigExtraSequentialDiagnostics()
 
     ws.Columns("A:I").EntireColumn.AutoFit
     ws.Activate
-    MsgBox "DiagnÃ³stico concluÃ­do. Ver folha '" & DIAG_SHEET & "' e DEBUG.", vbInformation
+    MsgBox "Diagnóstico concluído. Ver folha '" & DIAG_SHEET & "' e DEBUG.", vbInformation
     Exit Sub
 
 EH:
@@ -141,9 +141,9 @@ Private Sub Catalog_WriteHeaders(ByVal ws As Worksheet)
     ws.Range("F1").Value = "Modos"
     ws.Range("G1").Value = "Storage"
     ws.Range("H1").Value = "Config extra"
-    ws.Range("I1").Value = "ComentÃ¡rios"
+    ws.Range("I1").Value = "Comentários"
     ws.Range("J1").Value = "Notas para desenvolvimento"
-    ws.Range("K1").Value = "HistÃ³rico de versÃµes"
+    ws.Range("K1").Value = "Histórico de versões"
 
     ws.Rows(1).Font.Bold = True
 End Sub
@@ -154,20 +154,20 @@ Private Sub Catalog_WriteBlockSkeleton(ByVal ws As Worksheet, ByVal sheetName As
 
     ws.Range("A2").Value = idBase
     ws.Range("B2").Value = "NomeCurto"
-    ws.Range("C2").Value = "DescriÃ§Ã£o do prompt"
+    ws.Range("C2").Value = "Descrição do prompt"
     ws.Range("D2").Value = "ROLE" & vbLf & "Descreva aqui o prompt principal."
     ws.Range("E2").Value = "gpt-5.2"
     ws.Range("F2").Value = "Web search"
     ws.Range("G2").Value = "TRUE"
     ws.Range("H2").Value = "output_kind: file" & vbLf & "process_mode: metadata" & vbLf & "structured_outputs_mode: json_schema"
     ws.Range("I2").Value = "Exemplo base"
-    ws.Range("K2").Value = "A â€” versÃ£o inicial"
+    ws.Range("K2").Value = "A — versão inicial"
 
     ws.Range("B3").Value = "Next PROMPT: STOP"
     ws.Range("B4").Value = "Next PROMPT default: STOP"
     ws.Range("B5").Value = "Next PROMPT allowed: STOP"
 
-    ws.Range("C3").Value = "DescriÃ§Ã£o textual:"
+    ws.Range("C3").Value = "Descrição textual:"
     ws.Range("D3").Value = "Resumo do objetivo do prompt."
     ws.Range("C4").Value = "INPUTS:"
     ws.Range("D4").Value = "URLS_ENTRADA: <https://exemplo.pt/noticia>" & vbLf & "FILES: GUIA_DE_ESTILO.pdf (latest) (as pdf)"
@@ -181,10 +181,10 @@ Private Function BuildConfigExtraCases() As Collection
     Dim c As New Collection
 
     c.Add MakeCase("Escalar simples", "truncation: auto")
-    c.Add MakeCase("Lista include vÃ¡lida", "include: [web_search_call.action.sources]")
+    c.Add MakeCase("Lista include válida", "include: [web_search_call.action.sources]")
     c.Add MakeCase("Nesting com pontos", "text.format.type: json_schema")
-    c.Add MakeCase("Objeto simples vÃ¡lido", "metadata: {projeto: CPSA, versao: 1}")
-    c.Add MakeCase("Bloco input vÃ¡lido", "input:" & vbLf & "  role: user" & vbLf & "  content: Mensagem de teste")
+    c.Add MakeCase("Objeto simples válido", "metadata: {projeto: CPSA, versao: 1}")
+    c.Add MakeCase("Bloco input válido", "input:" & vbLf & "  role: user" & vbLf & "  content: Mensagem de teste")
     c.Add MakeCase("Linha sem separador", "linha_sem_dois_pontos")
     c.Add MakeCase("Conflito conversation + previous_response_id", "conversation: conv_123" & vbLf & "previous_response_id: resp_123")
     c.Add MakeCase("Chave proibida tools", "tools: [{type:web_search}]")
