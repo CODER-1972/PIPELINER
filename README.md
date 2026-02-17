@@ -209,10 +209,9 @@ Capacidades principais:
 
 Política de tools com anexos (gating automático):
 
-- quando o modo do prompt inclui `Web search`, o motor **só auto-adiciona** a tool se não houver anexos (`input_file`/`input_image`) e se o `Config extra` não trouxer `tools` explícitas;
-- se existirem anexos, o DEBUG regista `web_search=NAO_AUTO (ha anexos)` no check de payload;
-- esta regra é uma decisão do PIPELINER para previsibilidade operacional (menos chamadas externas desnecessárias quando já há contexto documental anexado), não uma limitação rígida da API;
-- se for necessário combinar anexos + pesquisa web no mesmo passo, definir `tools` explicitamente no `Config extra` (nessa situação o log esperado é `web_search=NAO_AUTO (tools no extra)`).
+- quando o modo do prompt inclui `Web search`, o motor auto-adiciona a tool por omissão;
+- a existência de anexos (`input_file`/`input_image`) **não desativa** o `web_search` automático;
+- se o `Config extra` já trouxer `tools` explícitas, o motor não auto-adiciona tools (log: `web_search=NAO_AUTO (tools no extra)`), preservando precedência do pedido explícito.
 
 Nota de compatibilidade importante:
 

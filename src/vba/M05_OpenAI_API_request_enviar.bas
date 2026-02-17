@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Ajuste de gating de web_search com anexos
+'   - Permite auto-adição de web_search mesmo quando existem input_file/input_image.
+'   - Mantém prioridade de tools explícitas no extra para evitar conflito de configuração.
 ' - 2026-02-16 | Codex | Dump opcional do payload final para troubleshooting local
 '   - Adiciona escrita do JSON final em C:\Temp\payload.json antes do envio HTTP.
 '   - Regista INFO/ALERTA no DEBUG sem expor segredos.
@@ -357,8 +360,8 @@ Public Function OpenAI_Executar( _
 
     ' -------------------------
     ' Tools: web_search
-    '  - Regra: nao auto-adicionar web_search quando ha ficheiro/imagem
-    '  - Se quiseres web_search com ficheiros, define tools explicitamente em extraFragmentSemInput
+    '  - Regra: auto-adicionar web_search quando o modo estiver ativo e nao houver tools explicitas no extra
+    '  - A existencia de anexos (input_file/input_image) nao desativa o web_search automatico
     ' -------------------------
     Dim modosWebSearch As Boolean
     modosWebSearch = Modos_Contem(modos, "Web search")
@@ -374,8 +377,6 @@ Public Function OpenAI_Executar( _
 
     If modosWebSearch Then
         If extraTemTools Then
-            autoAddWebSearch = False
-        ElseIf hasInputFile Or hasInputImage Then
             autoAddWebSearch = False
         Else
             autoAddWebSearch = True
@@ -431,8 +432,6 @@ Public Function OpenAI_Executar( _
             toolMsg = "web_search=ADICIONADO_AUTO"
         ElseIf extraTemTools Then
             toolMsg = "web_search=NAO_AUTO (tools no extra)"
-        ElseIf hasInputFile Or hasInputImage Then
-            toolMsg = "web_search=NAO_AUTO (ha anexos)"
         Else
             toolMsg = "web_search=NAO_AUTO"
         End If
