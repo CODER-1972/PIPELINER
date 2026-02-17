@@ -8,12 +8,15 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Validação preventiva para escape inválido com backslash no JSON
+'   - Adiciona deteção de sequências de escape inválidas (ex.: \x) em strings JSON no preflight.
+'   - Bloqueia envio com erro acionável no DEBUG e indica escapes válidos após \ (" \\ / b f n r t uXXXX).
+' - 2026-02-17 | Codex | Melhoria das sugestões de escaping no preflight de JSON
+'   - Detalha escape recomendado por carácter de controlo detectado (ex.: \n, \r, \t, \u00XX).
+'   - Expande mensagem de troubleshooting no DEBUG para reduzir tentativa/erro em invalid_json.
 ' - 2026-02-17 | Codex | Preflight de JSON para diagnosticar invalid_json antes do HTTP
 '   - Adiciona validação leve de controlo bruto em strings JSON (CR/LF/TAB não escapados).
 '   - Em caso de falha, bloqueia envio e regista snippet/contexto no DEBUG para correção rápida.
-' - 2026-02-17 | Codex | Flag retrocompatível para permitir auto web_search com anexos
-'   - Adiciona chave opcional de Config `TOOLS_WEB_SEARCH_WITH_ATTACHMENTS` (default FALSE).
-'   - Mantém regra histórica por omissão e reforça DEBUG com motivo explícito de decisão.
 ' - 2026-02-16 | Codex | Dump opcional do payload final para troubleshooting local
 '   - Adiciona escrita do JSON final em C:\Temp\payload.json antes do envio HTTP.
 '   - Regista INFO/ALERTA no DEBUG sem expor segredos.
@@ -280,12 +283,68 @@ Private Function NormalizarInputJsonLiteral(ByVal s As String) As String
     NormalizarInputJsonLiteral = Trim$(t)
 End Function
 
+Private Function M05_EscapeHintForControlChar(ByVal charCode As Long) As String
+    Select Case charCode
+        Case 10: M05_EscapeHintForControlChar = "\n"
+        Case 13: M05_EscapeHintForControlChar = "\r"
+        Case 9: M05_EscapeHintForControlChar = "\t"
+        Case Else: M05_EscapeHintForControlChar = "\u" & Right$("000" & Hex$(charCode), 4)
+    End Select
+End Function
+
+Private Function M05_IsHexChar(ByVal ch As String) As Boolean
+    M05_IsHexChar = (InStr(1, "0123456789abcdefABCDEF", ch, vbBinaryCompare) > 0)
+End Function
+
+Private Function M05_JsonEscapeIsValid(ByVal jsonText As String, ByVal slashPos As Long, ByRef outDetail As String) As Boolean
+    Dim nxt As String
+    Dim j As Long
+
+    outDetail = ""
+
+    If slashPos >= Len(jsonText) Then
+        outDetail = "escape=barra_final @pos=" & CStr(slashPos)
+        M05_JsonEscapeIsValid = False
+        Exit Function
+    End If
+
+    nxt = Mid$(jsonText, slashPos + 1, 1)
+
+    Select Case nxt
+        Case """, "\", "/", "b", "f", "n", "r", "t"
+            M05_JsonEscapeIsValid = True
+            Exit Function
+        Case "u"
+            If slashPos + 5 > Len(jsonText) Then
+                outDetail = "escape=unicode_incompleto @pos=" & CStr(slashPos)
+                M05_JsonEscapeIsValid = False
+                Exit Function
+            End If
+
+            For j = slashPos + 2 To slashPos + 5
+                If Not M05_IsHexChar(Mid$(jsonText, j, 1)) Then
+                    outDetail = "escape=unicode_invalido @pos=" & CStr(slashPos)
+                    M05_JsonEscapeIsValid = False
+                    Exit Function
+                End If
+            Next j
+
+            M05_JsonEscapeIsValid = True
+            Exit Function
+        Case Else
+            outDetail = "escape_invalido=\" & nxt & " @pos=" & CStr(slashPos)
+            M05_JsonEscapeIsValid = False
+            Exit Function
+    End Select
+End Function
+
 Private Function M05_JsonHasRawControlInString(ByVal jsonText As String, ByRef outDetail As String) As Boolean
     Dim i As Long
     Dim ch As String
     Dim code As Long
     Dim inString As Boolean
     Dim escaped As Boolean
+    Dim escapeHint As String
 
     inString = False
     escaped = False
@@ -297,13 +356,20 @@ Private Function M05_JsonHasRawControlInString(ByVal jsonText As String, ByRef o
 
         If inString Then
             If escaped Then
+                Dim escapeDetail As String
+                If Not M05_JsonEscapeIsValid(jsonText, i - 1, escapeDetail) Then
+                    outDetail = escapeDetail & " | escapes_validos=" & Chr$(92) & Chr$(34) & " " & Chr$(92) & Chr$(92) & " / b f n r t uXXXX"
+                    M05_JsonHasRawControlInString = True
+                    Exit Function
+                End If
                 escaped = False
             ElseIf ch = "\" Then
                 escaped = True
             ElseIf ch = """ Then
                 inString = False
             ElseIf code >= 0 And code <= 31 Then
-                outDetail = "char_code=" & CStr(code) & " @pos=" & CStr(i)
+                escapeHint = M05_EscapeHintForControlChar(code)
+                outDetail = "char_code=" & CStr(code) & " @pos=" & CStr(i) & " | escape_sugerido=" & escapeHint
                 M05_JsonHasRawControlInString = True
                 Exit Function
             End If
@@ -311,6 +377,12 @@ Private Function M05_JsonHasRawControlInString(ByVal jsonText As String, ByRef o
             If ch = """ Then inString = True
         End If
     Next i
+
+    If escaped Then
+        outDetail = "escape=barra_final @pos=" & CStr(Len(jsonText)) & " | escapes_validos=" & Chr$(92) & Chr$(34) & " " & Chr$(92) & Chr$(92) & " / b f n r t uXXXX"
+        M05_JsonHasRawControlInString = True
+        Exit Function
+    End If
 
     M05_JsonHasRawControlInString = False
 End Function
@@ -516,7 +588,7 @@ Public Function OpenAI_Executar( _
         On Error Resume Next
         Call Debug_Registar(0, dbgPromptId, "ERRO", "", "M05_JSON_PREFLIGHT", _
             "Payload bloqueado antes do envio: possivel controlo nao escapado dentro de string JSON (" & preflightDetail & ")", _
-            "Revise input_json/extraFragment. Quebras de linha em texto devem estar como \n no JSON literal.")
+            "Revise input_json/extraFragment. Escapes validos em JSON incluem \n, \r, \t, \u00XX e, apos \\, apenas " & Chr$(92) & Chr$(34) & " " & Chr$(92) & Chr$(92) & " / b f n r t uXXXX.")
         On Error GoTo TrataErro
 
         resultado.Erro = "Payload invalido (preflight): controlo nao escapado em string JSON. " & preflightDetail
