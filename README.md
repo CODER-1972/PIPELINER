@@ -233,6 +233,29 @@ Boas práticas de manutenção VBA (preventivas):
 - em literais de string com aspas duplas, usar escaping válido do VBA (ex.: `""""`) ou `Chr$(34)`;
 - após alterações em módulos `.bas`, correr compilação do projeto (`Debug > Compile VBAProject`) para apanhar erros de sintaxe antes de execução.
 
+
+### Diagnóstico rápido: web_search + anexos + ContextKV
+
+Quando o DEBUG mostrar `web_search=NAO_AUTO (ha anexos)` em `M05_PAYLOAD_CHECK`, isso indica **gating local do PIPELINER**: o motor não auto-adiciona `tools:[{"type":"web_search"}]` quando já existem `input_file`/`input_image` no `input`, salvo se `tools` vier explicitamente em `Config extra`.
+
+Checklist objetivo:
+
+1. Confirmar `REQ_INPUT_JSON` com `has_input_file=SIM` e `file_id=file-...` quando o modo de transporte for `FILE_ID`.
+2. Confirmar `M05_PAYLOAD_CHECK` com `has_input_file=SIM`, `has_file_id=SIM` e `web_search=NAO_AUTO (ha anexos)` para o cenário de anexos.
+3. Se precisar de pesquisa web + anexos no mesmo pedido, definir `tools` explicitamente no `Config extra` (em vez de depender do auto).
+
+Para ContextKV, `CAPTURE_MISS` significa que o output não trouxe rótulos capturáveis esperados (`RESULTS_JSON`, `NEXT_PROMPT_ID`, `MEMORY_SHORT`, etc.). Para aumentar taxa de `CAPTURE_OK`, incluir no prompt instruções explícitas para devolver pelo menos:
+
+- `RESULTS_JSON:` (linha com JSON ou bloco fenced);
+- `NEXT_PROMPT_ID: STOP` (ou ID válido, se a pipeline usar AUTO).
+
+SelfTests recomendados para este cenário:
+
+- `SelfTest_WebSearchGating` (com/sem anexos; valida mensagem em `M05_PAYLOAD_CHECK`);
+- `SelfTest_PayloadHasInputFileId` (valida `REQ_INPUT_JSON` e presença de `file_id`);
+- `SelfTest_ContextKV_CaptureOkMiss` (2 outputs sintéticos: um capturável e outro livre);
+- `SelfTest_InputsKvExtraction` (linhas `CHAVE: valor` e `CHAVE=valor`, com exclusão de `FILES:`).
+
 ### Seguimento
 
 Usar para auditar:
