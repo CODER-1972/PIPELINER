@@ -206,6 +206,7 @@ Capacidades principais:
 
 - resolução de ficheiros no `INPUT Folder` da pipeline;
 - flags por ficheiro (`required`, `latest`, `as pdf`, `as is`, `text`);
+- suporte a wildcard em `FILES:` (ex.: `GUIA_DE_ESTILO*.pdf`), incluindo fallback de correspondência flexível para nomes com `_`, `-` e espaço;
 - upload para `/v1/files` com reutilização por hash (quando configurado);
 - fallback entre engines/perfis de upload.
 
