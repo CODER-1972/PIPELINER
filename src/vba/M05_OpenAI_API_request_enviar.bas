@@ -11,6 +11,9 @@ Option Explicit
 ' - 2026-02-17 | Codex | Preflight estrutural de JSON para reduzir 400 invalid_json
 '   - Adiciona verificação de aspas/chaves/arrays e deteção de vírgula final inválida (`,}`/`,]`).
 '   - Regista diagnóstico acionável no DEBUG antes do HTTP quando o payload não fecha estruturalmente.
+' - 2026-02-17 | Codex | Correção de sintaxe VBA em validação de JSON preflight
+'   - Corrige literais com aspas duplas em Select Case e comparações de string para evitar erro de compilação.
+'   - Mantém validação de escapes JSON com mensagem de diagnóstico preservada no DEBUG.
 ' - 2026-02-17 | Codex | Validação preventiva para escape inválido com backslash no JSON
 '   - Adiciona deteção de sequências de escape inválidas (ex.: \x) em strings JSON no preflight.
 '   - Bloqueia envio com erro acionável no DEBUG e indica escapes válidos após \ (" \\ / b f n r t uXXXX).
@@ -335,7 +338,7 @@ Private Function M05_JsonEscapeIsValid(ByVal jsonText As String, ByVal slashPos 
             M05_JsonEscapeIsValid = True
             Exit Function
         Case Else
-            outDetail = "escape_invalido=\" & nxt & " @pos=" & CStr(slashPos)
+            outDetail = "escape_invalido=" & Chr$(34) & nxt & Chr$(34) & " @pos=" & CStr(slashPos)
             M05_JsonEscapeIsValid = False
             Exit Function
     End Select
