@@ -28,6 +28,7 @@ Template Excel + VBA para execução de pipelines de prompts com auditoria opera
 - [10. Segurança e compatibilidade retroativa](#10-segurança-e-compatibilidade-retroativa)
 - [11. Guia rápido de operação](#11-guia-rápido-de-operação)
 - [12. Notas de robustez dos SelfTests (output chain e schema strict)](#12-notas-de-robustez-dos-selftests-output-chain-e-schema-strict)
+- [13. Guia complementar de testes de variáveis entre prompts](#13-guia-complementar-de-testes-de-variáveis-entre-prompts)
 
 ---
 
@@ -341,3 +342,15 @@ Notas operacionais:
 - O schema de File Output (`file_manifest`) em `structured_outputs_mode=json_schema` deve manter `required` alinhado com `properties` tanto em **root** como em **items**.
 - A validação interna de schema deve extrair chaves no nível correto do objeto JSON para não confundir `required` de `items` com `required` de `root`.
 - Em caso de erro de payload, os artefactos em `C:\Temp\_raw` continuam a ser a referência de troubleshooting (`payload_invalid.json`, `payload_tail.txt`, `payload_slice_*.txt`).
+
+## 13. Guia complementar de testes de variáveis entre prompts
+
+Para validar captura/injeção de variáveis (`ContextKV`) e encadeamento entre passos com blocos prontos para copy-paste no catálogo, consultar:
+
+- `docs/TESTES_INTERNOS_CONTEXTKV.md`
+
+Este guia complementar inclui:
+
+- execução de testes internos (`SelfTest_RunAll` e `SelfTest_RunAll_ContextKV`);
+- pipeline de teste com 5 prompts (`CTXTEST/...`) no layout do catálogo;
+- checklist de evidências em `Seguimento`/`DEBUG` e testes negativos controlados.
