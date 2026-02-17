@@ -202,6 +202,18 @@ Na linha de `INPUTS` do prompt é possível declarar `FILES:`/`FICHEIROS:`.
 
 Capacidades principais:
 
+Novas chaves globais (Config, coluna A/B):
+
+- `INPUTS_APPEND_MODE` (`OFF` | `SAFE` | `RAW`, default `RAW`)
+  - `RAW`: anexa todo o texto de `INPUTS` ao fim da prompt, em bloco `### INPUTS_RESOLVIDOS`;
+  - `SAFE`: remove linhas técnicas (`FILES:`/`FICHEIROS:` e metadados internos) antes de anexar;
+  - `OFF`: não anexa `INPUTS` ao prompt final.
+- `AUTO_INJECT_INPUT_VARS` (`TRUE` | `FALSE`, default `TRUE`)
+  - extrai pares `CHAVE: valor`, `CHAVE=valor` (ou `CHAVE = valor`) da secção `INPUTS`;
+  - normaliza as chaves para um mapa comum e regista no `DEBUG` (INFO/ALERTA);
+  - guarda o resultado no `Seguimento` (`captured_vars`) para auditoria/reutilização;
+  - **não** faz substituição automática no texto da prompt.
+
 - resolução de ficheiros no `INPUT Folder` da pipeline;
 - flags por ficheiro (`required`, `latest`, `as pdf`, `as is`, `text`);
 - upload para `/v1/files` com reutilização por hash (quando configurado);
@@ -223,6 +235,12 @@ O módulo ContextKV permite:
 - registar eventos operacionais no DEBUG (`INJECT_*`, `CAPTURE_*`).
 
 É útil para pipelines multi-etapa onde uma resposta precisa ser reutilizada de forma controlada no passo seguinte.
+
+---
+
+## 8.1 Guia rápido de testes (catálogo `TESTE`)
+
+Para um roteiro de testes prático e uma tabela copy-paste para a folha de catálogo `TESTE`, ver: `docs/TESTE_CATALOGO_PROMPTS.md`.
 
 ---
 

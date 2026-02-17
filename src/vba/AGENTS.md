@@ -488,6 +488,8 @@ Se começar a ficar demasiado grande:
 - Sempre que editar strings com escape (JSON, regex-like, Replace), executar verificação rápida no VBE (Debug > Compile VBAProject) antes de fechar a alteração.
 - Em detecção de diretivas via `InStr`, normalize primeiro o texto (espaços/aspas) e compare também por igualdade canónica (`s = "environ(openai_api_key)"`) para evitar `Type mismatch` por string mal escapada.
 - Em schemas de Structured Outputs com `strict=true`, qualquer chave adicionada em `properties` deve ser adicionada também a `required`; tratar este alinhamento como check obrigatório de revisão para evitar `invalid_json_schema`.
+- Em prompts com secção `INPUTS`, tratar explicitamente a política de anexação ao prompt final (`INPUTS_APPEND_MODE`) e extração de pares chave/valor (`AUTO_INJECT_INPUT_VARS`); sem isso, campos como `URLS_ENTRADA` ficam apenas documentais e não operacionais.
+
 - Antes de enviar payload para `/v1/responses`, executar preflight de JSON para detetar caracteres de controlo não escapados e escapes inválidos com backslash dentro de strings (causas típicas de `invalid_json`) e registar posição + escape sugerido no DEBUG (`\n`, `\r`, `\t`, `\u00XX`; e após `\`: `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uXXXX`).
 - Em rotinas de `JsonEscape/JsonUnescape`, validar sempre o par inverso de `Replace` (ex.: `\ -> \\` no escape e `\\ -> \` no unescape; `" -> \"` no escape e `\" -> "` no unescape) para evitar corrupção silenciosa de payload/contexto.
 - Em troubleshooting de `invalid_json`, validar também estrutura mínima (aspas/chaves/arrays balanceados e deteção de vírgula final inválida `,}`/`,]`) antes do HTTP e reportar no DEBUG com causa curta e acionável.
