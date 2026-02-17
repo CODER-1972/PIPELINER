@@ -15,6 +15,7 @@ Private Const PAYLOAD_DEBUG_VERBOSE As String = "verbose"
 ' - 2026-02-17 | Codex | Diagnóstico profundo de payload e dumps resilientes
 '   - Remove heurística frágil por substring e adiciona posição/linha/coluna na pré-validação JSON.
 '   - Grava payload_invalid/payload_tail/payload_slice em pasta de debug com fallback para Documents.
+'   - Normaliza fragmentos extra antes de merge para prevenir fechos '}' excedentes em concatena??o din?mica.
 ' - 2026-02-17 | Codex | Guard rails de payload para invalid_json + debug por nível
 '   - Adiciona pré-validação JSON antes de http.Send e bloqueia envio em caso de payload inválido.
 '   - Introduz DEBUG_PAYLOAD_LEVEL (OFF|BASIC|VERBOSE), hash e slices contextuais no DEBUG.
@@ -471,8 +472,16 @@ Public Function OpenAI_Executar( _
     End If
 
     ' merge do extra (sem input)
-    If Trim$(extraFragmentSemInput) <> "" Then
-        json = json & "," & extraFragmentSemInput
+    Dim extraMerge As String
+    extraMerge = M05_NormalizeExtraFragmentForMerge(extraFragmentSemInput)
+    If Trim$(extraMerge) <> "" Then
+        json = json & "," & extraMerge
+
+        If extraMerge <> Trim$(extraFragmentSemInput) Then
+            Call Debug_Registar(0, dbgPromptId, "ALERTA", "", "M05_EXTRA_FRAGMENT_NORMALIZED", _
+                "extraFragment normalizado antes do merge (len_in=" & CStr(Len(extraFragmentSemInput)) & " | len_out=" & CStr(Len(extraMerge)) & ").", _
+                "Verifique Config extra e fragmentos de File Output para evitar fechos excedentes.")
+        End If
     End If
 
     json = json & "}"
@@ -788,6 +797,63 @@ Private Function M05_GetSliceAround(ByVal s As String, ByVal pos As Long, ByVal 
     If endPos > Len(s) Then endPos = Len(s)
 
     M05_GetSliceAround = "pos=" & CStr(pos) & vbCrLf & Mid$(s, startPos, endPos - startPos + 1)
+End Function
+
+Private Function M05_NormalizeExtraFragmentForMerge(ByVal extraFragment As String) As String
+    Dim e As String
+    e = Trim$(extraFragment)
+    If e = "" Then
+        M05_NormalizeExtraFragmentForMerge = ""
+        Exit Function
+    End If
+
+    If Left$(e, 1) = "," Then e = Mid$(e, 2)
+    If Right$(e, 1) = "," Then e = Left$(e, Len(e) - 1)
+    e = Trim$(e)
+
+    ' Compatibilidade defensiva: se vier como objeto completo, retirar chaves externas.
+    If Left$(e, 1) = "{" And Right$(e, 1) = "}" Then
+        e = Mid$(e, 2, Len(e) - 2)
+    End If
+
+    e = Trim$(e)
+    e = M05_StripExcessTrailingClosers(e)
+    M05_NormalizeExtraFragmentForMerge = e
+End Function
+
+Private Function M05_StripExcessTrailingClosers(ByVal frag As String) As String
+    Dim wrapped As String
+    wrapped = "{" & frag & "}"
+
+    Dim errTxt As String
+    Dim errPos As Long, errLine As Long, errCol As Long
+    Dim errChar As String
+    Dim objDepth As Long, arrDepth As Long
+    Dim inString As Boolean
+
+    If M05_ValidateJsonSyntaxBasic(wrapped, errTxt, errPos, errLine, errCol, errChar, objDepth, arrDepth, inString) Then
+        M05_StripExcessTrailingClosers = frag
+        Exit Function
+    End If
+
+    Dim outFrag As String
+    outFrag = frag
+
+    Do While Len(outFrag) > 0
+        wrapped = "{" & outFrag & "}"
+        If M05_ValidateJsonSyntaxBasic(wrapped, errTxt, errPos, errLine, errCol, errChar, objDepth, arrDepth, inString) Then
+            Exit Do
+        End If
+
+        If Right$(outFrag, 1) = "}" Or Right$(outFrag, 1) = "]" Then
+            outFrag = Left$(outFrag, Len(outFrag) - 1)
+            outFrag = RTrim$(outFrag)
+        Else
+            Exit Do
+        End If
+    Loop
+
+    M05_StripExcessTrailingClosers = outFrag
 End Function
 
 Private Function M05_GetPayloadDebugLevel() As String
