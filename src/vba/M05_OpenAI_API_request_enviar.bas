@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Preflight de JSON para diagnosticar invalid_json antes do HTTP
+'   - Adiciona validação leve de controlo bruto em strings JSON (CR/LF/TAB não escapados).
+'   - Em caso de falha, bloqueia envio e regista snippet/contexto no DEBUG para correção rápida.
 ' - 2026-02-16 | Codex | Dump opcional do payload final para troubleshooting local
 '   - Adiciona escrita do JSON final em C:\Temp\payload.json antes do envio HTTP.
 '   - Regista INFO/ALERTA no DEBUG sem expor segredos.
@@ -227,6 +230,41 @@ Private Function NormalizarInputJsonLiteral(ByVal s As String) As String
     NormalizarInputJsonLiteral = Trim$(t)
 End Function
 
+Private Function M05_JsonHasRawControlInString(ByVal jsonText As String, ByRef outDetail As String) As Boolean
+    Dim i As Long
+    Dim ch As String
+    Dim code As Long
+    Dim inString As Boolean
+    Dim escaped As Boolean
+
+    inString = False
+    escaped = False
+    outDetail = ""
+
+    For i = 1 To Len(jsonText)
+        ch = Mid$(jsonText, i, 1)
+        code = AscW(ch)
+
+        If inString Then
+            If escaped Then
+                escaped = False
+            ElseIf ch = "\" Then
+                escaped = True
+            ElseIf ch = """ Then
+                inString = False
+            ElseIf code >= 0 And code <= 31 Then
+                outDetail = "char_code=" & CStr(code) & " @pos=" & CStr(i)
+                M05_JsonHasRawControlInString = True
+                Exit Function
+            End If
+        Else
+            If ch = """ Then inString = True
+        End If
+    Next i
+
+    M05_JsonHasRawControlInString = False
+End Function
+
 Private Function ExtraFragment_TemTools(ByVal extraFragmentSemInput As String) As Boolean
     Dim t As String
     t = Trim$(CStr(extraFragmentSemInput))
@@ -419,6 +457,19 @@ Public Function OpenAI_Executar( _
     End If
 
     json = json & "}"
+
+    Dim preflightDetail As String
+    If M05_JsonHasRawControlInString(json, preflightDetail) Then
+        On Error Resume Next
+        Call Debug_Registar(0, dbgPromptId, "ERRO", "", "M05_JSON_PREFLIGHT", _
+            "Payload bloqueado antes do envio: possivel controlo nao escapado dentro de string JSON (" & preflightDetail & ")", _
+            "Revise input_json/extraFragment. Quebras de linha em texto devem estar como \n no JSON literal.")
+        On Error GoTo TrataErro
+
+        resultado.Erro = "Payload invalido (preflight): controlo nao escapado em string JSON. " & preflightDetail
+        OpenAI_Executar = resultado
+        Exit Function
+    End If
 
     Call M05_DumpPayloadForDebug(json, dbgPromptId)
 

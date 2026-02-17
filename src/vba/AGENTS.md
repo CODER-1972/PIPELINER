@@ -484,3 +484,4 @@ Se começar a ficar demasiado grande:
 - Sempre que editar strings com escape (JSON, regex-like, Replace), executar verificação rápida no VBE (Debug > Compile VBAProject) antes de fechar a alteração.
 - Em detecção de diretivas via `InStr`, normalize primeiro o texto (espaços/aspas) e compare também por igualdade canónica (`s = "environ(openai_api_key)"`) para evitar `Type mismatch` por string mal escapada.
 - Em schemas de Structured Outputs com `strict=true`, qualquer chave adicionada em `properties` deve ser adicionada também a `required`; tratar este alinhamento como check obrigatório de revisão para evitar `invalid_json_schema`.
+- Antes de enviar payload para `/v1/responses`, executar preflight de JSON para detetar caracteres de controlo não escapados dentro de strings (causa típica de `invalid_json`) e registar posição no DEBUG.
