@@ -241,19 +241,13 @@ Boas práticas de manutenção VBA (preventivas):
 
 ### Diagnóstico rápido: web_search + anexos + ContextKV
 
-Quando o DEBUG mostrar `web_search=NAO_AUTO (ha anexos + flag config=FALSE)` em `M05_PAYLOAD_CHECK`, isso indica **gating local do PIPELINER**: o motor não auto-adiciona `tools:[{"type":"web_search"}]` quando já existem `input_file`/`input_image` no `input`.
-
-A partir da revisão atual, existe a chave opcional `TOOLS_WEB_SEARCH_WITH_ATTACHMENTS` (folha `Config`, formato label->valor) para controlar este comportamento de forma retrocompatível:
-
-- `FALSE` (default): mantém a regra histórica de não auto-adicionar web_search com anexos;
-- `TRUE`: permite auto-adicionar web_search mesmo com anexos;
-- se a chave estiver ausente: assume `FALSE`.
+Regra atual do PIPELINER: quando `Modos` contém `Web search`, o payload deve incluir `tools:[{"type":"web_search"}]` por auto-injeção, mesmo que existam anexos (`input_file`/`input_image`).
 
 Checklist objetivo:
 
 1. Confirmar `REQ_INPUT_JSON` com `has_input_file=SIM` e `file_id=file-...` quando o modo de transporte for `FILE_ID`.
-2. Confirmar `M05_PAYLOAD_CHECK` com `has_input_file=SIM`, `has_file_id=SIM` e `web_search=NAO_AUTO (ha anexos + flag config=FALSE)` para o cenário de anexos (ou `ADICIONADO_AUTO ... flag config=TRUE`, se a flag estiver ativa).
-3. Se precisar de pesquisa web + anexos por auto-injeção, definir `TOOLS_WEB_SEARCH_WITH_ATTACHMENTS=TRUE` em `Config`.
+2. Confirmar `M05_PAYLOAD_CHECK` com `web_search=ADICIONADO_AUTO` sempre que `Modos=Web search`.
+3. Se `web_search` não for auto-adicionado, validar se existe `tools` explícito no fragmento extra (`web_search=NAO_AUTO (tools no extra)`).
 
 Para ContextKV, `CAPTURE_MISS` significa que o output não trouxe rótulos capturáveis esperados (`RESULTS_JSON`, `NEXT_PROMPT_ID`, `MEMORY_SHORT`, etc.). Para aumentar taxa de `CAPTURE_OK`, incluir no prompt instruções explícitas para devolver pelo menos:
 
@@ -265,7 +259,7 @@ Nota: `tools` continua como chave proibida em `Config extra` (é ignorada com al
 
 SelfTests recomendados para este cenário:
 
-- `SelfTest_WebSearchGating` (com/sem anexos; valida mensagem em `M05_PAYLOAD_CHECK`);
+- `SelfTest_WebSearchGating` (com/sem anexos; validar que a mensagem de `M05_PAYLOAD_CHECK` permanece `web_search=ADICIONADO_AUTO`);
 - `SelfTest_PayloadHasInputFileId` (valida `REQ_INPUT_JSON` e presença de `file_id`);
 - `SelfTest_ContextKV_CaptureOkMiss` (2 outputs sintéticos: um capturável e outro livre);
 - `SelfTest_InputsKvExtraction` (linhas `CHAVE: valor` e `CHAVE=valor`, com exclusão de `FILES:`).

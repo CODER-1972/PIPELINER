@@ -271,7 +271,7 @@ Chaves proibidas em Config extra (devem ser ignoradas com alerta):
 (Estas chaves têm colunas dedicadas / lógica própria.)
 
 Princípio de revisão (evitar regressões de documentação):
-- Não documentar `tools` via Config extra como mecanismo suportado de override; como `tools` é chave proibida no parser, qualquer controlo desta política deve ser feito por flag dedicada em Config/VBA.
+- Não documentar `tools` via Config extra como mecanismo suportado de override; como `tools` é chave proibida no parser, a política de ferramentas deve ficar centralizada no VBA. Para `Modos=Web search`, o payload deve incluir sempre `tools:[{"type":"web_search"}]` (sem gating por anexos).
 
 Regras de coerência:
 - Não usar `conversation` e `previous_response_id` em simultâneo; se ambos aparecerem, manter `conversation` e ignorar `previous_response_id` (com alerta).
