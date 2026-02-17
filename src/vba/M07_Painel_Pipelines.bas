@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Encadeamento robusto de previous_response_id
+'   - Só encadeia previous_response_id quando a resposta anterior foi persistida (store=TRUE).
+'   - Evita erro HTTP 400 previous_response_not_found em pipelines com prompts store=FALSE.
 ' - 2026-02-16 | Codex | Resolução de API key via ambiente com fallback compatível
 '   - Substitui leitura direta de Config!B1 por resolver central (M14_ConfigApiKey).
 '   - Regista ALERTA/ERRO no DEBUG para origem/falhas da credencial sem expor segredo.
@@ -598,7 +601,9 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     ultimos4(1) = "": ultimos4(2) = "": ultimos4(3) = "": ultimos4(4) = ""
 
     Dim prevResponseId As String
+    Dim prevResponseReusable As Boolean
     prevResponseId = ""
+    prevResponseReusable = False
 
     Dim inicioHHMM As String
     inicioHHMM = Format$(Now, "hh:nn")
@@ -687,7 +692,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Call ConfigExtra_Converter(prompt.ConfigExtra, prompt.textoPrompt, passo, prompt.Id, auditJson, inputJsonLiteral, extraFragment)
 
         ' Encadear previous_response_id, apenas se o config extra nao tiver conversation/previous_response_id
-        If prevResponseId <> "" Then
+        If prevResponseId <> "" And prevResponseReusable Then
             If InStr(1, auditJson, """conversation""", vbTextCompare) = 0 And _
                InStr(1, auditJson, """previous_response_id""", vbTextCompare) = 0 Then
                 extraFragment = Painel_AdicionarCampoJson(extraFragment, "previous_response_id", prevResponseId)
@@ -863,6 +868,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         End If
 
         prevResponseId = resultado.responseId
+        prevResponseReusable = (prompt.storage And Trim$(resultado.responseId) <> "")
 
         ' Ler Next config
         Dim nextPrompt As String, nextDefault As String, nextAllowed As String

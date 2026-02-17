@@ -272,6 +272,7 @@ Chaves proibidas em Config extra (devem ser ignoradas com alerta):
 
 Regras de coerência:
 - Não usar `conversation` e `previous_response_id` em simultâneo; se ambos aparecerem, manter `conversation` e ignorar `previous_response_id` (com alerta).
+- Ao encadear `previous_response_id`, só reutilizar IDs de respostas persistidas (`store=TRUE` no passo anterior); com `store=FALSE`, não encadear para evitar `previous_response_not_found`.
 
 ---
 
@@ -482,4 +483,5 @@ Se começar a ficar demasiado grande:
 - Ao remover aspas duplas em `Replace`, usar literal válido de VBA (`""""`) ou `Chr$(34)`; nunca usar `"""` porque gera erro de compilação.
 - Sempre que editar strings com escape (JSON, regex-like, Replace), executar verificação rápida no VBE (Debug > Compile VBAProject) antes de fechar a alteração.
 - Em detecção de diretivas via `InStr`, normalize primeiro o texto (espaços/aspas) e compare também por igualdade canónica (`s = "environ(openai_api_key)"`) para evitar `Type mismatch` por string mal escapada.
+- Ao fazer parsing de `VARS:`, normalizar cada token (trim + remoção de `CR/LF/TAB` e espaços residuais) antes do lookup para evitar chaves duplicadas semânticas (`MEMORY_SHORT` vs `MEMORY_SHORT\n`) e falsos `INJECT_MISS`.
 - Em schemas de Structured Outputs com `strict=true`, qualquer chave adicionada em `properties` deve ser adicionada também a `required`; tratar este alinhamento como check obrigatório de revisão para evitar `invalid_json_schema`.

@@ -224,6 +224,11 @@ O módulo ContextKV permite:
 
 É útil para pipelines multi-etapa onde uma resposta precisa ser reutilizada de forma controlada no passo seguinte.
 
+Notas operacionais de robustez (ContextKV + encadeamento):
+
+- em testes com `VARS:`, remover quebras de linha/tabs/espaços residuais nos nomes de variáveis para evitar alertas espúrios `INJECT_MISS`;
+- o encadeamento com `previous_response_id` só é feito quando a resposta anterior foi persistida com `store=TRUE`; em prompts com `Storage=FALSE`, o motor não encadeia automaticamente para evitar `previous_response_not_found`.
+
 ---
 
 ## 9. Logs, troubleshooting e validação operacional
