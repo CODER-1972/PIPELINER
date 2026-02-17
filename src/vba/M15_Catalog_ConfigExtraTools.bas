@@ -1,4 +1,4 @@
-Attribute VB_Name = "M15_Catalog_ConfigExtraTools"
+ï»¿Attribute VB_Name = "M15_Catalog_ConfigExtraTools"
 Option Explicit
 
 ' =============================================================================
