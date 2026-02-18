@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-18 | Codex | Enriquecimento da status bar por fase operacional
+'   - Permite detalhar a fase atual (ex.: preparacao, upload de ficheiros, chamada API).
+'   - Atualiza a barra de estado antes de operacoes criticas para feedback em tempo real.
 ' - 2026-02-17 | Codex | Corrige fonte do texto enviado ao M09
 '   - Passa promptTextFinal (com INPUTS_DECLARADOS_NO_CATALOGO) para Files_PrepararContextoDaPrompt.
 '   - Evita perda de URLS_ENTRADA/FILES no input_text quando há anexos.
@@ -622,7 +625,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     Dim passo As Long
     For passo = 1 To maxSteps
 
-        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount)
+        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "A preparar passo")
         DoEvents
 
         wsPainel.Cells(cursorRow, colIniciar).value = atual
@@ -732,6 +735,9 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         Dim okFiles As Boolean
         If promptTemFiles Then
+            Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "Uploading file")
+            DoEvents
+
             okFiles = Files_PrepararContextoDaPrompt( _
                 apiKey, _
                 pipelineNome, _
@@ -806,11 +812,14 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Call FileOutput_PrepareRequest(fo_outputKind, fo_processMode, fo_structuredMode, modosEfetivo, extraFragmentFO)
 
 
+        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "A executar prompt")
+        DoEvents
+
         resultado = OpenAI_Executar(apiKey, modeloUsado, promptTextFinal, temperaturaDefault, maxTokensDefault, _
                                     modosEfetivo, prompt.storage, inputJsonFinal, extraFragmentFO, prompt.Id)
 
         execCount = execCount + 1
-        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount)
+        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "Resposta recebida")
         DoEvents
 
                 ' -------------------------------
@@ -1035,7 +1044,7 @@ Private Sub Painel_LimparDebugSessaoAnterior()
     On Error GoTo 0
 End Sub
 
-Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long, ByVal total As Long, ByVal execCount As Long)
+Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long, ByVal total As Long, ByVal execCount As Long, Optional ByVal detalhe As String = "")
     On Error Resume Next
 
     Dim passoTxt As String
@@ -1045,7 +1054,11 @@ Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long
         passoTxt = CStr(passo)
     End If
 
-    Application.StatusBar = "(" & inicioHHMM & ") Step: " & passoTxt & " of " & CStr(total) & "  |  Retry: " & CStr(execCount)
+    Dim detalheLimpo As String
+    detalheLimpo = Trim$(CStr(detalhe))
+
+    Application.StatusBar = "(" & inicioHHMM & ") Step: " & passoTxt & " of " & CStr(total) & "  |  Retry: " & CStr(execCount) & _
+                            IIf(detalheLimpo = "", "", "  |  " & detalheLimpo)
     On Error GoTo 0
 End Sub
 
