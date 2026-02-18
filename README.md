@@ -84,6 +84,7 @@ Comportamentos esperados:
 - foco em `Seguimento!A1` no arranque;
 - limpeza de DEBUG da execução anterior;
 - status bar com progresso de execução.
+- durante cada passo, a status bar inclui fase operacional antes da execução (ex.: `A preparar passo`, `Uploading file`, `A executar prompt`).
 
 ## 3.2 Config
 
