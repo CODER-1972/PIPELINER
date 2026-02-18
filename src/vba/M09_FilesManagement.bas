@@ -11,6 +11,7 @@ Option Explicit
 ' - 2026-02-18 | Codex | Macro de diagnóstico para wildcard FILES (caso GUIA_DE_ESTILO)
 '   - Adiciona rotina pública para testar resolução determinística de padrões com `*` e `(latest)`.
 '   - Extrai lógica para função reutilizável (M12 SelfTest automático) e regista contagens de candidatos.
+'   - Corrige falso positivo de match exato quando `requested_name` contém wildcard (`*`/`?`).
 '   - Regista no DEBUG os candidatos Dir vs fallback normalizado para explicar `NOT_FOUND`/`AMBIGUOUS`.
 ' - 2026-02-17 | Codex | Fallback flexível para wildcard em resolução de ficheiros
 '   - Mantém Dir como primeira tentativa para padrões com *.
@@ -1602,14 +1603,17 @@ Private Sub Files_ResolverFicheiro( _
     Dim pathExato As String
     pathExato = Files_PathJoin(inputFolder, nome)
 
-    If Files_ExisteFicheiro(pathExato) Then
+    Dim hasWildcard As Boolean
+    hasWildcard = (InStr(1, nome, "*", vbBinaryCompare) > 0) Or (InStr(1, nome, "?", vbBinaryCompare) > 0)
+
+    If (Not hasWildcard) And Files_ExisteFicheiro(pathExato) Then
         outFullPath = pathExato
         outFileName = nome
         outStatus = "OK"
         Exit Sub
     End If
 
-    If InStr(1, nome, "*", vbTextCompare) > 0 Then
+    If hasWildcard Then
         Dim candidatos As Collection
         Set candidatos = Files_ListarPorPattern(inputFolder, nome)
 
