@@ -8,6 +8,11 @@ Option Explicit
 ' - Aplicar effective_mode, robustez multipart e utilitários de ficheiros para pipeline.
 '
 ' Atualizações:
+' - 2026-02-18 | Codex | Macro de diagnóstico para wildcard FILES (caso GUIA_DE_ESTILO)
+'   - Adiciona rotina pública para testar resolução determinística de padrões com `*` e `(latest)`.
+'   - Extrai lógica para função reutilizável (M12 SelfTest automático) e regista contagens de candidatos.
+'   - Corrige falso positivo de match exato quando `requested_name` contém wildcard (`*`/`?`).
+'   - Regista no DEBUG os candidatos Dir vs fallback normalizado para explicar `NOT_FOUND`/`AMBIGUOUS`.
 ' - 2026-02-17 | Codex | Fallback flexível para wildcard em resolução de ficheiros
 '   - Mantém Dir como primeira tentativa para padrões com *.
 '   - Adiciona fallback por normalização de separadores (_, -, espaço) quando Dir devolve 0 candidatos.
@@ -34,6 +39,8 @@ Option Explicit
 ' - Files_Diag_TestarConectividadeOpenAI (Sub): rotina pública do módulo.
 ' - Files_Diag_TestarUploadFicheiro (Sub): rotina pública do módulo.
 ' - Files_Diag_CorridaCompleta (Sub): rotina pública do módulo.
+' - Files_Diag_ResolverWildcard (Function): resolve wildcard FILES e devolve diagnóstico estruturado.
+' - Files_Diag_TestarResolucaoWildcard (Sub): macro pública para testar padrões FILES com wildcard e latest.
 ' - Files_SanitizeFilenameAsciiSafe (Function): rotina pública do módulo.
 ' - Files_FNV32_LastDiag (Function): rotina pública do módulo.
 ' - Files_SHA256_LastDiag (Function): rotina pública do módulo.
@@ -1596,14 +1603,17 @@ Private Sub Files_ResolverFicheiro( _
     Dim pathExato As String
     pathExato = Files_PathJoin(inputFolder, nome)
 
-    If Files_ExisteFicheiro(pathExato) Then
+    Dim hasWildcard As Boolean
+    hasWildcard = (InStr(1, nome, "*", vbBinaryCompare) > 0) Or (InStr(1, nome, "?", vbBinaryCompare) > 0)
+
+    If (Not hasWildcard) And Files_ExisteFicheiro(pathExato) Then
         outFullPath = pathExato
         outFileName = nome
         outStatus = "OK"
         Exit Sub
     End If
 
-    If InStr(1, nome, "*", vbTextCompare) > 0 Then
+    If hasWildcard Then
         Dim candidatos As Collection
         Set candidatos = Files_ListarPorPattern(inputFolder, nome)
 
@@ -4785,6 +4795,130 @@ Private Function Files_BuildMultipartBody_Safe( _
 
     Files_BuildMultipartBody_Safe = allBytes
 End Function
+
+Public Function Files_Diag_ResolverWildcard( _
+    ByVal inputFolder As String, _
+    ByVal requestedPattern As String, _
+    ByVal wantLatest As Boolean, _
+    ByRef outResolvedName As String, _
+    ByRef outStatus As String, _
+    ByRef outDetail As String, _
+    ByRef outCandidatesLog As String _
+) As Boolean
+    On Error GoTo Falha
+
+    Files_Diag_ResolverWildcard = False
+    outResolvedName = ""
+    outStatus = ""
+    outDetail = ""
+    outCandidatesLog = ""
+
+    Dim folder As String
+    folder = Trim$(inputFolder)
+
+    Dim pattern As String
+    pattern = Trim$(requestedPattern)
+
+    If folder = "" Then
+        outStatus = "INPUT_FOLDER_EMPTY"
+        outDetail = "inputFolder vazio"
+        Exit Function
+    End If
+
+    If Dir(folder, vbDirectory) = "" Then
+        outStatus = "INPUT_FOLDER_NOT_FOUND"
+        outDetail = "inputFolder inexistente: " & folder
+        Exit Function
+    End If
+
+    If pattern = "" Then
+        outStatus = "PATTERN_EMPTY"
+        outDetail = "requestedPattern vazio"
+        Exit Function
+    End If
+
+    Dim dirMatches As Collection
+    Set dirMatches = Files_ListarPorPattern(folder, pattern)
+
+    Dim normalizedMatches As Collection
+    Set normalizedMatches = New Collection
+    If dirMatches.Count = 0 And InStr(1, pattern, "*", vbBinaryCompare) > 0 Then
+        Set normalizedMatches = Files_ListarPorWildcardNormalizado(folder, pattern)
+    End If
+
+    Dim resolvedPath As String
+    Dim resolvedName As String
+    Dim status As String
+    Dim candidatesLog As String
+    Dim overrideUsed As Boolean
+    Dim hadAmbiguity As Boolean
+
+    Call Files_ResolverFicheiro("", "FILES_DIAG_WILDCARD", folder, pattern, wantLatest, False, _
+        resolvedPath, resolvedName, status, candidatesLog, overrideUsed, hadAmbiguity)
+
+    outResolvedName = resolvedName
+    outStatus = status
+    outCandidatesLog = candidatesLog
+    outDetail = "pattern=" & pattern & _
+                " | latest=" & IIf(wantLatest, "SIM", "NAO") & _
+                " | dir_matches=" & CStr(dirMatches.Count) & _
+                " | normalized_matches=" & CStr(normalizedMatches.Count) & _
+                " | status=" & status
+
+    Files_Diag_ResolverWildcard = True
+    Exit Function
+
+Falha:
+    outStatus = "EXCEPTION"
+    outDetail = "Excecao Files_Diag_ResolverWildcard: " & Err.Number & " - " & Err.Description
+End Function
+
+Public Sub Files_Diag_TestarResolucaoWildcard( _
+    ByVal inputFolder As String, _
+    ByVal requestedPattern As String, _
+    Optional ByVal wantLatest As Boolean = True _
+)
+    On Error GoTo Falha
+
+    Dim promptId As String
+    promptId = "FILES_DIAG_WILDCARD"
+
+    Dim resolvedName As String
+    Dim status As String
+    Dim detail As String
+    Dim candidatesLog As String
+
+    Dim ok As Boolean
+    ok = Files_Diag_ResolverWildcard(inputFolder, requestedPattern, wantLatest, resolvedName, status, detail, candidatesLog)
+
+    If Not ok Then
+        If status = "INPUT_FOLDER_EMPTY" Then
+            Call Debug_Registar(0, promptId, "ERRO", "", "FILES_DIAG", detail, "Sugestao: passe uma pasta valida com os anexos da pipeline.")
+        ElseIf status = "INPUT_FOLDER_NOT_FOUND" Then
+            Call Debug_Registar(0, promptId, "ERRO", "", "FILES_DIAG", detail, "Sugestao: confirme PAINEL linha 2 e permissoes da pasta.")
+        ElseIf status = "PATTERN_EMPTY" Then
+            Call Debug_Registar(0, promptId, "ERRO", "", "FILES_DIAG", detail, "Sugestao: use um padrao como GUIA_DE_ESTILO*.pdf.")
+        Else
+            Call Debug_Registar(0, promptId, "ERRO", "", "FILES_DIAG", detail, "Rever Files_Diag_ResolverWildcard para o padrao indicado.")
+        End If
+        Exit Sub
+    End If
+
+    If status = "OK" Then
+        Call Debug_Registar(0, promptId, "INFO", "", "FILES_DIAG", detail & " | resolved=" & resolvedName, "OK")
+    ElseIf status = "AMBIGUOUS" Then
+        Call Debug_Registar(0, promptId, "ALERTA", "", "FILES_DIAG", detail & " | candidatos=" & candidatesLog, "Sugestao: refine o padrao, mantenha (latest) ou use nome completo do ficheiro.")
+    Else
+        Call Debug_Registar(0, promptId, "ERRO", "", "FILES_DIAG", detail, "Sugestao: confirme nome/extensao e se o ficheiro esta no INPUT Folder (raiz, sem subpastas).")
+    End If
+
+    Exit Sub
+
+Falha:
+    Call Debug_Registar(0, "FILES_DIAG_WILDCARD", "ERRO", "", "FILES_DIAG", _
+        "Excecao no Files_Diag_TestarResolucaoWildcard: " & Err.Number & " - " & Err.Description, _
+        "Rever Files_Diag_ResolverWildcard/Files_ResolverFicheiro para o padrao indicado.")
+End Sub
 
 ' ============================================================
 ' (NOVO) Sanitização de filename para multipart (ASCII_SAFE)

@@ -8,6 +8,10 @@ Option Explicit
 ' - Registar resultados PASS/FAIL/ALERTA no DEBUG para diagnóstico rápido.
 '
 ' Atualizações:
+' - 2026-02-18 | Codex | SelfTest automático para wildcard FILES (GUIA_DE_ESTILO)
+'   - Cria pasta temporária + PDFs dummy e valida resolução `GUIA_DE_ESTILO*.pdf` com latest.
+'   - Integra resultado PASS/FAIL no ciclo SelfTest_RunAll sem dependência de API.
+'   - Corrige invocação do teste de output-chain para chamada direta com parâmetros ByRef (status/candidatos).
 ' - 2026-02-16 | Codex | SelfTest de schema strict para File Output (required vs properties)
 '   - Adiciona macro pública SELFTEST_FILEOUTPUT_SCHEMA para validar alinhamento entre properties e required.
 '   - Integra o teste no SelfTest_RunAll com registo PASS/FAIL no DEBUG.
@@ -21,6 +25,7 @@ Option Explicit
 ' Funções e procedimentos (inventário público):
 ' - SelfTest_RunAll (Sub): rotina pública do módulo.
 ' - SELFTEST_FILEOUTPUT_SCHEMA (Sub): valida schema strict do manifest de File Output.
+' - SELFTEST_FILES_WILDCARD_RESOLUTION (Sub): valida resolução automática de wildcard FILES em pasta temporária.
 ' =============================================================================
 
 ' =============================================================================
@@ -74,7 +79,10 @@ Public Sub SelfTest_RunAll()
     ' 6) Fluxo register/resolve output->input
     SelfTest_OutputRegister_And_Resolve
 
-    ' 7) File Output json_schema strict (required alinhado com properties)
+    ' 7) Resolucao de wildcard FILES (pasta temporaria + dummy PDF)
+    SELFTEST_FILES_WILDCARD_RESOLUTION
+
+    ' 8) File Output json_schema strict (required alinhado com properties)
     SELFTEST_FILEOUTPUT_SCHEMA
 
     SelfTest_Log SEV_INFO, "SELFTEST_RUN", "Fim dos testes internos.", "OK"
@@ -259,6 +267,52 @@ End Sub
 
 
 
+Public Sub SELFTEST_FILES_WILDCARD_RESOLUTION()
+    On Error GoTo EH
+
+    Dim baseTemp As String
+    baseTemp = Trim$(Environ$("TEMP"))
+    If baseTemp = "" Then baseTemp = ThisWorkbook.Path
+
+    Dim testFolder As String
+    testFolder = baseTemp & "\PIPELINER_SELFTEST_FILES_WILDCARD"
+
+    Call SelfTest_EnsureFolder(testFolder)
+
+    Dim oldFile As String
+    Dim newFile As String
+    oldFile = testFolder & "\GUIA_DE_ESTILO_v1.pdf"
+    newFile = testFolder & "\GUIA_DE_ESTILO_Guia_Geracao_Noticias_LLM_v1_8_1_links_clicaveis.pdf"
+
+    Call SelfTest_WriteDummyPdf(oldFile, "v1")
+    Application.Wait Now + TimeSerial(0, 0, 1)
+    Call SelfTest_WriteDummyPdf(newFile, "v1_8_1")
+
+    Dim resolvedName As String
+    Dim status As String
+    Dim detail As String
+    Dim candidates As String
+    Dim okCall As Boolean
+
+    okCall = Files_Diag_ResolverWildcard(testFolder, "GUIA_DE_ESTILO*.pdf", True, resolvedName, status, detail, candidates)
+
+    If okCall And status = "OK" And StrComp(resolvedName, SelfTest_GetFileName(newFile), vbTextCompare) = 0 Then
+        SelfTest_Log SEV_INFO, "SELFTEST_FILES_WILDCARD", "WILDCARD_RESOLUTION PASS: " & detail & " | resolved=" & resolvedName, "OK"
+    Else
+        SelfTest_Log SEV_ERRO, "SELFTEST_FILES_WILDCARD", "WILDCARD_RESOLUTION FAIL: " & detail & " | resolved=" & resolvedName & " | candidates=" & candidates, "Validar matching de wildcard/normalizacao e regra (latest) no M09."
+    End If
+
+    On Error Resume Next
+    Kill oldFile
+    Kill newFile
+    RmDir testFolder
+    On Error GoTo 0
+    Exit Sub
+
+EH:
+    SelfTest_Log SEV_ERRO, "SELFTEST_FILES_WILDCARD", "Excecao no SELFTEST_FILES_WILDCARD_RESOLUTION: " & Err.Number & " - " & Err.Description, "Rever criacao de pasta temporaria e Files_Diag_ResolverWildcard."
+End Sub
+
 Public Sub SELFTEST_FILEOUTPUT_SCHEMA()
     On Error GoTo EH
 
@@ -383,7 +437,8 @@ End Sub
 
 Private Sub SelfTest_InvokeResolve(ByVal token As String, ByVal stepN As Long, ByRef resolvedPath As String, ByRef resolvedName As String, ByRef status As String, ByRef candidatos As String)
     On Error GoTo EH
-    Application.Run "Files_ResolverOutputToken", "SELFTEST_PIPE", "SELFTEST", stepN, token, resolvedPath, resolvedName, status, candidatos
+
+    Call Files_ResolverOutputToken("SELFTEST_PIPE", "SELFTEST", stepN, token, resolvedPath, resolvedName, status, candidatos)
     Exit Sub
 EH:
     status = "NOT_FOUND"
@@ -402,6 +457,44 @@ Private Function SelfTest_FindHeader(ByVal ws As Worksheet, ByVal headerName As 
         End If
     Next c
 Fim:
+End Function
+
+Private Sub SelfTest_EnsureFolder(ByVal folderPath As String)
+    If Trim$(folderPath) = "" Then Exit Sub
+    If Dir(folderPath, vbDirectory) <> "" Then Exit Sub
+    MkDir folderPath
+End Sub
+
+Private Sub SelfTest_WriteDummyPdf(ByVal fullPath As String, ByVal tag As String)
+    Dim ff As Integer
+    ff = FreeFile
+
+    Open fullPath For Output As #ff
+    Print #ff, "%PDF-1.4"
+    Print #ff, "1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj"
+    Print #ff, "2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj"
+    Print #ff, "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]/Contents 4 0 R>>endobj"
+    Print #ff, "4 0 obj<</Length 44>>stream"
+    Print #ff, "BT /F1 12 Tf 20 100 Td (SELFTEST " & tag & ") Tj ET"
+    Print #ff, "endstream endobj"
+    Print #ff, "xref"
+    Print #ff, "0 5"
+    Print #ff, "0000000000 65535 f "
+    Print #ff, "trailer<</Root 1 0 R/Size 5>>"
+    Print #ff, "startxref"
+    Print #ff, "0"
+    Print #ff, "%%EOF"
+    Close #ff
+End Sub
+
+Private Function SelfTest_GetFileName(ByVal fullPath As String) As String
+    Dim p As Long
+    p = InStrRev(fullPath, "\")
+    If p > 0 Then
+        SelfTest_GetFileName = Mid$(fullPath, p + 1)
+    Else
+        SelfTest_GetFileName = fullPath
+    End If
 End Function
 
 ' =============================================================================
