@@ -8,6 +8,9 @@ Option Explicit
 ' - Aplicar effective_mode, robustez multipart e utilitários de ficheiros para pipeline.
 '
 ' Atualizações:
+' - 2026-02-17 | Codex | Fallback flexível para wildcard em resolução de ficheiros
+'   - Mantém Dir como primeira tentativa para padrões com *.
+'   - Adiciona fallback por normalização de separadores (_, -, espaço) quando Dir devolve 0 candidatos.
 ' - 2026-02-15 | Codex | Correção de sintaxe na normalização de nome de ficheiro
 '   - Corrige escaping de aspas em Replace para evitar erro de compilação no VBA.
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
@@ -35,6 +38,8 @@ Option Explicit
 ' - Files_FNV32_LastDiag (Function): rotina pública do módulo.
 ' - Files_SHA256_LastDiag (Function): rotina pública do módulo.
 ' - Files_FNV32_Bytes (Function): rotina pública do módulo.
+' - Files_ListarPorWildcardNormalizado (Function): helper privado para fallback de wildcard por tokens normalizados.
+' - Files_MatchWildcardNormalizado (Function): helper privado para validação de padrão com * após normalização.
 ' =============================================================================
 
 ' ============================================================================
@@ -1601,6 +1606,10 @@ Private Sub Files_ResolverFicheiro( _
     If InStr(1, nome, "*", vbTextCompare) > 0 Then
         Dim candidatos As Collection
         Set candidatos = Files_ListarPorPattern(inputFolder, nome)
+
+        If candidatos.Count = 0 Then
+            Set candidatos = Files_ListarPorWildcardNormalizado(inputFolder, nome)
+        End If
 
         If candidatos.Count = 1 Then
             outFullPath = CStr(candidatos(1)("full_path"))
@@ -3920,6 +3929,102 @@ Private Function Files_ListarPorPattern(ByVal folder As String, ByVal pattern As
     Loop
 
     Set Files_ListarPorPattern = col
+End Function
+
+Private Function Files_ListarPorWildcardNormalizado(ByVal folder As String, ByVal wildcardPattern As String) As Collection
+    Dim col As New Collection
+
+    Dim normalizedPattern As String
+    normalizedPattern = Files_NormalizarNomeParaMatch(wildcardPattern)
+
+    Dim f As String
+    f = Dir(folder & "\*.*")
+
+    Do While f <> ""
+        Dim fp As String
+        fp = folder & "\" & f
+
+        If Not Files_IsDirectory(fp) Then
+            If Files_MatchWildcardNormalizado(normalizedPattern, Files_NormalizarNomeParaMatch(f)) Then
+                Dim d As Object
+                Set d = CreateObject("Scripting.Dictionary")
+                d("name") = f
+                d("full_path") = fp
+                d("last_modified") = Files_DataModificacao(fp)
+                d("size") = Files_TamanhoBytes(fp)
+                col.Add d
+            End If
+        End If
+
+        f = Dir()
+    Loop
+
+    Set Files_ListarPorWildcardNormalizado = col
+End Function
+
+Private Function Files_NormalizarNomeParaMatch(ByVal s As String) As String
+    Dim t As String
+    t = LCase$(Trim$(CStr(s)))
+    t = Replace(t, "_", " ")
+    t = Replace(t, "-", " ")
+
+    Do While InStr(1, t, "  ", vbBinaryCompare) > 0
+        t = Replace(t, "  ", " ")
+    Loop
+
+    Files_NormalizarNomeParaMatch = t
+End Function
+
+Private Function Files_MatchWildcardNormalizado(ByVal wildcardNorm As String, ByVal candidateNorm As String) As Boolean
+    Dim parts() As String
+    parts = Split(wildcardNorm, "*")
+
+    Dim startsWithStar As Boolean
+    Dim endsWithStar As Boolean
+    startsWithStar = (Left$(wildcardNorm, 1) = "*")
+    endsWithStar = (Right$(wildcardNorm, 1) = "*")
+
+    Dim idx As Long
+    idx = 1
+
+    Dim i As Long
+    For i = LBound(parts) To UBound(parts)
+        Dim token As String
+        token = Trim$(parts(i))
+
+        If token <> "" Then
+            Dim pos As Long
+            pos = InStr(idx, candidateNorm, token, vbTextCompare)
+            If pos = 0 Then
+                Files_MatchWildcardNormalizado = False
+                Exit Function
+            End If
+
+            If i = LBound(parts) And (Not startsWithStar) Then
+                If pos <> 1 Then
+                    Files_MatchWildcardNormalizado = False
+                    Exit Function
+                End If
+            End If
+
+            idx = pos + Len(token)
+        End If
+    Next i
+
+    If Not endsWithStar Then
+        For i = UBound(parts) To LBound(parts) Step -1
+            token = Trim$(parts(i))
+            If token <> "" Then
+                If Right$(candidateNorm, Len(token)) <> token Then
+                    Files_MatchWildcardNormalizado = False
+                    Exit Function
+                End If
+                Exit For
+            End If
+        Next i
+    End If
+
+    Files_MatchWildcardNormalizado = True
 End Function
 
 Private Function Files_ListarPorSubstring(ByVal folder As String, ByVal needle As String) As Collection
