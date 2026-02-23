@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-23 | Codex | Execução de Output Orders (EXECUTE: LOAD_CSV)
+'   - Executa parser/whitelist de ordens após File Output em respostas com sucesso.
+'   - Acrescenta logs de importação CSV em files_ops_log sem quebrar fluxo sem EXECUTE.
 ' - 2026-02-18 | Codex | Enriquecimento da status bar por fase operacional
 '   - Permite detalhar a fase atual (ex.: preparacao, upload de ficheiros, chamada API).
 '   - Atualiza a barra de estado antes de operacoes criticas para feedback em tempo real.
@@ -829,6 +832,18 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         fo_logSeguimento = FileOutput_ProcessAfterResponse(apiKey, outputFolderBase, pipelineNome, pipelineIndex, passo, prompt.Id, resultado, _
             fo_outputKind, fo_processMode, fo_autoSave, fo_overwriteMode, fo_prefixTmpl, fo_subfolderTmpl, _
             fo_pptxMode, fo_xlsxMode, fo_pdfMode, fo_imageMode, fo_filesUsedOut, fo_filesOpsOut)
+        Dim fo_executeOpsLog As String
+        fo_executeOpsLog = ""
+        If Trim$(resultado.Erro) = "" And resultado.httpStatus >= 200 And resultado.httpStatus < 300 Then
+            fo_executeOpsLog = OutputOrders_TryExecute(passo, prompt.Id, resultado.responseId, resultado.outputText, outputFolderBase, fo_filesOpsOut)
+            If Trim$(fo_executeOpsLog) <> "" Then
+                If Trim$(fo_filesOpsOut) <> "" Then
+                    fo_filesOpsOut = fo_filesOpsOut & " | " & fo_executeOpsLog
+                Else
+                    fo_filesOpsOut = fo_executeOpsLog
+                End If
+            End If
+        End If
 
         If Trim$(resultado.Erro) <> "" Then
             textoSeguimento = "[ERRO] " & resultado.Erro

@@ -345,3 +345,79 @@ Notas operacionais:
 ---
 
 > Este README é a referência de funcionamento do projeto. Guias de teste específicos (ex.: T3) devem viver como subseções operacionais ou documentação complementar, sem substituir a visão global do sistema.
+
+## 12. EXECUTE Orders (Output Orders)
+
+O PIPELINER suporta execução controlada de ordens pós-output, após resposta HTTP 2xx e sem erro.
+
+### 12.1 Whitelist e sintaxe suportada (v1.3)
+
+- Comando permitido: `LOAD_CSV`.
+- Formatos aceites:
+  - `EXECUTE: LOAD_CSV([ficheiro.csv])`
+  - `<EXECUTE: LOAD_CSV([ficheiro.csv])>`
+  - `EXECUTE: LOAD_CSV("ficheiro.csv")`
+  - `EXECUTE: LOAD_CSV(ficheiro.csv)`
+- Segurança:
+  - apenas `basename.csv`;
+  - rejeita `..`, `:`, `/`, `\`, `%`, `~`;
+  - rejeita comandos fora da whitelist.
+
+### 12.2 Fluxo LOAD_CSV
+
+1. Parser ignora ordens dentro de blocos de código (```...```).
+2. Resolve CSV automaticamente a partir de `downloadedFiles` e `OUTPUT Folder` (incluindo subpastas).
+3. Faz pré-check técnico:
+   - BOM UTF-8 (EF BB BF);
+   - presença de CR/LF reais dentro de campos quoted;
+   - `colsHint` pela linha de cabeçalho.
+4. Cria worksheet nova após `PAINEL` (ou no fim, se `PAINEL` não existir), com nome baseado no prefixo do ID da coluna A do CSV.
+5. Importa CSV por `QueryTables` (`;`, UTF-8), com fallback `OpenText`.
+6. Verifica importação (linhas/colunas/header) e regista diagnóstico.
+
+### 12.3 Logs
+
+- DEBUG:
+  - `OUTPUT_EXECUTE_FOUND`
+  - `OUTPUT_EXECUTE_PARSED`
+  - `OUTPUT_EXECUTE_UNKNOWN_CMD`
+  - `OUTPUT_EXECUTE_INVALID_FILENAME`
+  - `OUTPUT_EXECUTE_FILE_NOT_FOUND`
+  - `OUTPUT_EXECUTE_CSV_PRECHECK`
+  - `OUTPUT_EXECUTE_SHEET_CREATED`
+  - `OUTPUT_EXECUTE_CSV_IMPORTED`
+  - `OUTPUT_EXECUTE_VERIFIED`
+  - `OUTPUT_EXECUTE_IMPORT_FAIL`
+- Seguimento (`files_ops_log`): append com separador ` | ` e frase:
+  - `CREATED AND LOADED Excel Sheet <sheetName> importing <nome_do_ficheiro.csv>, and verified.`
+
+### 12.4 Patch proposto para prompt CatalogoFromTxt v1.3
+
+Recomendação de alteração de prompt:
+
+- Novo parâmetro: `AUTO_IMPORT_CSV_TO_SHEET: Sim|Não` (default: `Não`).
+- Manifesto final curto:
+  - `EXPORT_OK: true|false`
+  - `FILE_NAME: <nome.csv>`
+  - `DELIMITER: ;`
+  - `ENCODING: UTF-8-BOM`
+  - `COLS: <n>`
+  - `ROWS: <n>`
+- Se `AUTO_IMPORT_CSV_TO_SHEET=Sim`, emitir linha isolada:
+  - `EXECUTE: LOAD_CSV([<nome_exacto_do_csv>])`
+- Mitigação operacional:
+  - anexar apenas 1 CSV final;
+  - não gerar `.txt` auxiliares;
+  - remover temporários no CI antes de concluir;
+  - exportar CSV com `utf-8-sig` e normalizar quebras em células para literal `\n`.
+
+### 12.5 DOCUMENTO_ORIENTADOR e FORMULARIO_DE_PROMPTS
+
+Se estes artefactos existirem no workbook/documentação da equipa, aplicar:
+
+- DOCUMENTO_ORIENTADOR:
+  - secção “EXECUTE Orders” com whitelist, segurança, logs e troubleshooting.
+- FORMULARIO_DE_PROMPTS:
+  - campo/checkbox “Emitir EXECUTE após exportação?” com valores `OFF | LOAD_CSV_TO_NEW_SHEET`;
+  - opção “Nome da folha: AUTO (prefixo do ID) / override”; 
+  - nota de segurança para permitir apenas `basename.csv`.
