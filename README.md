@@ -259,6 +259,28 @@ Para ContextKV, `CAPTURE_MISS` significa que o output não trouxe rótulos captu
 
 Nota: `tools` continua como chave proibida em `Config extra` (é ignorada com alerta), para preservar a coerência com as colunas/lógica dedicadas.
 
+### Diagnóstico rápido: `Erro VBA: The operation timed out`
+
+Quando o `Seguimento` mostra `HTTP Status=0` e `Output=[ERRO] Erro VBA: The operation timed out`, a falha tende a acontecer no cliente HTTP (tempo de espera do host/engine) e não necessariamente num erro de validação do payload.
+
+Checklist recomendado (ordem prática):
+
+1. Confirmar no `DEBUG` se existe `M05_PAYLOAD_CHECK` com `has_input_file=SIM/NAO`, `web_search=...`, `model=...` e `payload_len=...` para validar se o pedido final foi mesmo montado.
+2. Confirmar se existe `M05_PAYLOAD_DUMP` e abrir o `payload.json` gravado para inspeção local (estrutura JSON, tamanho e blocos `tools`/`input`).
+3. Se `process_mode=code_interpreter`, confirmar se o run devolveu `rawResponseJson`; evento `M10_CI_RAW_MISSING` indica que o fluxo CI não trouxe corpo bruto para pós-processamento e deve ser tratado como pista de diagnóstico, não como causa raiz isolada.
+4. Medir tamanho de entrada efetiva (`REQ_INPUT_JSON len=...`): payloads muito grandes (texto + anexos + instruções extensas) aumentam risco de timeout no host VBA.
+5. Repetir teste com redução controlada de carga:
+   - remover temporariamente `process_mode: code_interpreter`;
+   - reduzir anexos a 1 ficheiro essencial;
+   - testar com prompt curto (smoke test) no mesmo modelo.
+6. Se o timeout persistir com payload pequeno, validar conectividade e engine HTTP ativa (WinHTTP/MSXML), além de quota/latência do endpoint.
+
+Sinais úteis para separar causas:
+
+- `FILES ... Anexacao OK` + `has_input_file=SIM` + `timeout` => anexação concluída, falha provável em execução/resposta.
+- `HTTP 4xx/5xx` com body => erro API explícito (não timeout de cliente).
+- `timeout` sem `M05_PAYLOAD_CHECK` => falha antes da montagem final (inspecionar parsing/configuração).
+
 SelfTests recomendados para este cenário:
 
 - `SelfTest_WebSearchGating` (com/sem anexos; validar que a mensagem de `M05_PAYLOAD_CHECK` permanece `web_search=ADICIONADO_AUTO`);
@@ -273,6 +295,54 @@ Macros utilitárias para troubleshooting rápido de catálogo + Config extra:
 - `TOOL_RunConfigExtraSequentialDiagnostics` (M15): executa uma bateria sequencial de casos de `Config extra`, converte via parser oficial (`ConfigExtra_Converter`), injeta fragmento de File Output (`json_schema`) e valida a estrutura JSON final antes do HTTP.
 - `Files_Diag_TestarResolucaoWildcard` (M09): testa resolução de anexos `FILES:` com wildcard (ex.: `GUIA_DE_ESTILO*.pdf`) e regista no DEBUG quantos candidatos foram encontrados por `Dir` e por fallback normalizado, além do `status` final (`OK`/`AMBIGUOUS`/`NOT_FOUND`).
 - Resultado do diagnóstico fica em `CONFIG_EXTRA_TESTS` + linhas `INFO/ERRO` no `DEBUG` (`M15_CONFIG_EXTRA_DIAG`), com detalhe de causa (ex.: `fecho_sem_abertura`).
+
+
+### Padrão recomendado para mensagens de aviso/erro
+
+Para tornar mensagens mais informativas e acionáveis, usar sempre 4 partes:
+
+- **PROBLEMA**: o que falhou (facto observável, sem ambiguidade);
+- **IMPACTO**: consequência direta na execução;
+- **AÇÃO**: próximo passo objetivo para recuperação;
+- **DETALHE** (opcional): contexto técnico curto (ex.: `payload_len`, `http_status`, `file_id`).
+
+Formato alvo (1 linha):
+
+`[SCOPE] PROBLEMA=... | IMPACTO=... | ACAO=... | DETALHE=...`
+
+No VBA, o módulo `M16_ErrorMessageFormatter` disponibiliza helpers (`Diag_Format`, `Diag_WithRetryHint`, `Diag_ErrorFingerprint`) para padronizar este formato sem expor segredos.
+
+
+### Explicação didática (molde para leigos)
+
+Quando uma mensagem de erro aparece no DEBUG, quem não é técnico precisa de uma leitura "traduzida".
+Use este **molde de 5 blocos** logo abaixo da mensagem técnica:
+
+1. **O que aconteceu (em linguagem simples)**
+2. **Porque isto importa (impacto prático)**
+3. **O que fazer agora (passo a passo curto)**
+4. **Como confirmar que ficou resolvido**
+5. **Quando pedir ajuda e que evidências levar**
+
+Exemplo didático para timeout:
+
+- **O que aconteceu:** o sistema enviou o pedido, mas não recebeu resposta a tempo.
+- **Porque importa:** este passo da pipeline ficou incompleto e os seguintes não devem avançar sem validação.
+- **O que fazer agora:** (a) repetir com menos anexos, (b) reduzir texto da prompt, (c) testar sem `process_mode=code_interpreter`.
+- **Como confirmar resolução:** o `Seguimento` passa a ter HTTP 2xx e o `Output` deixa de mostrar `The operation timed out`.
+- **Quando pedir ajuda:** se falhar 3 vezes com payload pequeno; anexar `M05_PAYLOAD_CHECK`, `REQ_INPUT_JSON len` e `M05_PAYLOAD_DUMP`.
+
+Exemplo didático para erro de validação de payload:
+
+- **O que aconteceu:** o pedido foi rejeitado por formato inválido.
+- **Porque importa:** o modelo não chegou a processar conteúdo; é necessário corrigir estrutura JSON/config extra.
+- **O que fazer agora:** validar chaves/aspas no `Config extra`, remover trailing commas e repetir teste curto.
+- **Como confirmar resolução:** aparece HTTP 2xx e desaparece o erro `invalid_json`/`invalid_json_schema`.
+- **Quando pedir ajuda:** se persistir após correção local; partilhar fingerprint do erro e trecho mínimo do payload.
+
+Regra prática de escrita para equipas mistas (técnico + negócio):
+- 1 linha técnica padronizada (`PROBLEMA|IMPACTO|ACAO|DETALHE`) +
+- 3–5 linhas didáticas no molde acima.
 
 ### Seguimento
 
