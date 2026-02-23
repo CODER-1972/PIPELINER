@@ -293,6 +293,29 @@ Usar para diagnosticar:
 - limites de execução;
 - eventos de captura/injeção.
 
+### Matriz de troubleshooting (10 checks com mensagens DEBUG curtas)
+
+Objetivo: separar claramente onde a falha ocorre no ciclo completo de execução (montagem de request → API → exportação → consumo local).
+
+| # | Check (o que validar) | Evidência esperada | Mensagem DEBUG curta (sugestão) |
+|---|---|---|---|
+| 1 | Prompt resolvido no catálogo | ID existe, folha prefixo confere, bloco de 5 linhas lido sem erro | `CHK01_PROMPT_OK` |
+| 2 | Config efetiva montada | modelo/temperatura/tokens resolvidos com defaults+overrides | `CHK02_CONFIG_OK` |
+| 3 | `Config extra` parseado sem bloqueio | fragmento JSON válido; linhas inválidas apenas com alerta | `CHK03_CFG_EXTRA_OK` |
+| 4 | `Next PROMPT` consistente | `AUTO/default/allowed` válidos e compatíveis com fallback | `CHK04_NEXT_OK` |
+| 5 | FILES resolvidos no INPUT Folder | paths resolvidos sem fuga de diretório; `required` respeitado | `CHK05_FILES_RESOLVE_OK` |
+| 6 | Upload/attach técnico concluído | `file_id` presente quando `FILE_ID`; `input_image`/`input_file` no payload | `CHK06_ATTACH_OK` |
+| 7 | Request enviado com HTTP 2xx | status 200/201 e `response_id` registado | `CHK07_HTTP_OK` |
+| 8 | Output parseável para decisão | `NEXT_PROMPT_ID` extraído (ou default aplicado sem erro) | `CHK08_OUTPUT_PARSE_OK` |
+| 9 | Exportação para OUTPUT Folder concluída | ficheiro final com path auditável e nome sem colisão silenciosa | `CHK09_EXPORT_OK` |
+| 10 | Consumo local/COM concluído (se aplicável) | `FileExists=SIM` no destino final e abertura/uso sem timeout | `CHK10_LOCAL_CONSUME_OK` |
+
+Convenção curta recomendada para falhas, mantendo logs acionáveis:
+
+- `CHKxx_*_FAIL` + causa direta (`NOT_FOUND`, `INVALID_JSON`, `HTTP_4XX`, `TIMEOUT_COM`, `PATH_BLOCKED`);
+- `CHKxx_*_WARN` para degradações controladas (ex.: fallback aplicado com sucesso);
+- evitar dumps longos no DEBUG; detalhar apenas identificadores úteis (ID prompt, status HTTP, nome ficheiro, step).
+
 Notas adicionais para File Output + Structured Outputs (`json_schema`):
 
 - quando `structured_outputs_mode=json_schema` e `strict=true`, o schema do manifest deve manter `required` alinhado com todas as chaves definidas em `properties` (incluindo chaves como `subfolder` quando existirem);
