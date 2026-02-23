@@ -8,6 +8,10 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-02-23 | Codex | Fallback adicional no modo CI com nomes de ficheiro no output textual
+'   - Extrai nomes de ficheiro do `output_text` quando faltam `container_file_citation`.
+'   - Em fallback por listagem do container, aplica filtro preferencial por nomes esperados para reduzir downloads desalinhados.
+'   - Regista diagnóstico dedicado (`M10_CI_TEXT_FILENAME_HINTS`, `M10_CI_TEXT_FILTER_*`).
 ' - 2026-02-17 | Codex | Correção de fecho extra no schema JSON de File Output
 '   - Remove um `}` excedente na montagem de `FileOutput_ManifestJsonSchema`.
 '   - Evita preflight estrutural `fecho_sem_abertura` ao combinar Config Extra + File Output.
@@ -504,6 +508,15 @@ Private Function Process_CodeInterpreter( _
     End If
     Dim ciList As Collection
     Set ciList = CI_ExtractCitations(rawJson)
+
+    Dim expectedNames As Collection
+    Set expectedNames = CI_ExtractExpectedFileNamesFromOutputText(Nz(resultado.outputText))
+    If expectedNames.Count > 0 Then
+        Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_TEXT_FILENAME_HINTS", _
+            "output_text sugeriu " & CStr(expectedNames.Count) & " nome(s): " & CI_JoinCollection(expectedNames, " | "), _
+            "Usado como filtro preferencial quando houver fallback por listagem de container.")
+    End If
+
     Dim usedFallback As Boolean
     usedFallback = False
     ' ------------------------------------------------------------
@@ -520,7 +533,7 @@ Private Function Process_CodeInterpreter( _
         If Trim$(containerFromCall) = "" Then
             Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_NO_CONTAINER_ID", _
                 "Sem container_file_citation e sem container_id em code_interpreter_call.", _
-                "Isto sugere que o Code Interpreter não foi realmente executado, ou o formato mudou.")
+                "Isto sugere que o Code Interpreter não foi realmente executado, ou o formato mudou. Se houver nomes no output textual, use-os para reforçar o prompt e repetir.")
             Process_CodeInterpreter = "[FILE OUTPUT/CI] Sem container_file_citation e sem container_id (code_interpreter_call)."
             Exit Function
         End If
@@ -549,6 +562,23 @@ Private Function Process_CodeInterpreter( _
         Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_CONTAINER_LIST", _
             "container_id=" & containerFromCall & " | total=" & CStr(files.Count) & " | elegíveis=" & CStr(eligible), _
             "Elegíveis = extensões típicas (docx/xlsx/pptx/pdf/imagens/txt/csv/...).")
+        If expectedNames.Count > 0 And ciList2.Count > 0 Then
+            Dim filtered As Collection
+            Dim matched As Long
+            Set filtered = CI_FilterCitationsByExpectedNames(ciList2, expectedNames, matched)
+            If matched > 0 Then
+                Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_TEXT_FILTER_APPLIED", _
+                    "Filtro por output_text aplicado no fallback CI | esperados=" & CStr(expectedNames.Count) & _
+                    " | matched=" & CStr(matched) & " | antes=" & CStr(ciList2.Count) & " | depois=" & CStr(filtered.Count), _
+                    "Reduz risco de descarregar ficheiros não pretendidos quando faltam citations.")
+                Set ciList2 = filtered
+            Else
+                Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_TEXT_FILTER_MISS", _
+                    "Output textual sugeriu nomes de ficheiro, mas nenhum foi encontrado na listagem do container.", _
+                    "Verifique se os nomes no output final coincidem com os artefactos efetivamente gravados no CI.")
+            End If
+        End If
+
         If ciList2.Count = 0 Then
             Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_CONTAINER_EMPTY", _
                 "Listagem do container devolveu 0 ficheiros elegíveis para download.", _
@@ -1784,6 +1814,107 @@ Private Function CI_BuildCitationsFromContainerList(ByVal containerId As String,
     Exit Function
 
 Falha:
+End Function
+
+Private Function CI_ExtractExpectedFileNamesFromOutputText(ByVal outputText As String) As Collection
+    Set CI_ExtractExpectedFileNamesFromOutputText = New Collection
+    On Error GoTo Falha
+
+    Dim txt As String
+    txt = Replace(Replace(Nz(outputText), vbCr, " "), vbLf, " ")
+    If Trim$(txt) = "" Then Exit Function
+
+    Dim seen As Object
+    Set seen = CreateObject("Scripting.Dictionary")
+
+    Dim re As Object, ms As Object, m As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = True
+    re.IgnoreCase = True
+
+    ' Markdown links: [texto](ficheiro.ext)
+    re.Pattern = "\[[^\]]*\]\(([^\)\s]+\.(docx|pptx|xlsx|pdf|txt|md|csv|png|jpg|jpeg|webp|gif|zip|json))\)"
+    Set ms = re.Execute(txt)
+    For Each m In ms
+        Call CI_AddExpectedFileName(CI_ExtractExpectedFileNamesFromOutputText, seen, CI_PathBaseName(CStr(m.SubMatches(0))))
+    Next m
+
+    ' Nomes entre aspas
+    re.Pattern = """""([^""]+\.(docx|pptx|xlsx|pdf|txt|md|csv|png|jpg|jpeg|webp|gif|zip|json))"""""
+    Set ms = re.Execute(txt)
+    For Each m In ms
+        Call CI_AddExpectedFileName(CI_ExtractExpectedFileNamesFromOutputText, seen, CI_PathBaseName(CStr(m.SubMatches(0))))
+    Next m
+
+    ' Tokens soltos com extensão
+    re.Pattern = "\b([A-Za-z0-9_\-\.]+\.(docx|pptx|xlsx|pdf|txt|md|csv|png|jpg|jpeg|webp|gif|zip|json))\b"
+    Set ms = re.Execute(txt)
+    For Each m In ms
+        Call CI_AddExpectedFileName(CI_ExtractExpectedFileNamesFromOutputText, seen, CI_PathBaseName(CStr(m.SubMatches(0))))
+    Next m
+
+    Exit Function
+Falha:
+End Function
+
+Private Sub CI_AddExpectedFileName(ByRef coll As Collection, ByRef seen As Object, ByVal fileName As String)
+    On Error GoTo Falha
+    Dim base As String
+    base = Trim$(CStr(fileName))
+    If base = "" Then Exit Sub
+    If Not CI_ShouldDownloadPath(base) Then Exit Sub
+
+    Dim k As String
+    k = LCase$(base)
+    If seen.exists(k) Then Exit Sub
+
+    seen.Add k, True
+    coll.Add base
+    Exit Sub
+Falha:
+End Sub
+
+Private Function CI_FilterCitationsByExpectedNames(ByVal citations As Collection, ByVal expectedNames As Collection, ByRef outMatched As Long) As Collection
+    Set CI_FilterCitationsByExpectedNames = New Collection
+    outMatched = 0
+    On Error GoTo Falha
+
+    Dim expected As Object
+    Set expected = CreateObject("Scripting.Dictionary")
+
+    Dim i As Long
+    For i = 1 To expectedNames.Count
+        expected(LCase$(Trim$(CStr(expectedNames(i))))) = True
+    Next i
+
+    For i = 1 To citations.Count
+        Dim it As Object
+        Set it = citations(i)
+
+        Dim nm As String
+        nm = LCase$(Trim$(CStr(it("filename"))))
+        If expected.exists(nm) Then
+            CI_FilterCitationsByExpectedNames.Add it
+            outMatched = outMatched + 1
+        End If
+    Next i
+
+    Exit Function
+Falha:
+End Function
+
+Private Function CI_JoinCollection(ByVal coll As Collection, Optional ByVal delim As String = ", ") As String
+    On Error GoTo Falha
+    Dim s As String
+    Dim i As Long
+    For i = 1 To coll.Count
+        If s <> "" Then s = s & delim
+        s = s & CStr(coll(i))
+    Next i
+    CI_JoinCollection = s
+    Exit Function
+Falha:
+    CI_JoinCollection = ""
 End Function
 
 Private Function CI_PathBaseName(ByVal p As String) As String

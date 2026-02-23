@@ -268,12 +268,13 @@ Checklist recomendado (ordem prática):
 1. Confirmar no `DEBUG` se existe `M05_PAYLOAD_CHECK` com `has_input_file=SIM/NAO`, `web_search=...`, `model=...` e `payload_len=...` para validar se o pedido final foi mesmo montado.
 2. Confirmar se existe `M05_PAYLOAD_DUMP` e abrir o `payload.json` gravado para inspeção local (estrutura JSON, tamanho e blocos `tools`/`input`).
 3. Se `process_mode=code_interpreter`, confirmar se o run devolveu `rawResponseJson`; evento `M10_CI_RAW_MISSING` indica que o fluxo CI não trouxe corpo bruto para pós-processamento e deve ser tratado como pista de diagnóstico, não como causa raiz isolada.
-4. Medir tamanho de entrada efetiva (`REQ_INPUT_JSON len=...`): payloads muito grandes (texto + anexos + instruções extensas) aumentam risco de timeout no host VBA.
-5. Repetir teste com redução controlada de carga:
+4. Se aparecer `M10_CI_NO_CITATION`, confirmar se o output textual trouxe nomes de ficheiro esperados; o fallback atual tenta extrair esses nomes (`M10_CI_TEXT_FILENAME_HINTS`) e, quando possível, filtra a listagem do container por correspondência de filename (`M10_CI_TEXT_FILTER_APPLIED`).
+5. Medir tamanho de entrada efetiva (`REQ_INPUT_JSON len=...`): payloads muito grandes (texto + anexos + instruções extensas) aumentam risco de timeout no host VBA.
+6. Repetir teste com redução controlada de carga:
    - remover temporariamente `process_mode: code_interpreter`;
    - reduzir anexos a 1 ficheiro essencial;
    - testar com prompt curto (smoke test) no mesmo modelo.
-6. Se o timeout persistir com payload pequeno, validar conectividade e engine HTTP ativa (WinHTTP/MSXML), além de quota/latência do endpoint.
+7. Se o timeout persistir com payload pequeno, validar conectividade e engine HTTP ativa (WinHTTP/MSXML), além de quota/latência do endpoint.
 
 Sinais úteis para separar causas:
 
