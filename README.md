@@ -338,7 +338,64 @@ Exemplo didático para erro de validação de payload:
 - **Porque importa:** o modelo não chegou a processar conteúdo; é necessário corrigir estrutura JSON/config extra.
 - **O que fazer agora:** validar chaves/aspas no `Config extra`, remover trailing commas e repetir teste curto.
 - **Como confirmar resolução:** aparece HTTP 2xx e desaparece o erro `invalid_json`/`invalid_json_schema`.
-- **Quando pedir ajuda:** se persistir após correção local; partilhar fingerprint do erro e trecho mínimo do payload.
+
+
+### Diagnóstico rápido: `output_kind:file` + `process_mode:code_interpreter` com saída "desalinhada"
+
+Sintoma típico no `Seguimento`/`DEBUG`:
+
+- `HTTP Status=200`, mas o texto devolvido não respeita o contrato pedido (IDs de outro workflow, secções inesperadas, etc.);
+- `M10_CI_NO_CITATION` seguido de `M10_CI_CONTAINER_LIST` (sem `container_file_citation` explícita no output);
+- `OUTPUT_EXECUTE_FOUND directives=0` (sem diretiva de ficheiro para o pós-processador);
+- `files_ops_log` mostra download fallback de um ficheiro já existente no container (por exemplo, um anexo de entrada), em vez de artefacto novo.
+
+Porque acontece:
+
+1. `output_kind:file` + `process_mode:code_interpreter` força o modelo a operar via CI; se a prompt não impuser um contrato mínimo de saída na conversa (ex.: "APENAS 2 linhas: link sandbox + ok"), o modelo pode responder em Markdown livre.
+2. Sem `container_file_citation`/diretiva explícita, o motor entra em fallback e tenta "adivinhar" um ficheiro elegível no container.
+3. Esse fallback pode apanhar um ficheiro de entrada (já montado no container) e registá-lo como output, criando falsa perceção de sucesso funcional.
+
+Checklist objetivo:
+
+1. Confirmar no `DEBUG` a sequência `M10_CI_NO_CITATION` + `M10_CI_CONTAINER_LIST` + `OUTPUT_EXECUTE_FOUND directives=0`.
+2. Confirmar no `Seguimento` se `files_used`/`files_ops_log` apontam para ficheiro que já existia como input (mesmo `file_id` ou nome prefixed por `file-...`).
+3. Abrir o `rawResponseJson` e validar se o `output_text` contém o conteúdo esperado para o prompt corrente (IDs, versão e domínio corretos).
+4. Se houver desalinhamento, reforçar a prompt com:
+   - contrato de saída mínimo e determinístico na conversa;
+   - instrução explícita para criar o artefacto e devolver link `sandbox:/mnt/data/...`;
+   - proibição de blocos extra fora do formato pedido.
+5. Para teste de isolamento, correr 1 execução sem `process_mode:code_interpreter` (texto puro) e comparar aderência ao formato antes de reativar CI.
+
+**Quando pedir ajuda:** se persistir após correção local; partilhar fingerprint do erro e trecho mínimo do payload.
+
+#### Patch recomendado de prompt (saída fechada e eficaz)
+
+Para reduzir deriva de formato quando `process_mode:code_interpreter` está ativo, adicionar este bloco no fim do **Texto prompt**:
+
+```text
+CONTRATO DE SAÍDA (OBRIGATÓRIO — BLOQUEANTE)
+1) Cria exatamente 2 ficheiros em /mnt/data:
+   - PROMPTS_PIPELINER_{{YYYYMMDD}}_v{{X}}.txt
+   - PROMPTS_PIPELINER_{{YYYYMMDD}}_v{{X}}_RELATORIO.docx
+2) Se não conseguires criar ambos, NÃO inventes links e devolve fallback textual conforme formato abaixo.
+3) Na conversa, devolve APENAS um dos formatos permitidos:
+
+FORMATO A (sucesso com ficheiros):
+[Descarregar TXT](sandbox:/mnt/data/PROMPTS_PIPELINER_{{YYYYMMDD}}_v{{X}}.txt)
+[Descarregar DOCX](sandbox:/mnt/data/PROMPTS_PIPELINER_{{YYYYMMDD}}_v{{X}}_RELATORIO.docx)
+ok
+
+FORMATO B (fallback sem ficheiros):
+FICHEIRO_TXT_BEGIN
+...conteúdo completo...
+FICHEIRO_TXT_END
+RELATORIO_WORD_PARA_COLAR_BEGIN
+...conteúdo humano...
+RELATORIO_WORD_PARA_COLAR_END
+
+4) É proibido devolver qualquer texto fora desses formatos (sem preâmbulo, sem explicações extra).
+5) Antes de responder, valida: (a) ficheiros existem; (b) size_bytes > 0; (c) nomes finais correspondem ao padrão pedido.
+```
 
 Regra prática de escrita para equipas mistas (técnico + negócio):
 - 1 linha técnica padronizada (`PROBLEMA|IMPACTO|ACAO|DETALHE`) +

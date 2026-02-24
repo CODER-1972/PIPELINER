@@ -501,3 +501,6 @@ Se começar a ficar demasiado grande:
 - Em erros `The operation timed out`, registar e cruzar sempre quatro sinais mínimos de diagnóstico (`M05_PAYLOAD_CHECK`, `REQ_INPUT_JSON len`, `M05_PAYLOAD_DUMP`, `M10_CI_RAW_MISSING`) antes de concluir causa raiz; isto evita confundir timeout de transporte com erro de schema/payload.
 - Em mensagens de DEBUG para incidentes operacionais, usar formato estável de 1 linha (`PROBLEMA`, `IMPACTO`, `ACAO`, `DETALHE`) para reduzir ambiguidade e acelerar triagem por filtro textual.
 - Quando o erro tiver impacto operacional para utilizadores não técnicos, complementar a linha técnica com explicação didática curta (o que aconteceu, impacto, próximos passos e confirmação de resolução).
+- Quando `output_kind:file` e `process_mode:code_interpreter` estiverem ativos, exigir contrato mínimo de saída na conversa (ex.: link `sandbox:/mnt/data/...` + `ok`) e validar no DEBUG se houve `container_file_citation`; sem isso, tratar como risco de fallback ambíguo.
+- Se ocorrer `M10_CI_NO_CITATION` com fallback por listagem do container, validar se o ficheiro escolhido não é um input pré-existente (nome/file_id reaproveitado); em caso positivo, registar alerta de “falso sucesso de output” e impedir conclusão silenciosa.
+
