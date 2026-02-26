@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-26 | Codex | STOP passa a encerrar contagem de Row n de z no PAINEL
+'   - Ajusta Painel_ContarPromptsPlaneados para terminar no primeiro STOP encontrado.
+'   - Evita que IDs residuais abaixo de STOP inflem o total mostrado na status bar.
 ' - 2026-02-26 | Codex | Lookup robusto de IDs no catálogo para evitar STOP falso
 '   - Adiciona fallback por varrimento normalizado de IDs quando o Find exato não encontra a célula.
 '   - Normaliza quebras de linha/NBSP/TAB em IDs para tolerar colagens de DOCX/CSV com lixo invisível.
@@ -1120,13 +1123,7 @@ Private Function Painel_ContarPromptsPlaneados(ByVal wsPainel As Worksheet, ByVa
             End If
         End If
 
-        If Painel_EhSTOP(v) Then
-            If Painel_ExistePromptValidoAbaixo(wsPainel, colIniciar, r + 1) Then
-                GoTo ProximaLinha
-            Else
-                Exit For
-            End If
-        End If
+        If Painel_EhSTOP(v) Then Exit For
 
         total = total + 1
 ProximaLinha:
