@@ -85,6 +85,7 @@ Comportamentos esperados:
 - limpeza de DEBUG da execução anterior;
 - status bar com progresso de execução.
 - durante cada passo, a status bar inclui fase operacional antes da execução (ex.: `A preparar passo`, `Uploading file`, `A executar prompt`).
+- a status bar também mostra a posição da lista no PAINEL no formato `Row n de z` (em que `z` conta prompts da coluna INICIAR até `STOP`, excluindo o próprio `STOP`).
 
 ## 3.2 Config
 
