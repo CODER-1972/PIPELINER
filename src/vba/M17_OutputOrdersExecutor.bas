@@ -9,6 +9,9 @@ Option Explicit
 ' - Importar CSV para nova worksheet com logging completo em DEBUG e resumo para Seguimento.
 '
 ' AtualizaÃ§Ãµes:
+' - 2026-02-26 | Codex | Corrige dependÃªncias internas do SelfTest
+'   - Adiciona helpers locais EnsureFolder e WriteTextUTF8 usados pela bateria T1..T9.
+'   - Remove acoplamento implÃ­cito a helpers Private de outros mÃ³dulos.
 ' - 2026-02-23 | Codex | ImplementaÃ§Ã£o inicial de Output Orders (v1.3)
 '   - Adiciona parser de linhas EXECUTE com tolerÃ¢ncia a variantes seguras.
 '   - Implementa LOAD_CSV com resoluÃ§Ã£o automÃ¡tica de ficheiro, prÃ©-check e importaÃ§Ã£o.
@@ -761,4 +764,27 @@ Private Sub WriteAnsiText(ByVal filePath As String, ByVal txt As String)
     Open filePath For Output As #ff
     Print #ff, txt
     Close #ff
+End Sub
+
+Private Sub EnsureFolder(ByVal folderPath As String)
+    On Error Resume Next
+    If Len(Trim$(folderPath)) = 0 Then Exit Sub
+    If Len(Dir$(folderPath, vbDirectory)) = 0 Then MkDir folderPath
+    On Error GoTo 0
+End Sub
+
+Private Sub WriteTextUTF8(ByVal filePath As String, ByVal txt As String)
+    On Error GoTo EH
+    Dim st As Object
+    Set st = CreateObject("ADODB.Stream")
+    st.Type = 2
+    st.Charset = "utf-8"
+    st.Open
+    st.WriteText txt
+    st.SaveToFile filePath, 2
+    st.Close
+    Exit Sub
+EH:
+    On Error Resume Next
+    If Not st Is Nothing Then st.Close
 End Sub
