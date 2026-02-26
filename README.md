@@ -379,6 +379,7 @@ Checklist objetivo:
    - instrução explícita para criar o artefacto e devolver link `sandbox:/mnt/data/...`;
    - proibição de blocos extra fora do formato pedido.
 5. Para teste de isolamento, correr 1 execução sem `process_mode:code_interpreter` (texto puro) e comparar aderência ao formato antes de reativar CI.
+6. Se a pipeline terminar logo no 1.º passo com `STOP` inesperado, validar no catálogo se o `ID` da coluna A não contém caracteres invisíveis (quebras de linha, TAB, NBSP) vindos de colagens DOCX/CSV. O motor agora faz fallback por comparação normalizada, mas esta verificação continua útil para higiene de dados.
 
 **Quando pedir ajuda:** se persistir após correção local; partilhar fingerprint do erro e trecho mínimo do payload.
 
