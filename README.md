@@ -112,6 +112,10 @@ Cada folha contém prompts executáveis. O prefixo do ID deve corresponder ao no
 
 Folha de auditoria de ficheiros (upload/reutilização/download/output), quando o módulo de files está ativo.
 
+Notas de layout operacional:
+- o separador visual entre runs é uma linha própria com fundo preto e altura fixa de **6 pt**;
+- as linhas de registo (não separadoras) são sempre forçadas para altura normal legível (mínimo 15 pt), evitando herança da altura do separador.
+
 ---
 
 ## 4. Modelo de IDs e catálogo de prompts

@@ -8,6 +8,9 @@ Option Explicit
 ' - Aplicar effective_mode, robustez multipart e utilitários de ficheiros para pipeline.
 '
 ' Atualizações:
+' - 2026-02-26 | Codex | Normalização visual de alturas na FILES_MANAGEMENT
+'   - Garante altura mínima para linhas de registo (não separadoras) para evitar herança visual de 6 pt.
+'   - Mantém separador por run com altura fixa de 6 pt e registos com altura normal legível.
 ' - 2026-02-18 | Codex | Macro de diagnóstico para wildcard FILES (caso GUIA_DE_ESTILO)
 '   - Adiciona rotina pública para testar resolução determinística de padrões com `*` e `(latest)`.
 '   - Extrai lógica para função reutilizável (M12 SelfTest automático) e regista contagens de candidatos.
@@ -131,6 +134,7 @@ Private gLastFNV32Diag As String
 Private Const SHEET_FILES As String = "FILES_MANAGEMENT"
 Private Const SHEET_CONFIG As String = "Config"
 Private Const PDF_CACHE_SIDECAR_EXT As String = ".src.sha256"
+Private Const FILES_DATA_ROW_MIN_HEIGHT_PT As Double = 15#
 
 ' Headers da folha FILES_MANAGEMENT (v2)
 Private Const H_TIMESTAMP As String = "Timestamp"
@@ -2473,7 +2477,7 @@ Private Sub Files_UpsertFilesManagement( _
     ' CORRECÇÃO #1: o registo NÃO pode herdar a altura 6 do separador
     ' ============================================================
     On Error Resume Next
-    lr.Range.EntireRow.RowHeight = wsFiles.StandardHeight
+    lr.Range.EntireRow.RowHeight = Files_DataRowHeightPt(wsFiles)
     ' Também impedir herança de "preto" do separador
     lr.Range.Interior.pattern = xlNone
     lr.Range.Font.Bold = False
@@ -5327,6 +5331,24 @@ Public Function Files_SHA256_LastDiag() As String
     Files_SHA256_LastDiag = gLastSHA256Diag
 End Function
 
+
+
+Private Function Files_DataRowHeightPt(ByVal wsFiles As Worksheet) As Double
+    On Error GoTo Falha
+
+    Dim h As Double
+    h = wsFiles.StandardHeight
+
+    If h < FILES_DATA_ROW_MIN_HEIGHT_PT Then
+        Files_DataRowHeightPt = FILES_DATA_ROW_MIN_HEIGHT_PT
+    Else
+        Files_DataRowHeightPt = h
+    End If
+    Exit Function
+
+Falha:
+    Files_DataRowHeightPt = FILES_DATA_ROW_MIN_HEIGHT_PT
+End Function
 
 Private Sub Files_MaybeAddRunSeparator(ByVal wsFiles As Worksheet, ByVal lo As ListObject)
     On Error GoTo Falha
