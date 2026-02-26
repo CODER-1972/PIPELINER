@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-26 | Codex | Contagem robusta de "Row n de z" com lista INICIAR esparsa
+'   - Ignora STOP/lacunas intermedias quando ainda existem IDs validos abaixo na coluna INICIAR.
+'   - Calcula rowPos pelo indice logico de prompts validos, evitando "Row 1 de 1" falso com listas maiores.
 ' - 2026-02-26 | Codex | Status bar com posicao da linha no PAINEL
 '   - Mostra "Row n de z" com base na lista INICIAR (exclui STOP) para contexto visual do utilizador.
 '   - Mantem "Step x of y" como limite de execucao (Max Steps), sem quebrar compatibilidade.
@@ -636,8 +639,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         Dim rowPos As Long
         Dim rowTotal As Long
-        rowPos = (cursorRow - LIST_START_ROW) + 1
-        If rowPos < 1 Then rowPos = 1
+        rowPos = Painel_PosicaoPromptPlaneado(wsPainel, colIniciar, cursorRow)
         rowTotal = Painel_ContarPromptsPlaneados(wsPainel, colIniciar)
         If rowTotal < rowPos Then rowTotal = rowPos
 
@@ -1107,10 +1109,24 @@ Private Function Painel_ContarPromptsPlaneados(ByVal wsPainel As Worksheet, ByVa
         Dim v As String
         v = Trim$(CStr(wsPainel.Cells(r, colIniciar).value))
 
-        If v = "" Then Exit For
-        If Painel_EhSTOP(v) Then Exit For
+        If v = "" Then
+            If Painel_ExistePromptValidoAbaixo(wsPainel, colIniciar, r + 1) Then
+                GoTo ProximaLinha
+            Else
+                Exit For
+            End If
+        End If
+
+        If Painel_EhSTOP(v) Then
+            If Painel_ExistePromptValidoAbaixo(wsPainel, colIniciar, r + 1) Then
+                GoTo ProximaLinha
+            Else
+                Exit For
+            End If
+        End If
 
         total = total + 1
+ProximaLinha:
     Next r
 
     Painel_ContarPromptsPlaneados = total
@@ -1118,6 +1134,54 @@ Private Function Painel_ContarPromptsPlaneados(ByVal wsPainel As Worksheet, ByVa
 
 Falha:
     Painel_ContarPromptsPlaneados = 0
+End Function
+
+Private Function Painel_PosicaoPromptPlaneado(ByVal wsPainel As Worksheet, ByVal colIniciar As Long, ByVal targetRow As Long) As Long
+    On Error GoTo Falha
+
+    If targetRow < LIST_START_ROW Then
+        Painel_PosicaoPromptPlaneado = 1
+        Exit Function
+    End If
+
+    Dim total As Long
+    total = 0
+
+    Dim r As Long
+    For r = LIST_START_ROW To targetRow
+        Dim v As String
+        v = Trim$(CStr(wsPainel.Cells(r, colIniciar).value))
+
+        If v <> "" And Not Painel_EhSTOP(v) Then total = total + 1
+    Next r
+
+    If total <= 0 Then total = 1
+    Painel_PosicaoPromptPlaneado = total
+    Exit Function
+
+Falha:
+    Painel_PosicaoPromptPlaneado = 1
+End Function
+
+Private Function Painel_ExistePromptValidoAbaixo(ByVal wsPainel As Worksheet, ByVal colIniciar As Long, ByVal fromRow As Long) As Boolean
+    On Error GoTo Falha
+
+    If fromRow > LIST_START_ROW + LIST_MAX_ROWS - 1 Then Exit Function
+
+    Dim r As Long
+    For r = fromRow To LIST_START_ROW + LIST_MAX_ROWS - 1
+        Dim v As String
+        v = Trim$(CStr(wsPainel.Cells(r, colIniciar).value))
+        If v <> "" And Not Painel_EhSTOP(v) Then
+            Painel_ExistePromptValidoAbaixo = True
+            Exit Function
+        End If
+    Next r
+
+    Exit Function
+
+Falha:
+    Painel_ExistePromptValidoAbaixo = False
 End Function
 
 
