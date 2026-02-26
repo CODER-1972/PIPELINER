@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-26 | Codex | Status bar com posicao da linha no PAINEL
+'   - Mostra "Row n de z" com base na lista INICIAR (exclui STOP) para contexto visual do utilizador.
+'   - Mantem "Step x of y" como limite de execucao (Max Steps), sem quebrar compatibilidade.
 ' - 2026-02-23 | Codex | Execução de Output Orders (EXECUTE: LOAD_CSV)
 '   - Executa parser/whitelist de ordens após File Output em respostas com sucesso.
 '   - Acrescenta logs de importação CSV em files_ops_log sem quebrar fluxo sem EXECUTE.
@@ -56,7 +59,7 @@ Option Explicit
 ' Requisitos adicionados (user):
 '   1) Ao clicar INICIAR: foco em Seguimento!A1
 '   2) Ao clicar INICIAR: limpar DEBUG (sessao anterior) sem ativar a folha
-'   3) Status bar: "(hh:mm) Step: x of y  |  Retry: z"
+'   3) Status bar: "(hh:mm) Step: x of y  |  Retry: z  |  Row n de z"
 '   4) Check/diagnostico de FILES (3 checks) + logging util
 ' ============================================================
 
@@ -628,10 +631,18 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     Dim passo As Long
     For passo = 1 To maxSteps
 
-        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "A preparar passo")
-        DoEvents
 
         wsPainel.Cells(cursorRow, colIniciar).value = atual
+
+        Dim rowPos As Long
+        Dim rowTotal As Long
+        rowPos = (cursorRow - LIST_START_ROW) + 1
+        If rowPos < 1 Then rowPos = 1
+        rowTotal = Painel_ContarPromptsPlaneados(wsPainel, colIniciar)
+        If rowTotal < rowPos Then rowTotal = rowPos
+
+        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "A preparar passo", rowPos, rowTotal)
+        DoEvents
 
         ' Controlo de repeticoes por ID
         Dim key As String
@@ -738,7 +749,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         Dim okFiles As Boolean
         If promptTemFiles Then
-            Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "Uploading file")
+            Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "Uploading file", rowPos, rowTotal)
             DoEvents
 
             okFiles = Files_PrepararContextoDaPrompt( _
@@ -815,14 +826,14 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Call FileOutput_PrepareRequest(fo_outputKind, fo_processMode, fo_structuredMode, modosEfetivo, extraFragmentFO)
 
 
-        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "A executar prompt")
+        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "A executar prompt", rowPos, rowTotal)
         DoEvents
 
         resultado = OpenAI_Executar(apiKey, modeloUsado, promptTextFinal, temperaturaDefault, maxTokensDefault, _
                                     modosEfetivo, prompt.storage, inputJsonFinal, extraFragmentFO, prompt.Id)
 
         execCount = execCount + 1
-        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "Resposta recebida")
+        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "Resposta recebida", rowPos, rowTotal)
         DoEvents
 
                 ' -------------------------------
@@ -1059,7 +1070,7 @@ Private Sub Painel_LimparDebugSessaoAnterior()
     On Error GoTo 0
 End Sub
 
-Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long, ByVal total As Long, ByVal execCount As Long, Optional ByVal detalhe As String = "")
+Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long, ByVal total As Long, ByVal execCount As Long, Optional ByVal detalhe As String = "", Optional ByVal rowPos As Long = 0, Optional ByVal rowTotal As Long = 0)
     On Error Resume Next
 
     Dim passoTxt As String
@@ -1072,10 +1083,43 @@ Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long
     Dim detalheLimpo As String
     detalheLimpo = Trim$(CStr(detalhe))
 
+    Dim rowLabel As String
+    rowLabel = ""
+    If rowTotal > 0 Then
+        If rowPos <= 0 Then rowPos = 1
+        If rowPos > rowTotal Then rowPos = rowTotal
+        rowLabel = "  |  Row " & CStr(rowPos) & " de " & CStr(rowTotal)
+    End If
+
     Application.StatusBar = "(" & inicioHHMM & ") Step: " & passoTxt & " of " & CStr(total) & "  |  Retry: " & CStr(execCount) & _
-                            IIf(detalheLimpo = "", "", "  |  " & detalheLimpo)
+                            rowLabel & IIf(detalheLimpo = "", "", "  |  " & detalheLimpo)
     On Error GoTo 0
 End Sub
+
+Private Function Painel_ContarPromptsPlaneados(ByVal wsPainel As Worksheet, ByVal colIniciar As Long) As Long
+    On Error GoTo Falha
+
+    Dim total As Long
+    total = 0
+
+    Dim r As Long
+    For r = LIST_START_ROW To LIST_START_ROW + LIST_MAX_ROWS - 1
+        Dim v As String
+        v = Trim$(CStr(wsPainel.Cells(r, colIniciar).value))
+
+        If v = "" Then Exit For
+        If Painel_EhSTOP(v) Then Exit For
+
+        total = total + 1
+    Next r
+
+    Painel_ContarPromptsPlaneados = total
+    Exit Function
+
+Falha:
+    Painel_ContarPromptsPlaneados = 0
+End Function
+
 
 Private Sub Painel_AnexarInputsTextuaisAoPrompt(ByVal promptId As String, ByRef ioPromptText As String)
     On Error GoTo Falha
