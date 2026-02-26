@@ -295,6 +295,36 @@ Sinais úteis para separar causas:
 - `HTTP 4xx/5xx` com body => erro API explícito (não timeout de cliente).
 - `timeout` sem `M05_PAYLOAD_CHECK` => falha antes da montagem final (inspecionar parsing/configuração).
 
+### Diagnóstico rápido: `HTTP 429` com `insufficient_quota`
+
+Quando o `Seguimento` mostra `HTTP Status=429` e body com `"code":"insufficient_quota"`, o problema não é de formato do payload: a API rejeitou o pedido por falta de quota/crédito disponível no projeto/organização.
+
+Leitura prática (como distinguir de rate limit):
+
+- `insufficient_quota` = limite financeiro/crédito/plano (não resolve com retry imediato).
+- outros 429 (ex.: `rate_limit_exceeded`) = limite de ritmo (TPM/RPM/RPD), normalmente transitório com backoff.
+
+Checklist objetivo para este cenário:
+
+1. Confirmar no `Seguimento` o par `HTTP Status=429` + body com `type/code = insufficient_quota`.
+2. Confirmar no `DEBUG` que o payload foi montado (há registos de request); isto evita perseguir falsos positivos de parsing.
+3. No portal OpenAI, validar o **mesmo escopo da API key** (organização + projeto) em:
+   - `Billing/Usage` (consumo e budget),
+   - `Limits` (tier e limites),
+   - saldo/créditos ativos.
+4. Se existir budget mensal, confirmar se não atingiu 100% nem bloqueou hard limit.
+5. Se a key estiver noutro projeto, alinhar `OPENAI_API_KEY` (Config!B1) com o projeto que tem crédito.
+6. Repetir com um pedido mínimo (prompt curto, sem anexos) para validar recuperação.
+
+Ações corretivas recomendadas:
+
+- adicionar créditos/atualizar plano/budget do projeto correto;
+- trocar para uma API key do projeto com saldo;
+- reduzir custos por execução (menos anexos, prompts mais curtas, `max_output_tokens` mais baixo);
+- manter logs curtos em `DEBUG` sem expor segredos.
+
+Nota operacional: a falta de `PROMPT_TEMPLATE*.csv` no `files_ops_log` é um alerta de completude de inputs, mas não explica o 429. Deve ser tratada em paralelo para qualidade do output, depois de restaurar quota.
+
 SelfTests recomendados para este cenário:
 
 - `SelfTest_WebSearchGating` (com/sem anexos; validar que a mensagem de `M05_PAYLOAD_CHECK` permanece `web_search=ADICIONADO_AUTO`);
