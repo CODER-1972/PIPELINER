@@ -276,6 +276,18 @@ Checklist recomendado (ordem prática):
    - testar com prompt curto (smoke test) no mesmo modelo.
 7. Se o timeout persistir com payload pequeno, validar conectividade e engine HTTP ativa (WinHTTP/MSXML), além de quota/latência do endpoint.
 
+Configuração de timeout HTTP (folha `Config`, coluna A/B; opcional, com fallback interno):
+
+- `HTTP_TIMEOUT_RESOLVE_MS` (default: `15000`)
+- `HTTP_TIMEOUT_CONNECT_MS` (default: `15000`)
+- `HTTP_TIMEOUT_SEND_MS` (default: `60000`)
+- `HTTP_TIMEOUT_RECEIVE_MS` (default: `120000`)
+
+Notas:
+
+- Valores fora do intervalo `1000..900000` ms são ignorados e o motor usa o default, com alerta no `DEBUG` (`M05_HTTP_TIMEOUT_INVALID`).
+- Os timeouts efetivos de cada execução são registados no `DEBUG` como `M05_HTTP_TIMEOUTS`.
+
 Sinais úteis para separar causas:
 
 - `FILES ... Anexacao OK` + `has_input_file=SIM` + `timeout` => anexação concluída, falha provável em execução/resposta.

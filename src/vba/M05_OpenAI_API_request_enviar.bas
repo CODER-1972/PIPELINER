@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-26 | Codex | Torna timeouts HTTP configuráveis via folha Config
+'   - Adiciona leitura tolerante das chaves HTTP_TIMEOUT_*_MS (com fallback seguro para defaults atuais).
+'   - Regista no DEBUG os timeouts efetivos aplicados e alerta quando houver valor inválido fora de intervalo.
 ' - 2026-02-17 | Codex | Remove gating de web_search por anexos
 '   - Garante que `Modos=Web search` injeta sempre `tools:[{"type":"web_search"}]` quando não existem tools explícitas no extra.
 '   - Elimina a dependência de configuração por anexos para evitar execuções sem acesso web neste cenário.
@@ -41,6 +44,12 @@ Option Explicit
 ' =============================================================================
 
 Private Const OPENAI_ENDPOINT As String = "https://api.openai.com/v1/responses"
+Private Const HTTP_TIMEOUT_RESOLVE_MS_DEFAULT As Long = 15000
+Private Const HTTP_TIMEOUT_CONNECT_MS_DEFAULT As Long = 15000
+Private Const HTTP_TIMEOUT_SEND_MS_DEFAULT As Long = 60000
+Private Const HTTP_TIMEOUT_RECEIVE_MS_DEFAULT As Long = 120000
+Private Const HTTP_TIMEOUT_MIN_MS As Long = 1000
+Private Const HTTP_TIMEOUT_MAX_MS As Long = 900000
 ' ============================================================
 ' JSON helpers (escape / unescape / parsing simples)
 ' ============================================================
@@ -714,6 +723,24 @@ On Error Resume Next
     Dim httpStatus As Long
     Dim resposta As String
     Dim reqId As String
+    Dim timeoutResolveMs As Long
+    Dim timeoutConnectMs As Long
+    Dim timeoutSendMs As Long
+    Dim timeoutReceiveMs As Long
+
+    timeoutResolveMs = M05_GetHttpTimeoutMs("HTTP_TIMEOUT_RESOLVE_MS", HTTP_TIMEOUT_RESOLVE_MS_DEFAULT, dbgPromptId)
+    timeoutConnectMs = M05_GetHttpTimeoutMs("HTTP_TIMEOUT_CONNECT_MS", HTTP_TIMEOUT_CONNECT_MS_DEFAULT, dbgPromptId)
+    timeoutSendMs = M05_GetHttpTimeoutMs("HTTP_TIMEOUT_SEND_MS", HTTP_TIMEOUT_SEND_MS_DEFAULT, dbgPromptId)
+    timeoutReceiveMs = M05_GetHttpTimeoutMs("HTTP_TIMEOUT_RECEIVE_MS", HTTP_TIMEOUT_RECEIVE_MS_DEFAULT, dbgPromptId)
+
+    On Error Resume Next
+    Call Debug_Registar(0, dbgPromptId, "INFO", "", "M05_HTTP_TIMEOUTS", _
+        "resolve_ms=" & timeoutResolveMs & _
+        " | connect_ms=" & timeoutConnectMs & _
+        " | send_ms=" & timeoutSendMs & _
+        " | receive_ms=" & timeoutReceiveMs, _
+        "Pode ajustar na folha Config com as chaves HTTP_TIMEOUT_*_MS.")
+    On Error GoTo TrataErro
 
     attempt = 0
 
@@ -725,7 +752,7 @@ On Error Resume Next
         Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
 
         ' Mais tolerante para payloads com base64 (INLINE_BASE64)
-        http.SetTimeouts 15000, 15000, 60000, 120000
+        http.SetTimeouts timeoutResolveMs, timeoutConnectMs, timeoutSendMs, timeoutReceiveMs
 
         http.Open "POST", OPENAI_ENDPOINT, False
         http.SetRequestHeader "Authorization", "Bearer " & apiKey
@@ -788,6 +815,67 @@ On Error Resume Next
 TrataErro:
     resultado.Erro = "Erro VBA: " & Err.Description
     OpenAI_Executar = resultado
+End Function
+
+Private Function M05_GetHttpTimeoutMs(ByVal keyName As String, ByVal defaultValue As Long, ByVal dbgPromptId As String) As Long
+    On Error GoTo EH
+
+    Dim raw As String
+    raw = Trim$(M05_Config_GetByKey(keyName, ""))
+
+    If raw = "" Then
+        M05_GetHttpTimeoutMs = defaultValue
+        Exit Function
+    End If
+
+    If Not IsNumeric(raw) Then GoTo InvalidValue
+
+    Dim n As Double
+    n = CDbl(raw)
+
+    If n < HTTP_TIMEOUT_MIN_MS Or n > HTTP_TIMEOUT_MAX_MS Then GoTo InvalidValue
+
+    M05_GetHttpTimeoutMs = CLng(n)
+    Exit Function
+
+InvalidValue:
+    On Error Resume Next
+    Call Debug_Registar(0, dbgPromptId, "ALERTA", "", "M05_HTTP_TIMEOUT_INVALID", _
+        "Valor inválido em Config para " & keyName & "=[" & raw & "]; a usar default=" & defaultValue & "ms.", _
+        "Use inteiro entre " & HTTP_TIMEOUT_MIN_MS & " e " & HTTP_TIMEOUT_MAX_MS & " (ms).")
+    On Error GoTo EH
+
+    M05_GetHttpTimeoutMs = defaultValue
+    Exit Function
+
+EH:
+    M05_GetHttpTimeoutMs = defaultValue
+End Function
+
+Private Function M05_Config_GetByKey(ByVal keyName As String, Optional ByVal defaultValue As String = "") As String
+    On Error GoTo EH
+
+    Dim ws As Worksheet
+    Dim i As Long
+    Dim lastRow As Long
+    Dim k As String
+
+    Set ws = ThisWorkbook.Worksheets("Config")
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+
+    For i = 1 To lastRow
+        k = UCase$(Trim$(CStr(ws.Cells(i, 1).Value)))
+        If k = UCase$(Trim$(keyName)) Then
+            M05_Config_GetByKey = Trim$(CStr(ws.Cells(i, 2).Value))
+            Exit Function
+        End If
+    Next i
+
+    M05_Config_GetByKey = defaultValue
+    Exit Function
+
+EH:
+    M05_Config_GetByKey = defaultValue
 End Function
 
 Private Sub M05_SleepSeconds(ByVal seconds As Long)
