@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-26 | Codex | Lookup robusto de IDs no catálogo para evitar STOP falso
+'   - Adiciona fallback por varrimento normalizado de IDs quando o Find exato não encontra a célula.
+'   - Normaliza quebras de linha/NBSP/TAB em IDs para tolerar colagens de DOCX/CSV com lixo invisível.
 ' - 2026-02-26 | Codex | Contagem robusta de "Row n de z" com lista INICIAR esparsa
 '   - Ignora STOP/lacunas intermedias quando ainda existem IDs validos abaixo na coluna INICIAR.
 '   - Calcula rowPos pelo indice logico de prompts validos, evitando "Row 1 de 1" falso com listas maiores.
@@ -1604,11 +1607,42 @@ Private Function Catalogo_EncontrarCelulaID(ByVal promptId As String) As Range
     Dim rng As Range
     Set rng = ws.Columns(1).Find(What:=Trim$(promptId), LookIn:=xlValues, LookAt:=xlWhole)
 
+    If rng Is Nothing Then
+        Dim alvoNormalizado As String
+        alvoNormalizado = Painel_NormalizarPromptIdKey(promptId)
+
+        If alvoNormalizado <> "" Then
+            Dim lastRow As Long
+            lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+
+            Dim r As Long
+            For r = 1 To lastRow
+                If Painel_NormalizarPromptIdKey(CStr(ws.Cells(r, 1).value)) = alvoNormalizado Then
+                    Set rng = ws.Cells(r, 1)
+                    Exit For
+                End If
+            Next r
+        End If
+    End If
+
     Set Catalogo_EncontrarCelulaID = rng
     Exit Function
 
 Falha:
     Set Catalogo_EncontrarCelulaID = Nothing
+End Function
+
+Private Function Painel_NormalizarPromptIdKey(ByVal rawId As String) As String
+    Dim k As String
+    k = CStr(rawId)
+
+    k = Replace(k, vbCr, "")
+    k = Replace(k, vbLf, "")
+    k = Replace(k, vbTab, "")
+    k = Replace(k, Chr$(160), " ")
+    k = Application.WorksheetFunction.Trim(k)
+
+    Painel_NormalizarPromptIdKey = UCase$(Trim$(k))
 End Function
 
 ' ============================================================
