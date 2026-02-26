@@ -585,3 +585,12 @@ Se estes artefactos existirem no workbook/documentação da equipa, aplicar:
   - campo/checkbox “Emitir EXECUTE após exportação?” com valores `OFF | LOAD_CSV_TO_NEW_SHEET`;
   - opção “Nome da folha: AUTO (prefixo do ID) / override”; 
   - nota de segurança para permitir apenas `basename.csv`.
+
+### 12.6 Troubleshooting de compilação no VBE (SelfTest_OutputOrders_RunAll)
+
+Se surgir `Compile error: Sub or Function not defined` ao abrir `SelfTest_OutputOrders_RunAll`, validar primeiro se os helpers usados no próprio módulo existem e estão acessíveis:
+
+- `EnsureFolder`
+- `WriteTextUTF8`
+
+Regra prática: SelfTests do `M17_OutputOrdersExecutor` devem ser auto-contidos (helper local no mesmo módulo) ou chamar apenas procedimentos `Public` de outros módulos. Evitar dependência em `Private Sub/Function` externos, porque o compilador do VBA não os resolve fora do módulo de origem.
