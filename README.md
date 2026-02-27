@@ -299,6 +299,27 @@ Sinais úteis para separar causas:
 - `HTTP 4xx/5xx` com body => erro API explícito (não timeout de cliente).
 - `timeout` sem `M05_PAYLOAD_CHECK` => falha antes da montagem final (inspecionar parsing/configuração).
 
+### Diagnóstico correlacionado M05↔M10 com fingerprint (FP)
+
+Para reduzir ambiguidade entre "transporte HTTP" e "contrato funcional de output", o motor passa a usar um fingerprint textual curto nos logs.
+
+Formato recomendado:
+
+`FP=pipeline=<nome>|step=<n>|prompt=<id>|resp=<response_id|[pendente]>|model=<modelo|[n/d]>|ok_http=<SIM|NAO|[pendente]>|mode=<output_kind/process_mode>`
+
+Onde consultar:
+
+1. `M05_PAYLOAD_CHECK` (início da narrativa técnica do pedido).
+2. `M05_HTTP_TIMEOUTS` e `M05_HTTP_RESULT` (estado de transporte da chamada).
+3. `M10_CI_*` relevantes (contrato CI: citação/container/listagem/download).
+4. `M10_CI_CONTRACT_STATUS` (frase final consolidada do passo: contrato cumprido/falhado).
+
+Leitura em 10 segundos (regra prática):
+
+- Se `M05_HTTP_RESULT` indica 2xx (`ok_http=SIM`) e `M10_CI_CONTRACT_STATUS` indica falha, então o problema é **contrato/output**, não transporte.
+- Se não há 2xx e surgem erros M05, então o problema está na camada de **transporte/payload/timeout**.
+- Em `text_embed`, a evidência correta é mensagem de anexação textual; não é esperado `file_id`.
+
 ### Diagnóstico rápido: `HTTP 429` com `insufficient_quota`
 
 Quando o `Seguimento` mostra `HTTP Status=429` e body com `"code":"insufficient_quota"`, o problema não é de formato do payload: a API rejeitou o pedido por falta de quota/crédito disponível no projeto/organização.

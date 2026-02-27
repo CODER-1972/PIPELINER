@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-27 | Codex | Fingerprint operacional e mensagens FILES mais explicativas
+'   - Injeta fingerprint textual (pipeline/step/prompt/mode) na chamada M05 para correlação com M10.
+'   - Refina mensagens REQ_INPUT_JSON e text_embed para diferenciar anexação textual de upload com file_id.
 ' - 2026-02-26 | Codex | STOP passa a encerrar contagem de Row n de z no PAINEL
 '   - Ajusta Painel_ContarPromptsPlaneados para terminar no primeiro STOP encontrado.
 '   - Evita que IDs residuais abaixo de STOP inflem o total mostrado na status bar.
@@ -816,7 +819,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             " | has_input_file=" & IIf(InStr(1, inputJsonFinal, """type"":""input_file""", vbTextCompare) > 0, "SIM", "NAO") & _
             " | has_input_image=" & IIf(InStr(1, inputJsonFinal, """type"":""input_image""", vbTextCompare) > 0, "SIM", "NAO") & _
             " | preview=" & Left$(inputJsonFinal, 350), _
-            "Se has_input_file=NAO, o modelo nao pode receber PDF.")
+            "Input final construído; este retrato confirma se anexos seguiram como file/image ou apenas texto. Se esperava PDF e has_input_file=NAO, corrigir FILES/mode.")
 
         ' -------------------------------
         ' Chamada a API (1 chamada / passo)
@@ -837,8 +840,11 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "A executar prompt", rowPos, rowTotal)
         DoEvents
 
+        Dim debugFingerprintSeed As String
+        debugFingerprintSeed = "pipeline=" & pipelineNome & "|step=" & CStr(passo) & "|prompt=" & prompt.Id & "|mode=" & LCase$(Trim$(fo_outputKind)) & "/" & LCase$(Trim$(fo_processMode))
+
         resultado = OpenAI_Executar(apiKey, modeloUsado, promptTextFinal, temperaturaDefault, maxTokensDefault, _
-                                    modosEfetivo, prompt.storage, inputJsonFinal, extraFragmentFO, prompt.Id)
+                                    modosEfetivo, prompt.storage, inputJsonFinal, extraFragmentFO, prompt.Id, debugFingerprintSeed)
 
         execCount = execCount + 1
         Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "Resposta recebida", rowPos, rowTotal)
@@ -1392,8 +1398,8 @@ Private Function Painel_Files_Checks_Debug( _
 
     ElseIf temTextEmbed Then
         Call Debug_Registar(passo, promptId, "INFO", "", "FILES", _
-            "Anexacao OK via text_embed (conteudo extraido e inserido no input_text).", _
-            "Nota: para PDFs/imagens, prefira input_file/input_image quando necessario.")
+            "Anexo processado por extração/embebido de texto; neste modo não existe file_id.", _
+            "Se precisares de layout visual (ex.: PDF), mudar para modo upload.")
     End If
 End Function
 
