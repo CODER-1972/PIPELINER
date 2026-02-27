@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-27 | Codex | Diagnóstico com fingerprint e distinção transporte vs contrato
+'   - Adiciona fingerprint textual (FP=...) em M05_PAYLOAD_CHECK/M05_HTTP_TIMEOUTS/M05_HTTP_RESULT.
+'   - Torna mensagens de M05 mais explicativas para correlacionar facilmente com eventos M10 do mesmo passo.
 ' - 2026-02-26 | Codex | Torna timeouts HTTP configuráveis via folha Config
 '   - Adiciona leitura tolerante das chaves HTTP_TIMEOUT_*_MS (com fallback seguro para defaults atuais).
 '   - Regista no DEBUG os timeouts efetivos aplicados e alerta quando houver valor inválido fora de intervalo.
@@ -495,12 +498,16 @@ Public Function OpenAI_Executar( _
     ByVal storage As Boolean, _
     ByVal inputJsonLiteralOpcional As String, _
     ByVal extraFragmentSemInput As String, _
-    Optional ByVal promptIdForDebug As String = "" _
+    Optional ByVal promptIdForDebug As String = "", _
+    Optional ByVal debugFingerprintSeed As String = "" _
 ) As ApiResultado
 
     Dim resultado As ApiResultado
     Dim dbgPromptId As String
     dbgPromptId = IIf(Trim$(promptIdForDebug) <> "", promptIdForDebug, "M05")
+
+    Dim fpBase As String
+    fpBase = M05_BuildFingerprint(debugFingerprintSeed, dbgPromptId, "[pendente]", modelo, "[pendente]", "[pendente]")
 
     On Error GoTo TrataErro
 
@@ -698,7 +705,8 @@ Public Function OpenAI_Executar( _
 
 On Error Resume Next
     Call Debug_Registar(0, dbgPromptId, "INFO", "", "M05_PAYLOAD_CHECK", _
-        "endpoint=" & OPENAI_ENDPOINT & _
+        "FP=" & fpBase & _
+        " | endpoint=" & OPENAI_ENDPOINT & _
         " | model=" & modelo & _
         " | input_is_array=" & IIf(usarInputArray, "SIM", "NAO") & _
         " | has_input_file=" & IIf(hasInputFile, "SIM", "NAO") & _
@@ -707,7 +715,7 @@ On Error Resume Next
         " | has_input_image=" & IIf(hasInputImage, "SIM", "NAO") & _
         " | " & toolMsg & _
         " | payload_len=" & CStr(Len(json)), _
-        "")
+        "Pedido preparado e enviado com sucesso técnico; validação de contrato de output será feita após resposta (correlacionar com M10_* do mesmo FP).")
     On Error GoTo TrataErro
 
     ' -------------------------
@@ -735,11 +743,12 @@ On Error Resume Next
 
     On Error Resume Next
     Call Debug_Registar(0, dbgPromptId, "INFO", "", "M05_HTTP_TIMEOUTS", _
-        "resolve_ms=" & timeoutResolveMs & _
+        "FP=" & fpBase & _
+        " | resolve_ms=" & timeoutResolveMs & _
         " | connect_ms=" & timeoutConnectMs & _
         " | send_ms=" & timeoutSendMs & _
         " | receive_ms=" & timeoutReceiveMs, _
-        "Pode ajustar na folha Config com as chaves HTTP_TIMEOUT_*_MS.")
+        "Time-outs aplicados nesta execução; útil para distinguir lentidão de erro lógico. Se houver timeout, aumentar HTTP_TIMEOUT_RECEIVE_MS e repetir 1 vez.")
     On Error GoTo TrataErro
 
     attempt = 0
@@ -767,6 +776,15 @@ On Error Resume Next
         ' Guardar JSON bruto para auditoria (sempre)
         resultado.rawResponseJson = resposta
         resultado.httpStatus = httpStatus
+
+        On Error Resume Next
+        Call Debug_Registar(0, dbgPromptId, "INFO", "", "M05_HTTP_RESULT", _
+            "FP=" & M05_BuildFingerprint(debugFingerprintSeed, dbgPromptId, ExtrairCampoJsonSimples(resposta, """id"":"), modelo, IIf(httpStatus >= 200 And httpStatus < 300, "SIM", "NAO"), "[pendente]") & _
+            " | http_status=" & CStr(httpStatus), _
+            IIf(httpStatus >= 200 And httpStatus < 300, _
+                "Transporte HTTP concluído com sucesso (2xx). O contrato funcional de output deve ser confirmado pelos eventos M10.", _
+                "Transporte HTTP falhou; validar conectividade, payload e timeouts antes de analisar contrato de output."))
+        On Error GoTo TrataErro
 
         If httpStatus >= 200 And httpStatus < 300 Then
             resultado.responseId = ExtrairCampoJsonSimples(resposta, """id"":")
@@ -815,6 +833,29 @@ On Error Resume Next
 TrataErro:
     resultado.Erro = "Erro VBA: " & Err.Description
     OpenAI_Executar = resultado
+End Function
+
+
+Private Function M05_BuildFingerprint( _
+    ByVal seed As String, _
+    ByVal promptId As String, _
+    ByVal responseId As String, _
+    ByVal modelName As String, _
+    ByVal okHttp As String, _
+    ByVal modeTxt As String _
+) As String
+    Dim s As String
+    s = Trim$(seed)
+    If s = "" Then
+        s = "pipeline=[n/d]|step=[n/d]|prompt=" & Trim$(promptId)
+    End If
+
+    If Trim$(responseId) = "" Then responseId = "[pendente]"
+    If Trim$(modelName) = "" Then modelName = "[n/d]"
+    If Trim$(okHttp) = "" Then okHttp = "[pendente]"
+    If Trim$(modeTxt) = "" Then modeTxt = "[pendente]"
+
+    M05_BuildFingerprint = s & "|resp=" & Trim$(responseId) & "|model=" & Trim$(modelName) & "|ok_http=" & Trim$(okHttp) & "|mode=" & Trim$(modeTxt)
 End Function
 
 Private Function M05_GetHttpTimeoutMs(ByVal keyName As String, ByVal defaultValue As Long, ByVal dbgPromptId As String) As Long

@@ -8,6 +8,9 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-02-27 | Codex | Contrato CI com fingerprint e frases finais consolidadas
+'   - Introduz fingerprint textual (FP=...) nos principais eventos de diagnóstico do process_mode=code_interpreter.
+'   - Acrescenta estado final explícito para separar sucesso HTTP de sucesso de contrato de output.
 ' - 2026-02-23 | Codex | Fallback adicional no modo CI com nomes de ficheiro no output textual
 '   - Extrai nomes de ficheiro do `output_text` quando faltam `container_file_citation`.
 '   - Em fallback por listagem do container, aplica filtro preferencial por nomes esperados para reduzir downloads desalinhados.
@@ -469,6 +472,7 @@ Private Function Process_Metadata( _
         End If
     Next i
 
+
     Process_Metadata = "[FILE OUTPUT/metadata] " & CStr(savedCount) & " ficheiro(s) gravado(s) em " & runFolder & " | raw: " & manifestPath
     Exit Function
 
@@ -511,6 +515,9 @@ Private Function Process_CodeInterpreter( _
 
     Dim expectedNames As Collection
     Set expectedNames = CI_ExtractExpectedFileNamesFromOutputText(Nz(resultado.outputText))
+
+    Dim ciFingerprintBase As String
+    ciFingerprintBase = FileOutput_BuildFingerprint(pipelineNome, passo, promptId, resultado.responseId, "[n/d]", "SIM", "file/code_interpreter")
     If expectedNames.Count > 0 Then
         Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_TEXT_FILENAME_HINTS", _
             "output_text sugeriu " & CStr(expectedNames.Count) & " nome(s): " & CI_JoinCollection(expectedNames, " | "), _
@@ -526,14 +533,17 @@ Private Function Process_CodeInterpreter( _
     ' ------------------------------------------------------------
     If ciList.Count = 0 Then
         Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_NO_CITATION", _
-            "Sem container_file_citation; a tentar fallback por listagem do container.", _
-            "Se isto acontecer frequentemente, reforce o prompt para anexar ficheiros e/ou force tool_choice.")
+            "FP=" & ciFingerprintBase & " | Resposta veio sem citação de ficheiro do container; o sistema tenta recuperação por listagem.", _
+            "Reforçar prompt para citar explicitamente o artefacto final.")
         Dim containerFromCall As String
         containerFromCall = CI_ExtractContainerIdFromCall(rawJson)
         If Trim$(containerFromCall) = "" Then
             Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_NO_CONTAINER_ID", _
-                "Sem container_file_citation e sem container_id em code_interpreter_call.", _
-                "Isto sugere que o Code Interpreter não foi realmente executado, ou o formato mudou. Se houver nomes no output textual, use-os para reforçar o prompt e repetir.")
+                "FP=" & ciFingerprintBase & " | Resposta não trouxe nem citação nem identificador de container; não foi possível provar execução útil do CI.", _
+                "Repetir com instrução explícita de geração + citação de ficheiro, e rever compatibilidade do modelo. Se persistir, tratar como possível mudança de formato da resposta.")
+            Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_CONTRACT_STATUS", _
+                "FP=" & ciFingerprintBase & " | HTTP OK, mas contrato de output CI falhou: sem citation e sem container_id.", _
+                "Impacto: sem artefacto comprovável para download. Ação: repetir execução com instrução explícita de citação e rever compatibilidade do modelo/conta.")
             Process_CodeInterpreter = "[FILE OUTPUT/CI] Sem container_file_citation e sem container_id (code_interpreter_call)."
             Exit Function
         End If
@@ -551,8 +561,8 @@ Private Function Process_CodeInterpreter( _
         End If
         If listStatus < 200 Or listStatus >= 300 Then
             Call Debug_Registar(passo, promptId, "ERRO", "", "M10_CI_LIST_FAIL", _
-                "Falha ao listar ficheiros no container (HTTP " & CStr(listStatus) & "). container_id=" & containerFromCall, _
-                "Verifique API key/permissões e se o endpoint /containers/{id}/files está disponível.")
+                "FP=" & ciFingerprintBase & " | Falhou o acesso à listagem de ficheiros do container; diagnóstico bloqueado por API/permissão (HTTP " & CStr(listStatus) & "). container_id=" & containerFromCall, _
+                "Confirmar permissões/chave e disponibilidade do endpoint de container.")
             Process_CodeInterpreter = "[FILE OUTPUT/CI] Fallback list container falhou (HTTP " & CStr(listStatus) & ")."
             Exit Function
         End If
@@ -574,15 +584,18 @@ Private Function Process_CodeInterpreter( _
                 Set ciList2 = filtered
             Else
                 Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_TEXT_FILTER_MISS", _
-                    "Output textual sugeriu nomes de ficheiro, mas nenhum foi encontrado na listagem do container.", _
-                    "Verifique se os nomes no output final coincidem com os artefactos efetivamente gravados no CI.")
+                    "FP=" & ciFingerprintBase & " | O texto sugeriu nomes de ficheiro que não existem na listagem do container.", _
+                    "Alinhar nome anunciado no output com nome real gerado no CI.")
             End If
         End If
 
         If ciList2.Count = 0 Then
             Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_CONTAINER_EMPTY", _
-                "Listagem do container devolveu 0 ficheiros elegíveis para download.", _
-                "Confirme se o CI gravou o ficheiro em disco (ex.: /mnt/data/...).")
+                "FP=" & ciFingerprintBase & " | Container acessível, mas sem artefactos elegíveis para download.", _
+                "Garantir que a tool grava ficheiro em /mnt/data antes da resposta final.")
+            Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_CONTRACT_STATUS", _
+                "FP=" & ciFingerprintBase & " | HTTP OK, mas contrato de output CI falhou: container sem ficheiros elegíveis.", _
+                "Impacto: sem ficheiro final utilizável. Ação: validar geração do ficheiro no CI e repetir execução.")
             Process_CodeInterpreter = "[FILE OUTPUT/CI] Sem container_file_citation; container_id=" & containerFromCall & "; 0 ficheiros elegíveis."
             Exit Function
         End If
@@ -628,14 +641,14 @@ Private Function Process_CodeInterpreter( _
         ok = DownloadContainerFileEx(apiKey, container_id, file_id, fullPath, dlStatus, dlErr)
         If Not ok Then
             Call Debug_Registar(passo, promptId, "ERRO", "", "M10_CI_DOWNLOAD_FAIL", _
-                "Falha download (HTTP " & CStr(dlStatus) & ") " & container_id & ":" & file_id & " -> " & fullPath & IIf(Trim$(dlErr) <> "", " | " & dlErr, ""), _
-                "Verifique API key, permissões, conectividade e path local.")
+                "FP=" & ciFingerprintBase & " | Artefacto identificado, mas falhou transferência para disco local (HTTP " & CStr(dlStatus) & ") " & container_id & ":" & file_id & " -> " & fullPath & IIf(Trim$(dlErr) <> "", " | " & dlErr, ""), _
+                "Verificar rede/permissões/path e repetir download.")
             GoTo ProximoFicheiro
         End If
         If Not FileOutput_FileExists(fullPath) Then
             Call Debug_Registar(passo, promptId, "ERRO", "", "M10_CI_DOWNLOAD_NOFILE", _
-                "Download reportado como OK, mas o ficheiro não existe no disco: " & fullPath, _
-                "Possível falha de permissões/OneDrive/antivírus/paths longos.")
+                "FP=" & ciFingerprintBase & " | Download devolveu sucesso técnico, mas o ficheiro não apareceu no disco: " & fullPath, _
+                "Validar antivírus/OneDrive/path longos/permissões locais.")
             GoTo ProximoFicheiro
         End If
         Dim bytesLen As Double
@@ -645,8 +658,8 @@ Private Function Process_CodeInterpreter( _
         On Error GoTo Falha
         If bytesLen = 0 Then
             Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_ZERO_BYTES", _
-                "Ficheiro gravado com 0 bytes: " & fullPath, _
-                "Confirme se o ficheiro no container tem conteúdo.")
+                "FP=" & ciFingerprintBase & " | Ficheiro criado sem conteúdo útil (0 bytes): " & fullPath, _
+                "Verificar se o script no CI escreveu conteúdo antes de encerrar.")
         End If
         savedCount = savedCount + 1
         ' Sidecar meta (best-effort; se path demasiado longo, regista alerta e segue)
@@ -666,6 +679,11 @@ Private Function Process_CodeInterpreter( _
         Call AppendList(outFilesOps, "DL:" & Replace(fullPath, runFolder & "\", ""))
 ProximoFicheiro:
     Next i
+
+    Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_CONTRACT_STATUS", _
+        "FP=" & ciFingerprintBase & " | HTTP OK e contrato de output CI cumprido: " & CStr(savedCount) & " ficheiro(s) descarregado(s).", _
+        "Contrato validado: citação/container resolvido e artefactos descarregados.")
+
     If usedFallback Then
         Process_CodeInterpreter = "[FILE OUTPUT/CI] (fallback list container) " & CStr(savedCount) & " ficheiro(s) descarregado(s) para " & runFolder
     Else
@@ -2437,5 +2455,28 @@ End Sub
 
 
 
+
+Private Function FileOutput_BuildFingerprint( _
+    ByVal pipelineNome As String, _
+    ByVal passo As Long, _
+    ByVal promptId As String, _
+    ByVal responseId As String, _
+    ByVal modelName As String, _
+    ByVal okHttp As String, _
+    ByVal modeTxt As String _
+) As String
+    If Trim$(responseId) = "" Then responseId = "[pendente]"
+    If Trim$(modelName) = "" Then modelName = "[n/d]"
+    If Trim$(okHttp) = "" Then okHttp = "[pendente]"
+    If Trim$(modeTxt) = "" Then modeTxt = "[pendente]"
+
+    FileOutput_BuildFingerprint = "pipeline=" & Trim$(pipelineNome) & _
+        "|step=" & CStr(passo) & _
+        "|prompt=" & Trim$(promptId) & _
+        "|resp=" & Trim$(responseId) & _
+        "|model=" & Trim$(modelName) & _
+        "|ok_http=" & Trim$(okHttp) & _
+        "|mode=" & Trim$(modeTxt)
+End Function
 
 
