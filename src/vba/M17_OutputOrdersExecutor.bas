@@ -19,7 +19,18 @@ Option Explicit
 '
 ' FunÃ§Ãµes e procedimentos:
 ' - OutputOrders_TryExecute(...): executa ordens reconhecidas e devolve append para files_ops_log.
-' - SelfTest_OutputOrders_RunAll(): bateria idempotente de testes do executor.
+' - ParseExecuteDirectives(outputText): extrai diretivas EXECUTE fora de code fences.
+' - ValidateCsvFileName(fileName): valida basename CSV contra path traversal e caracteres perigosos.
+' - ResolveCsvSource(fileName, outputFolder, downloadedFiles): resolve origem do CSV em output/downloads.
+' - PrecheckCsv_BomAndCrLf(csvPath, ...): avalia BOM UTF-8, CR/LF quoted e sugestÃ£o de colunas.
+' - DeriveSheetNameFromCsv(csvPath): deriva nome base da worksheet a partir do ficheiro.
+' - CreateUniqueWorksheetName(baseName): gera nome de worksheet Ãºnico e compatÃ­vel com limite Excel.
+' - LoadCsvIntoSheet_QueryTable(...): importaÃ§Ã£o principal via QueryTable.
+' - LoadCsvIntoSheet_OpenTextFallback(...): fallback de importaÃ§Ã£o via OpenText + cÃ³pia para destino.
+' - VerifyImportedSheet(ws, expectedCols, ...): valida estrutura importada e recolhe evidÃªncias.
+' - SelfTest_OutputOrders_RunAll(): bateria idempotente de testes T1..T9 do executor.
+' - EnsureFolder(folderPath): cria pasta local para fixtures temporÃ¡rias dos selftests.
+' - WriteTextUTF8(filePath, txt): escreve ficheiros UTF-8 usados nos selftests.
 ' =============================================================================
 
 Private Const OUTPUT_ORDERS_MAX As Long = 3
