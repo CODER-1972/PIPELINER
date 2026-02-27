@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-27 | Codex | Corrige leitura dos limites Max Steps/Max Repetitions no PAINEL
+'   - Ajusta Painel_LerLimitesPipeline para ler Max Steps da linha 5 e Max Repetitions da linha 6.
+'   - Elimina bug em que Max Steps herdava indevidamente o valor de Max Repetitions.
 ' - 2026-02-27 | Codex | Fingerprint operacional e mensagens FILES mais explicativas
 '   - Injeta fingerprint textual (pipeline/step/prompt/mode) na chamada M05 para correlação com M10.
 '   - Refina mensagens REQ_INPUT_JSON e text_embed para diferenciar anexação textual de upload com file_id.
@@ -1814,7 +1817,7 @@ Private Sub Painel_LerLimitesPipeline(ByVal wsPainel As Worksheet, ByVal pipelin
     Dim colIniciar As Long, colRegistar As Long
     Call Painel_ObterColunasPipeline(pipelineIndex, colIniciar, colRegistar)
 
-    maxSteps = CLng(val(wsPainel.Cells(6, colIniciar).value))
+    maxSteps = CLng(val(wsPainel.Cells(5, colIniciar).value))
     maxRep = CLng(val(wsPainel.Cells(6, colIniciar).value))
 
     If maxSteps <= 0 Then maxSteps = 20
