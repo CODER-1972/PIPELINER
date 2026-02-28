@@ -11,6 +11,9 @@ Option Explicit
 ' - 2026-02-28 | Codex | Diagnostico enriquecido para timeouts HTTP
 '   - Classifica timeout provavel (resolve/connect/send/receive/outro) com base no tempo decorrido e limites configurados.
 '   - Regista tempo decorrido ate falha e valores efetivos de HTTP_TIMEOUT_*_MS no DEBUG (M05_HTTP_TIMEOUT_ERROR).
+' - 2026-02-28 | Codex | Preserva detalhes de erro no handler de timeout
+'   - Guarda Err.Number/Err.Description antes de logging para evitar perda de mensagem no resultado final.
+'   - Inclui diagnostico de timeout (tipo, elapsed e HTTP_TIMEOUT_*_MS) tambem em resultado.Erro no Seguimento.
 ' - 2026-02-27 | Codex | Diagnóstico com fingerprint e distinção transporte vs contrato
 '   - Adiciona fingerprint textual (FP=...) em M05_PAYLOAD_CHECK/M05_HTTP_TIMEOUTS/M05_HTTP_RESULT.
 '   - Torna mensagens de M05 mais explicativas para correlacionar facilmente com eventos M10 do mesmo passo.
@@ -837,25 +840,38 @@ On Error Resume Next
     Loop
 
 TrataErro:
-    timeoutElapsedMs = M05_ElapsedMsFromTick(attemptStartTick)
-    If M05_IsTimeoutError(Err.Number, Err.Description) Then
-        Dim timeoutType As String
-        timeoutType = M05_ClassifyTimeoutType(timeoutElapsedMs, timeoutResolveMs, timeoutConnectMs, timeoutSendMs, timeoutReceiveMs)
+    Dim errNumber As Long
+    Dim errDescription As String
+    Dim timeoutType As String
+    Dim timeoutDiag As String
 
-        On Error Resume Next
-        Call Debug_Registar(0, dbgPromptId, "ERRO", "", "M05_HTTP_TIMEOUT_ERROR", _
-            "FP=" & fpBase & _
-            " | timeout_type=" & timeoutType & _
+    errNumber = Err.Number
+    errDescription = Err.Description
+
+    timeoutElapsedMs = M05_ElapsedMsFromTick(attemptStartTick)
+    If M05_IsTimeoutError(errNumber, errDescription) Then
+        timeoutType = M05_ClassifyTimeoutType(timeoutElapsedMs, timeoutResolveMs, timeoutConnectMs, timeoutSendMs, timeoutReceiveMs)
+        timeoutDiag = timeoutType & _
             " | elapsed_ms=" & CStr(timeoutElapsedMs) & _
             " | HTTP_TIMEOUT_RESOLVE_MS=" & CStr(timeoutResolveMs) & _
             " | HTTP_TIMEOUT_CONNECT_MS=" & CStr(timeoutConnectMs) & _
             " | HTTP_TIMEOUT_SEND_MS=" & CStr(timeoutSendMs) & _
-            " | HTTP_TIMEOUT_RECEIVE_MS=" & CStr(timeoutReceiveMs), _
+            " | HTTP_TIMEOUT_RECEIVE_MS=" & CStr(timeoutReceiveMs)
+
+        On Error Resume Next
+        Call Debug_Registar(0, dbgPromptId, "ERRO", "", "M05_HTTP_TIMEOUT_ERROR", _
+            "FP=" & fpBase & " | " & timeoutDiag, _
             "Timeout detetado na chamada a /v1/responses; rever limite indicado e latencia/rede antes de repetir.")
         On Error GoTo 0
     End If
 
-    resultado.Erro = "Erro VBA: " & Err.Description
+    resultado.Erro = "Erro VBA: " & errDescription
+    If timeoutDiag <> "" Then
+        resultado.Erro = resultado.Erro & " | " & timeoutDiag
+    ElseIf errNumber <> 0 Then
+        resultado.Erro = resultado.Erro & " | Err.Number=" & CStr(errNumber)
+    End If
+
     OpenAI_Executar = resultado
 End Function
 
