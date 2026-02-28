@@ -84,8 +84,9 @@ Comportamentos esperados:
 - foco em `Seguimento!A1` no arranque;
 - limpeza de DEBUG da execução anterior;
 - status bar com progresso de execução.
+- no formato `Step x of y`, o `y` mostra o total planeado da lista ativa no PAINEL (`Row n de z`) e não apenas o limite técnico de `Max Steps`.
 - durante cada passo, a status bar inclui fase operacional antes da execução (ex.: `A preparar passo`, `Uploading file`, `A executar prompt`).
-- a status bar também mostra a posição da lista no PAINEL no formato `Row n de z` (índice lógico de prompts válidos na coluna INICIAR até ao primeiro `STOP`; lacunas intermédias só contam enquanto não existir sentinela de término).
+- a status bar também mostra a posição da lista no PAINEL no formato `Row n de z` e inclui o `Prompt ID` completo em execução antes do detalhe da fase (ex.: `... | Row 5 de 6 | PIPELINE_MAKER/01/WF_PROMPT_AUDIT/v1.3 | A executar prompt`).
 
 ## 3.2 Config
 
@@ -244,6 +245,7 @@ Boas práticas de manutenção VBA (preventivas):
 - em padrões regex com aspas dentro de classe de caracteres (ex.: `[^\"]`), duplicar aspas no literal VBA (ex.: `"""([^""]+)"""`) para evitar erro de compilação;
 - em rotinas de escape/unescape JSON, validar o par inverso de `Replace` (escape: `\ -> \\`, `" -> \"`; unescape: `\\ -> \`, `\" -> "`) para não corromper conteúdo silenciosamente;
 - após alterações em módulos `.bas`, correr compilação do projeto (`Debug > Compile VBAProject`) para apanhar erros de sintaxe antes de execução.
+- em procedimentos com `Option Explicit`, qualquer identificador usado em mensagens/StatusBar (ex.: `promptId`) deve existir na assinatura ou em `Dim` local; quando o helper for reutilizável, preferir parâmetro opcional explícito para evitar `Compile error: Variable not defined`.
 
 
 ### Diagnóstico rápido: web_search + anexos + ContextKV
