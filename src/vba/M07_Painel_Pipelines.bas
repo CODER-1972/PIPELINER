@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-28 | Codex | Status bar passa a exibir Prompt ID completo por fase
+'   - Inclui o prompt ID entre "Row n de z" e o detalhe da fase (preparacao/upload/execucao/resposta).
+'   - Mantem formato existente de Step/Retry/Row para preservar compatibilidade visual no PAINEL.
 ' - 2026-02-27 | Codex | Corrige leitura dos limites Max Steps/Max Repetitions no PAINEL
 '   - Ajusta Painel_LerLimitesPipeline para ler Max Steps da linha 5 e Max Repetitions da linha 6.
 '   - Elimina bug em que Max Steps herdava indevidamente o valor de Max Repetitions.
@@ -655,7 +658,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         rowTotal = Painel_ContarPromptsPlaneados(wsPainel, colIniciar)
         If rowTotal < rowPos Then rowTotal = rowPos
 
-        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "A preparar passo", rowPos, rowTotal)
+        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, atual, "A preparar passo", rowPos, rowTotal)
         DoEvents
 
         ' Controlo de repeticoes por ID
@@ -763,7 +766,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         Dim okFiles As Boolean
         If promptTemFiles Then
-            Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "Uploading file", rowPos, rowTotal)
+            Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, prompt.Id, "Uploading file", rowPos, rowTotal)
             DoEvents
 
             okFiles = Files_PrepararContextoDaPrompt( _
@@ -840,7 +843,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Call FileOutput_PrepareRequest(fo_outputKind, fo_processMode, fo_structuredMode, modosEfetivo, extraFragmentFO)
 
 
-        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "A executar prompt", rowPos, rowTotal)
+        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, prompt.Id, "A executar prompt", rowPos, rowTotal)
         DoEvents
 
         Dim debugFingerprintSeed As String
@@ -850,7 +853,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                                     modosEfetivo, prompt.storage, inputJsonFinal, extraFragmentFO, prompt.Id, debugFingerprintSeed)
 
         execCount = execCount + 1
-        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "Resposta recebida", rowPos, rowTotal)
+        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, prompt.Id, "Resposta recebida", rowPos, rowTotal)
         DoEvents
 
                 ' -------------------------------
@@ -1087,7 +1090,7 @@ Private Sub Painel_LimparDebugSessaoAnterior()
     On Error GoTo 0
 End Sub
 
-Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long, ByVal total As Long, ByVal execCount As Long, Optional ByVal detalhe As String = "", Optional ByVal rowPos As Long = 0, Optional ByVal rowTotal As Long = 0)
+Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long, ByVal total As Long, ByVal execCount As Long, Optional ByVal promptId As String = "", Optional ByVal detalhe As String = "", Optional ByVal rowPos As Long = 0, Optional ByVal rowTotal As Long = 0)
     On Error Resume Next
 
     Dim passoTxt As String
@@ -1100,6 +1103,9 @@ Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long
     Dim detalheLimpo As String
     detalheLimpo = Trim$(CStr(detalhe))
 
+    Dim promptIdLimpo As String
+    promptIdLimpo = Trim$(CStr(promptId))
+
     Dim rowLabel As String
     rowLabel = ""
     If rowTotal > 0 Then
@@ -1109,7 +1115,8 @@ Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long
     End If
 
     Application.StatusBar = "(" & inicioHHMM & ") Step: " & passoTxt & " of " & CStr(total) & "  |  Retry: " & CStr(execCount) & _
-                            rowLabel & IIf(detalheLimpo = "", "", "  |  " & detalheLimpo)
+                            rowLabel & IIf(promptIdLimpo = "", "", "  |  " & promptIdLimpo) & _
+                            IIf(detalheLimpo = "", "", "  |  " & detalheLimpo)
     On Error GoTo 0
 End Sub
 

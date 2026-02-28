@@ -85,7 +85,7 @@ Comportamentos esperados:
 - limpeza de DEBUG da execução anterior;
 - status bar com progresso de execução.
 - durante cada passo, a status bar inclui fase operacional antes da execução (ex.: `A preparar passo`, `Uploading file`, `A executar prompt`).
-- a status bar também mostra a posição da lista no PAINEL no formato `Row n de z` (índice lógico de prompts válidos na coluna INICIAR até ao primeiro `STOP`; lacunas intermédias só contam enquanto não existir sentinela de término).
+- a status bar também mostra a posição da lista no PAINEL no formato `Row n de z` e inclui o `Prompt ID` completo em execução antes do detalhe da fase (ex.: `... | Row 5 de 6 | PIPELINE_MAKER/01/WF_PROMPT_AUDIT/v1.3 | A executar prompt`).
 
 ## 3.2 Config
 
