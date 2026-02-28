@@ -292,6 +292,8 @@ Notas:
 
 - Valores fora do intervalo `1000..900000` ms são ignorados e o motor usa o default, com alerta no `DEBUG` (`M05_HTTP_TIMEOUT_INVALID`).
 - Os timeouts efetivos de cada execução são registados no `DEBUG` como `M05_HTTP_TIMEOUTS`.
+- Quando ocorrer `Erro VBA: ... tempo limite ...`, o motor regista `M05_HTTP_TIMEOUT_ERROR` com: tipo de timeout provável (`resolve/connect/send/receive/outro`), `elapsed_ms` até à falha e os parâmetros efetivos `HTTP_TIMEOUT_*_MS` aplicados no passo.
+- O mesmo diagnóstico de timeout também é anexado em `resultado.Erro` (`[ERRO] Erro VBA: ...`) para ficar visível no `Seguimento`, mesmo quando o utilizador não consulta a folha `DEBUG`.
 
 Sinais úteis para separar causas:
 
