@@ -298,6 +298,9 @@ Notas:
 - O mesmo diagnóstico de timeout também é anexado em `resultado.Erro` (`[ERRO] Erro VBA: ...`) para ficar visível no `Seguimento`, mesmo quando o utilizador não consulta a folha `DEBUG`.
 - O diagnóstico inclui ainda `stage` (`Open`/`Send`/`Status`/`ResponseText`) para indicar em que fase HTTP a falha ocorreu e, quando `Err.Description` vier vazio, o motor adiciona fallback com `Err.Number`/`LastDllError` para evitar mensagens em branco.
 - O motor passa também a emitir `cause_hint` + `confidence` + `action` com heurística por fase (`stage`), `payload_len`, `response_len` e `http_status_partial`, para orientar rapidamente a causa provável e próxima ação de mitigação.
+- O evento de timeout inclui `started_at`/`failed_at` (timestamps absolutos), `retry_outcome` e um bloco de contexto de host (`winhttp_proxy`, `vpn_flag`, `host`, `ip_masked`) para acelerar troubleshooting de rede.
+- Em timeout de `stage=Send`, o motor executa automaticamente 1 retry curto com novo socket e regista `M05_TIMEOUT_DECISION` com a decisão aplicada/sugerida.
+- É mantida métrica em memória por execução (`timeout_count_prompt_model`, `timeout_count_global`) para distinguir padrão sistémico de prompt/modelo específico.
 
 Sinais úteis para separar causas:
 
