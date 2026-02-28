@@ -8,6 +8,15 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-28 | Codex | Corrige compile error na status bar por variável não declarada
+'   - Adiciona parâmetro opcional promptId em Painel_StatusBar_Set para suportar exibição do ID atual.
+'   - Atualiza chamadas durante o passo (preparação/upload/execução/resposta) para passar prompt ID consistente.
+' - 2026-02-28 | Codex | Ajusta total exibido em "Step x of y" para total planeado da lista
+'   - Passa a calcular total visível por passo com base em "Row n de z" (prompts planeados).
+'   - Mantém Max Steps como limite duro de execução, evitando mostrar total inferior ao passo atual.
+' - 2026-02-28 | Codex | Status bar passa a exibir Prompt ID completo por fase
+'   - Inclui o prompt ID entre "Row n de z" e o detalhe da fase (preparacao/upload/execucao/resposta).
+'   - Mantem formato existente de Step/Retry/Row para preservar compatibilidade visual no PAINEL.
 ' - 2026-02-27 | Codex | Corrige leitura dos limites Max Steps/Max Repetitions no PAINEL
 '   - Ajusta Painel_LerLimitesPipeline para ler Max Steps da linha 5 e Max Repetitions da linha 6.
 '   - Elimina bug em que Max Steps herdava indevidamente o valor de Max Repetitions.
@@ -651,11 +660,13 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         Dim rowPos As Long
         Dim rowTotal As Long
+        Dim stepTotalVisivel As Long
         rowPos = Painel_PosicaoPromptPlaneado(wsPainel, colIniciar, cursorRow)
         rowTotal = Painel_ContarPromptsPlaneados(wsPainel, colIniciar)
         If rowTotal < rowPos Then rowTotal = rowPos
+        stepTotalVisivel = Painel_TotalVisivelStep(maxSteps, rowTotal, passo)
 
-        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "A preparar passo", rowPos, rowTotal)
+        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "A preparar passo", rowPos, rowTotal, atual)
         DoEvents
 
         ' Controlo de repeticoes por ID
@@ -763,7 +774,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         Dim okFiles As Boolean
         If promptTemFiles Then
-            Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "Uploading file", rowPos, rowTotal)
+            Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "Uploading file", rowPos, rowTotal, prompt.Id)
             DoEvents
 
             okFiles = Files_PrepararContextoDaPrompt( _
@@ -840,7 +851,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Call FileOutput_PrepareRequest(fo_outputKind, fo_processMode, fo_structuredMode, modosEfetivo, extraFragmentFO)
 
 
-        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "A executar prompt", rowPos, rowTotal)
+        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "A executar prompt", rowPos, rowTotal, prompt.Id)
         DoEvents
 
         Dim debugFingerprintSeed As String
@@ -850,7 +861,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                                     modosEfetivo, prompt.storage, inputJsonFinal, extraFragmentFO, prompt.Id, debugFingerprintSeed)
 
         execCount = execCount + 1
-        Call Painel_StatusBar_Set(inicioHHMM, passo, maxSteps, execCount, "Resposta recebida", rowPos, rowTotal)
+        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "Resposta recebida", rowPos, rowTotal, prompt.Id)
         DoEvents
 
                 ' -------------------------------
@@ -1087,7 +1098,18 @@ Private Sub Painel_LimparDebugSessaoAnterior()
     On Error GoTo 0
 End Sub
 
-Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long, ByVal total As Long, ByVal execCount As Long, Optional ByVal detalhe As String = "", Optional ByVal rowPos As Long = 0, Optional ByVal rowTotal As Long = 0)
+Private Function Painel_TotalVisivelStep(ByVal maxSteps As Long, ByVal rowTotal As Long, ByVal passoAtual As Long) As Long
+    Dim total As Long
+
+    total = rowTotal
+    If total <= 0 Then total = maxSteps
+    If total <= 0 Then total = passoAtual
+    If total < passoAtual Then total = passoAtual
+
+    Painel_TotalVisivelStep = total
+End Function
+
+Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long, ByVal total As Long, ByVal execCount As Long, Optional ByVal detalhe As String = "", Optional ByVal rowPos As Long = 0, Optional ByVal rowTotal As Long = 0, Optional ByVal promptId As String = "")
     On Error Resume Next
 
     Dim passoTxt As String
@@ -1100,6 +1122,9 @@ Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long
     Dim detalheLimpo As String
     detalheLimpo = Trim$(CStr(detalhe))
 
+    Dim promptIdLimpo As String
+    promptIdLimpo = Trim$(CStr(promptId))
+
     Dim rowLabel As String
     rowLabel = ""
     If rowTotal > 0 Then
@@ -1109,7 +1134,8 @@ Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long
     End If
 
     Application.StatusBar = "(" & inicioHHMM & ") Step: " & passoTxt & " of " & CStr(total) & "  |  Retry: " & CStr(execCount) & _
-                            rowLabel & IIf(detalheLimpo = "", "", "  |  " & detalheLimpo)
+                            rowLabel & IIf(promptIdLimpo = "", "", "  |  " & promptIdLimpo) & _
+                            IIf(detalheLimpo = "", "", "  |  " & detalheLimpo)
     On Error GoTo 0
 End Sub
 
