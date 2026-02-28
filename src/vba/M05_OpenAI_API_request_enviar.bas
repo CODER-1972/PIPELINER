@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-28 | Codex | Diagnostico enriquecido para timeouts HTTP
+'   - Classifica timeout provavel (resolve/connect/send/receive/outro) com base no tempo decorrido e limites configurados.
+'   - Regista tempo decorrido ate falha e valores efetivos de HTTP_TIMEOUT_*_MS no DEBUG (M05_HTTP_TIMEOUT_ERROR).
 ' - 2026-02-27 | Codex | Diagnóstico com fingerprint e distinção transporte vs contrato
 '   - Adiciona fingerprint textual (FP=...) em M05_PAYLOAD_CHECK/M05_HTTP_TIMEOUTS/M05_HTTP_RESULT.
 '   - Torna mensagens de M05 mais explicativas para correlacionar facilmente com eventos M10 do mesmo passo.
@@ -735,6 +738,8 @@ On Error Resume Next
     Dim timeoutConnectMs As Long
     Dim timeoutSendMs As Long
     Dim timeoutReceiveMs As Long
+    Dim attemptStartTick As Double
+    Dim timeoutElapsedMs As Long
 
     timeoutResolveMs = M05_GetHttpTimeoutMs("HTTP_TIMEOUT_RESOLVE_MS", HTTP_TIMEOUT_RESOLVE_MS_DEFAULT, dbgPromptId)
     timeoutConnectMs = M05_GetHttpTimeoutMs("HTTP_TIMEOUT_CONNECT_MS", HTTP_TIMEOUT_CONNECT_MS_DEFAULT, dbgPromptId)
@@ -756,6 +761,7 @@ On Error Resume Next
     Do
         attempt = attempt + 1
         reqId = ""
+        attemptStartTick = Timer
 
         Dim http As Object
         Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
@@ -831,8 +837,106 @@ On Error Resume Next
     Loop
 
 TrataErro:
+    timeoutElapsedMs = M05_ElapsedMsFromTick(attemptStartTick)
+    If M05_IsTimeoutError(Err.Number, Err.Description) Then
+        Dim timeoutType As String
+        timeoutType = M05_ClassifyTimeoutType(timeoutElapsedMs, timeoutResolveMs, timeoutConnectMs, timeoutSendMs, timeoutReceiveMs)
+
+        On Error Resume Next
+        Call Debug_Registar(0, dbgPromptId, "ERRO", "", "M05_HTTP_TIMEOUT_ERROR", _
+            "FP=" & fpBase & _
+            " | timeout_type=" & timeoutType & _
+            " | elapsed_ms=" & CStr(timeoutElapsedMs) & _
+            " | HTTP_TIMEOUT_RESOLVE_MS=" & CStr(timeoutResolveMs) & _
+            " | HTTP_TIMEOUT_CONNECT_MS=" & CStr(timeoutConnectMs) & _
+            " | HTTP_TIMEOUT_SEND_MS=" & CStr(timeoutSendMs) & _
+            " | HTTP_TIMEOUT_RECEIVE_MS=" & CStr(timeoutReceiveMs), _
+            "Timeout detetado na chamada a /v1/responses; rever limite indicado e latencia/rede antes de repetir.")
+        On Error GoTo 0
+    End If
+
     resultado.Erro = "Erro VBA: " & Err.Description
     OpenAI_Executar = resultado
+End Function
+
+Private Function M05_ElapsedMsFromTick(ByVal startTick As Double) As Long
+    On Error GoTo EH
+
+    If startTick <= 0 Then
+        M05_ElapsedMsFromTick = 0
+        Exit Function
+    End If
+
+    Dim nowTick As Double
+    Dim elapsedSec As Double
+    nowTick = Timer
+
+    If nowTick >= startTick Then
+        elapsedSec = nowTick - startTick
+    Else
+        elapsedSec = (86400# - startTick) + nowTick
+    End If
+
+    M05_ElapsedMsFromTick = CLng(elapsedSec * 1000#)
+    Exit Function
+
+EH:
+    M05_ElapsedMsFromTick = 0
+End Function
+
+Private Function M05_IsTimeoutError(ByVal errNumber As Long, ByVal errDescription As String) As Boolean
+    Dim d As String
+    d = LCase$(Trim$(CStr(errDescription)))
+
+    If InStr(1, d, "timed out", vbTextCompare) > 0 Then
+        M05_IsTimeoutError = True
+        Exit Function
+    End If
+
+    If InStr(1, d, "tempo limite", vbTextCompare) > 0 Then
+        M05_IsTimeoutError = True
+        Exit Function
+    End If
+
+    ' WinHTTP ERROR_WINHTTP_TIMEOUT
+    If errNumber = -2147012894 Then
+        M05_IsTimeoutError = True
+        Exit Function
+    End If
+
+    M05_IsTimeoutError = False
+End Function
+
+Private Function M05_ClassifyTimeoutType( _
+    ByVal elapsedMs As Long, _
+    ByVal resolveMs As Long, _
+    ByVal connectMs As Long, _
+    ByVal sendMs As Long, _
+    ByVal receiveMs As Long _
+) As String
+    Const MARGIN_MS As Long = 1500
+
+    Dim tResolve As Long
+    Dim tConnect As Long
+    Dim tSend As Long
+    Dim tReceive As Long
+
+    tResolve = resolveMs
+    tConnect = resolveMs + connectMs
+    tSend = resolveMs + connectMs + sendMs
+    tReceive = resolveMs + connectMs + sendMs + receiveMs
+
+    If elapsedMs > 0 And elapsedMs <= (tResolve + MARGIN_MS) Then
+        M05_ClassifyTimeoutType = "Timeout DNS/resolve (ms) para /v1/responses"
+    ElseIf elapsedMs > 0 And elapsedMs <= (tConnect + MARGIN_MS) Then
+        M05_ClassifyTimeoutType = "Timeout de ligacao TCP/TLS (ms) para /v1/responses"
+    ElseIf elapsedMs > 0 And elapsedMs <= (tSend + MARGIN_MS) Then
+        M05_ClassifyTimeoutType = "Timeout de envio do request (ms) para /v1/responses"
+    ElseIf elapsedMs > 0 And elapsedMs <= (tReceive + MARGIN_MS) Then
+        M05_ClassifyTimeoutType = "Timeout de espera da resposta (ms) para /v1/responses"
+    Else
+        M05_ClassifyTimeoutType = "Outro tipo de Timeout"
+    End If
 End Function
 
 

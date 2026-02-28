@@ -11,6 +11,9 @@ Option Explicit
 ' - 2026-02-28 | Codex | Ajusta total exibido em "Step x of y" para total planeado da lista
 '   - Passa a calcular total visível por passo com base em "Row n de z" (prompts planeados).
 '   - Mantém Max Steps como limite duro de execução, evitando mostrar total inferior ao passo atual.
+' - 2026-02-28 | Codex | Status bar passa a exibir Prompt ID completo por fase
+'   - Inclui o prompt ID entre "Row n de z" e o detalhe da fase (preparacao/upload/execucao/resposta).
+'   - Mantem formato existente de Step/Retry/Row para preservar compatibilidade visual no PAINEL.
 ' - 2026-02-27 | Codex | Corrige leitura dos limites Max Steps/Max Repetitions no PAINEL
 '   - Ajusta Painel_LerLimitesPipeline para ler Max Steps da linha 5 e Max Repetitions da linha 6.
 '   - Elimina bug em que Max Steps herdava indevidamente o valor de Max Repetitions.
@@ -1116,6 +1119,9 @@ Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long
     Dim detalheLimpo As String
     detalheLimpo = Trim$(CStr(detalhe))
 
+    Dim promptIdLimpo As String
+    promptIdLimpo = Trim$(CStr(promptId))
+
     Dim rowLabel As String
     rowLabel = ""
     If rowTotal > 0 Then
@@ -1125,7 +1131,8 @@ Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long
     End If
 
     Application.StatusBar = "(" & inicioHHMM & ") Step: " & passoTxt & " of " & CStr(total) & "  |  Retry: " & CStr(execCount) & _
-                            rowLabel & IIf(detalheLimpo = "", "", "  |  " & detalheLimpo)
+                            rowLabel & IIf(promptIdLimpo = "", "", "  |  " & promptIdLimpo) & _
+                            IIf(detalheLimpo = "", "", "  |  " & detalheLimpo)
     On Error GoTo 0
 End Sub
 
