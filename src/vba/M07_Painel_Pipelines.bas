@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-02-28 | Codex | Corrige compile error na status bar por variável não declarada
+'   - Adiciona parâmetro opcional promptId em Painel_StatusBar_Set para suportar exibição do ID atual.
+'   - Atualiza chamadas durante o passo (preparação/upload/execução/resposta) para passar prompt ID consistente.
 ' - 2026-02-28 | Codex | Ajusta total exibido em "Step x of y" para total planeado da lista
 '   - Passa a calcular total visível por passo com base em "Row n de z" (prompts planeados).
 '   - Mantém Max Steps como limite duro de execução, evitando mostrar total inferior ao passo atual.
@@ -663,7 +666,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         If rowTotal < rowPos Then rowTotal = rowPos
         stepTotalVisivel = Painel_TotalVisivelStep(maxSteps, rowTotal, passo)
 
-        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "A preparar passo", rowPos, rowTotal)
+        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "A preparar passo", rowPos, rowTotal, atual)
         DoEvents
 
         ' Controlo de repeticoes por ID
@@ -771,7 +774,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         Dim okFiles As Boolean
         If promptTemFiles Then
-            Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "Uploading file", rowPos, rowTotal)
+            Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "Uploading file", rowPos, rowTotal, prompt.Id)
             DoEvents
 
             okFiles = Files_PrepararContextoDaPrompt( _
@@ -848,7 +851,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Call FileOutput_PrepareRequest(fo_outputKind, fo_processMode, fo_structuredMode, modosEfetivo, extraFragmentFO)
 
 
-        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "A executar prompt", rowPos, rowTotal)
+        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "A executar prompt", rowPos, rowTotal, prompt.Id)
         DoEvents
 
         Dim debugFingerprintSeed As String
@@ -858,7 +861,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                                     modosEfetivo, prompt.storage, inputJsonFinal, extraFragmentFO, prompt.Id, debugFingerprintSeed)
 
         execCount = execCount + 1
-        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "Resposta recebida", rowPos, rowTotal)
+        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "Resposta recebida", rowPos, rowTotal, prompt.Id)
         DoEvents
 
                 ' -------------------------------
@@ -1106,7 +1109,7 @@ Private Function Painel_TotalVisivelStep(ByVal maxSteps As Long, ByVal rowTotal 
     Painel_TotalVisivelStep = total
 End Function
 
-Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long, ByVal total As Long, ByVal execCount As Long, Optional ByVal detalhe As String = "", Optional ByVal rowPos As Long = 0, Optional ByVal rowTotal As Long = 0)
+Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long, ByVal total As Long, ByVal execCount As Long, Optional ByVal detalhe As String = "", Optional ByVal rowPos As Long = 0, Optional ByVal rowTotal As Long = 0, Optional ByVal promptId As String = "")
     On Error Resume Next
 
     Dim passoTxt As String
