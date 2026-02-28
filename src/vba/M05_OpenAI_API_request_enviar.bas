@@ -8,6 +8,15 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-28 | Codex | Aumenta precisao de causa provavel em timeout
+'   - Acrescenta hint de causa com confianca usando fase HTTP, tamanho de payload/resposta e estado parcial.
+'   - Regista contexto extra (attempt, payload_len, http_status_partial, response_len, Err.Source) no erro final.
+' - 2026-02-28 | Codex | Diagnostico enriquecido para timeouts HTTP
+'   - Classifica timeout provavel (resolve/connect/send/receive/outro) com base no tempo decorrido e limites configurados.
+'   - Regista tempo decorrido ate falha e valores efetivos de HTTP_TIMEOUT_*_MS no DEBUG (M05_HTTP_TIMEOUT_ERROR).
+' - 2026-02-28 | Codex | Preserva detalhes de erro no handler de timeout
+'   - Guarda Err.Number/Err.Description antes de logging para evitar perda de mensagem no resultado final.
+'   - Inclui diagnostico de timeout (tipo, elapsed e HTTP_TIMEOUT_*_MS) tambem em resultado.Erro no Seguimento.
 ' - 2026-02-27 | Codex | Diagnóstico com fingerprint e distinção transporte vs contrato
 '   - Adiciona fingerprint textual (FP=...) em M05_PAYLOAD_CHECK/M05_HTTP_TIMEOUTS/M05_HTTP_RESULT.
 '   - Torna mensagens de M05 mais explicativas para correlacionar facilmente com eventos M10 do mesmo passo.
@@ -735,6 +744,13 @@ On Error Resume Next
     Dim timeoutConnectMs As Long
     Dim timeoutSendMs As Long
     Dim timeoutReceiveMs As Long
+    Dim attemptStartTick As Double
+    Dim timeoutElapsedMs As Long
+    Dim httpStage As String
+    Dim httpLastDllError As Long
+    Dim requestPayloadLen As Long
+    Dim httpStatusSnapshot As Long
+    Dim responseLenSnapshot As Long
 
     timeoutResolveMs = M05_GetHttpTimeoutMs("HTTP_TIMEOUT_RESOLVE_MS", HTTP_TIMEOUT_RESOLVE_MS_DEFAULT, dbgPromptId)
     timeoutConnectMs = M05_GetHttpTimeoutMs("HTTP_TIMEOUT_CONNECT_MS", HTTP_TIMEOUT_CONNECT_MS_DEFAULT, dbgPromptId)
@@ -751,27 +767,39 @@ On Error Resume Next
         "Time-outs aplicados nesta execução; útil para distinguir lentidão de erro lógico. Se houver timeout, aumentar HTTP_TIMEOUT_RECEIVE_MS e repetir 1 vez.")
     On Error GoTo TrataErro
 
+    requestPayloadLen = Len(json)
     attempt = 0
 
     Do
         attempt = attempt + 1
         reqId = ""
+        attemptStartTick = Timer
+        httpStage = "init"
+        httpStatusSnapshot = 0
+        responseLenSnapshot = 0
 
         Dim http As Object
         Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
 
         ' Mais tolerante para payloads com base64 (INLINE_BASE64)
+        httpStage = "set_timeouts"
         http.SetTimeouts timeoutResolveMs, timeoutConnectMs, timeoutSendMs, timeoutReceiveMs
 
+        httpStage = "open"
         http.Open "POST", OPENAI_ENDPOINT, False
         http.SetRequestHeader "Authorization", "Bearer " & apiKey
         http.SetRequestHeader "Content-Type", "application/json; charset=utf-8"
         http.SetRequestHeader "Accept", "application/json"
 
+        httpStage = "send"
         http.Send json
 
+        httpStage = "status"
         httpStatus = CLng(http.Status)
+        httpStatusSnapshot = httpStatus
+        httpStage = "response_text"
         resposta = CStr(http.ResponseText)
+        responseLenSnapshot = Len(resposta)
 
         ' Guardar JSON bruto para auditoria (sempre)
         resultado.rawResponseJson = resposta
@@ -831,8 +859,235 @@ On Error Resume Next
     Loop
 
 TrataErro:
-    resultado.Erro = "Erro VBA: " & Err.Description
+    Dim errNumber As Long
+    Dim errDescription As String
+    Dim timeoutType As String
+    Dim timeoutDiag As String
+    Dim timeoutCauseHint As String
+    Dim errSource As String
+
+    errNumber = Err.Number
+    errDescription = Trim$(Err.Description)
+    errSource = Trim$(Err.Source)
+    httpLastDllError = Err.LastDllError
+
+    timeoutElapsedMs = M05_ElapsedMsFromTick(attemptStartTick)
+    If M05_IsTimeoutError(errNumber, errDescription) Then
+        timeoutType = M05_ClassifyTimeoutType(httpStage, timeoutElapsedMs, timeoutResolveMs, timeoutConnectMs, timeoutSendMs, timeoutReceiveMs)
+        timeoutCauseHint = M05_BuildTimeoutCauseHint(httpStage, timeoutElapsedMs, timeoutSendMs, timeoutReceiveMs, requestPayloadLen, responseLenSnapshot, httpStatusSnapshot)
+        timeoutDiag = timeoutType & _
+            " | stage=" & M05_TimeoutStageLabel(httpStage) & _
+            " | elapsed_ms=" & CStr(timeoutElapsedMs) & _
+            " | attempt=" & CStr(attempt) & _
+            " | payload_len=" & CStr(requestPayloadLen) & _
+            " | http_status_partial=" & CStr(httpStatusSnapshot) & _
+            " | response_len=" & CStr(responseLenSnapshot) & _
+            " | HTTP_TIMEOUT_RESOLVE_MS=" & CStr(timeoutResolveMs) & _
+            " | HTTP_TIMEOUT_CONNECT_MS=" & CStr(timeoutConnectMs) & _
+            " | HTTP_TIMEOUT_SEND_MS=" & CStr(timeoutSendMs) & _
+            " | HTTP_TIMEOUT_RECEIVE_MS=" & CStr(timeoutReceiveMs)
+        If timeoutCauseHint <> "" Then timeoutDiag = timeoutDiag & " | " & timeoutCauseHint
+
+        On Error Resume Next
+        Call Debug_Registar(0, dbgPromptId, "ERRO", "", "M05_HTTP_TIMEOUT_ERROR", _
+            "FP=" & fpBase & " | " & timeoutDiag, _
+            "Timeout detetado na chamada a /v1/responses; rever limite indicado e latencia/rede antes de repetir.")
+        On Error GoTo 0
+    End If
+
+    If errDescription = "" Then
+        errDescription = "(sem descricao VBA)"
+    End If
+
+    resultado.Erro = "Erro VBA: " & errDescription
+    If timeoutDiag <> "" Then
+        resultado.Erro = resultado.Erro & " | " & timeoutDiag
+    End If
+
+    If errNumber <> 0 Then
+        resultado.Erro = resultado.Erro & " | Err.Number=" & CStr(errNumber)
+    End If
+    If httpLastDllError <> 0 Then
+        resultado.Erro = resultado.Erro & " | LastDllError=" & CStr(httpLastDllError)
+    End If
+    If errSource <> "" Then
+        resultado.Erro = resultado.Erro & " | Err.Source=" & errSource
+    End If
+
     OpenAI_Executar = resultado
+End Function
+
+Private Function M05_ElapsedMsFromTick(ByVal startTick As Double) As Long
+    On Error GoTo EH
+
+    If startTick <= 0 Then
+        M05_ElapsedMsFromTick = 0
+        Exit Function
+    End If
+
+    Dim nowTick As Double
+    Dim elapsedSec As Double
+    nowTick = Timer
+
+    If nowTick >= startTick Then
+        elapsedSec = nowTick - startTick
+    Else
+        elapsedSec = (86400# - startTick) + nowTick
+    End If
+
+    M05_ElapsedMsFromTick = CLng(elapsedSec * 1000#)
+    Exit Function
+
+EH:
+    M05_ElapsedMsFromTick = 0
+End Function
+
+Private Function M05_IsTimeoutError(ByVal errNumber As Long, ByVal errDescription As String) As Boolean
+    Dim d As String
+    d = LCase$(Trim$(CStr(errDescription)))
+
+    If InStr(1, d, "timed out", vbTextCompare) > 0 Then
+        M05_IsTimeoutError = True
+        Exit Function
+    End If
+
+    If InStr(1, d, "tempo limite", vbTextCompare) > 0 Then
+        M05_IsTimeoutError = True
+        Exit Function
+    End If
+
+    ' WinHTTP ERROR_WINHTTP_TIMEOUT
+    If errNumber = -2147012894 Then
+        M05_IsTimeoutError = True
+        Exit Function
+    End If
+
+    M05_IsTimeoutError = False
+End Function
+
+Private Function M05_ClassifyTimeoutType( _
+    ByVal httpStage As String, _
+    ByVal elapsedMs As Long, _
+    ByVal resolveMs As Long, _
+    ByVal connectMs As Long, _
+    ByVal sendMs As Long, _
+    ByVal receiveMs As Long _
+) As String
+    Const MARGIN_MS As Long = 1500
+
+    Dim tResolve As Long
+    Dim tConnect As Long
+    Dim tSend As Long
+    Dim tReceive As Long
+
+    tResolve = resolveMs
+    tConnect = resolveMs + connectMs
+    tSend = resolveMs + connectMs + sendMs
+    tReceive = resolveMs + connectMs + sendMs + receiveMs
+
+    Select Case LCase$(Trim$(httpStage))
+        Case "open", "set_timeouts"
+            M05_ClassifyTimeoutType = "Timeout de ligacao TCP/TLS (ms) para /v1/responses"
+            Exit Function
+        Case "send"
+            M05_ClassifyTimeoutType = "Timeout de envio do request (ms) para /v1/responses"
+            Exit Function
+        Case "status", "response_text"
+            M05_ClassifyTimeoutType = "Timeout de espera da resposta (ms) para /v1/responses"
+            Exit Function
+    End Select
+
+    If elapsedMs > 0 And elapsedMs <= (tResolve + MARGIN_MS) Then
+        M05_ClassifyTimeoutType = "Timeout DNS/resolve (ms) para /v1/responses"
+    ElseIf elapsedMs > 0 And elapsedMs <= (tConnect + MARGIN_MS) Then
+        M05_ClassifyTimeoutType = "Timeout de ligacao TCP/TLS (ms) para /v1/responses"
+    ElseIf elapsedMs > 0 And elapsedMs <= (tSend + MARGIN_MS) Then
+        M05_ClassifyTimeoutType = "Timeout de envio do request (ms) para /v1/responses"
+    ElseIf elapsedMs > 0 And elapsedMs <= (tReceive + MARGIN_MS) Then
+        M05_ClassifyTimeoutType = "Timeout de espera da resposta (ms) para /v1/responses"
+    Else
+        M05_ClassifyTimeoutType = "Outro tipo de Timeout"
+    End If
+End Function
+
+Private Function M05_BuildTimeoutCauseHint( _
+    ByVal httpStage As String, _
+    ByVal elapsedMs As Long, _
+    ByVal sendMs As Long, _
+    ByVal receiveMs As Long, _
+    ByVal payloadLen As Long, _
+    ByVal responseLen As Long, _
+    ByVal httpStatusPartial As Long _
+) As String
+    Dim stageNorm As String
+    Dim causeHint As String
+    Dim confidence As String
+    Dim actionHint As String
+
+    stageNorm = LCase$(Trim$(httpStage))
+    causeHint = "indeterminada"
+    confidence = "baixa"
+    actionHint = "correlacionar com M05_PAYLOAD_CHECK e repetir com payload reduzido"
+
+    Select Case stageNorm
+        Case "open", "set_timeouts"
+            causeHint = "rede_dns_proxy_tls"
+            confidence = "media"
+            actionHint = "validar DNS/proxy/TLS/firewall e conectividade para api.openai.com"
+
+        Case "send"
+            If payloadLen > 250000 Then
+                causeHint = "upload_lento_payload_grande"
+                confidence = "alta"
+                actionHint = "reduzir payload/anexos ou aumentar HTTP_TIMEOUT_SEND_MS"
+            Else
+                causeHint = "uplink_lento_ou_interrupcao_envio"
+                confidence = "media"
+                actionHint = "validar rede e considerar aumentar HTTP_TIMEOUT_SEND_MS"
+            End If
+
+        Case "status"
+            causeHint = "servidor_lento_ate_headers"
+            confidence = "media"
+            actionHint = "aumentar HTTP_TIMEOUT_RECEIVE_MS e verificar latencia do endpoint"
+
+        Case "response_text"
+            If httpStatusPartial >= 200 And httpStatusPartial < 300 And responseLen = 0 Then
+                causeHint = "stream_resposta_interrompido"
+                confidence = "media"
+                actionHint = "repetir 1x e validar estabilidade de rede/proxy"
+            ElseIf responseLen > 200000 Then
+                causeHint = "resposta_grande_lenta"
+                confidence = "alta"
+                actionHint = "reduzir output esperado ou aumentar HTTP_TIMEOUT_RECEIVE_MS"
+            Else
+                causeHint = "espera_resposta_excedida"
+                confidence = "media"
+                actionHint = "aumentar HTTP_TIMEOUT_RECEIVE_MS"
+            End If
+
+        Case Else
+            If elapsedMs > 0 And elapsedMs <= sendMs Then
+                causeHint = "tempo_gasto_antes_rececao"
+                confidence = "baixa"
+            ElseIf elapsedMs > sendMs And elapsedMs <= (sendMs + receiveMs) Then
+                causeHint = "tempo_gasto_em_espera_resposta"
+                confidence = "baixa"
+            End If
+    End Select
+
+    M05_BuildTimeoutCauseHint = "cause_hint=" & causeHint & " | confidence=" & confidence & " | action=" & actionHint
+End Function
+
+Private Function M05_TimeoutStageLabel(ByVal httpStage As String) As String
+    Select Case LCase$(Trim$(httpStage))
+        Case "set_timeouts": M05_TimeoutStageLabel = "SetTimeouts"
+        Case "open": M05_TimeoutStageLabel = "Open"
+        Case "send": M05_TimeoutStageLabel = "Send"
+        Case "status": M05_TimeoutStageLabel = "Status"
+        Case "response_text": M05_TimeoutStageLabel = "ResponseText"
+        Case Else: M05_TimeoutStageLabel = IIf(Trim$(httpStage) = "", "[n/d]", Trim$(httpStage))
+    End Select
 End Function
 
 
