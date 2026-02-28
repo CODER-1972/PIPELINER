@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-02-28 | Codex | Diagnostico detalhado para context_length_exceeded (HTTP 400)
+'   - Regista evento dedicado `API_CONTEXT_LENGTH_EXCEEDED` com metrica de tamanho (payload/input/prompt), anexos e faixas de risco.
+'   - Emite mensagem didatica no DEBUG com ação recomendada (reduzir input, anexos text_embed ou max_output_tokens).
 ' - 2026-02-28 | Codex | Diagnostico operativo com contexto de rede e retry dirigido
 '   - Regista started_at/failed_at absolutos, contexto de rede do host e decisao automatica no evento M05_TIMEOUT_DECISION.
 '   - Adiciona retry unico para timeout em stage=Send com novo socket e registo de retry_outcome.
@@ -216,6 +219,73 @@ Private Function ExtrairCampoJsonSimples(ByVal json As String, ByVal chave As St
     If pAspa2 = 0 Then Exit Function
 
     ExtrairCampoJsonSimples = Mid$(json, pAspa1 + 1, pAspa2 - pAspa1 - 1)
+End Function
+
+Private Function M05_CountOccurrences(ByVal haystack As String, ByVal needle As String) As Long
+    Dim pos As Long
+    Dim nextPos As Long
+
+    If Len(haystack) = 0 Or Len(needle) = 0 Then
+        M05_CountOccurrences = 0
+        Exit Function
+    End If
+
+    pos = 1
+    Do
+        nextPos = InStr(pos, haystack, needle, vbTextCompare)
+        If nextPos = 0 Then Exit Do
+        M05_CountOccurrences = M05_CountOccurrences + 1
+        pos = nextPos + Len(needle)
+    Loop
+End Function
+
+Private Function M05_LengthBand(ByVal valueLen As Long) As String
+    If valueLen <= 20000 Then
+        M05_LengthBand = "baixo"
+    ElseIf valueLen <= 120000 Then
+        M05_LengthBand = "medio"
+    ElseIf valueLen <= 300000 Then
+        M05_LengthBand = "alto"
+    Else
+        M05_LengthBand = "muito_alto"
+    End If
+End Function
+
+Private Function M05_BuildContextLengthDetail( _
+    ByVal modelo As String, _
+    ByVal payloadLen As Long, _
+    ByVal promptLen As Long, _
+    ByVal inputLitLen As Long, _
+    ByVal maxOutputTokens As Long, _
+    ByVal hasInputFile As Boolean, _
+    ByVal hasInputImage As Boolean, _
+    ByVal hasFileData As Boolean, _
+    ByVal hasFileId As Boolean, _
+    ByVal inputLit As String _
+) As String
+    Dim inputTextCount As Long
+    Dim inputFileCount As Long
+    Dim inputImageCount As Long
+    Dim contextPart As String
+
+    inputTextCount = M05_CountOccurrences(inputLit, """type"":""input_text""")
+    inputFileCount = M05_CountOccurrences(inputLit, """type"":""input_file""")
+    inputImageCount = M05_CountOccurrences(inputLit, """type"":""input_image""")
+
+    contextPart = "model=" & modelo & _
+        " | payload_len=" & CStr(payloadLen) & "(" & M05_LengthBand(payloadLen) & ")" & _
+        " | prompt_len=" & CStr(promptLen) & "(" & M05_LengthBand(promptLen) & ")" & _
+        " | input_array_len=" & CStr(inputLitLen) & "(" & M05_LengthBand(inputLitLen) & ")" & _
+        " | max_output_tokens=" & CStr(maxOutputTokens) & _
+        " | input_text_items=" & CStr(inputTextCount) & _
+        " | input_file_items=" & CStr(inputFileCount) & _
+        " | input_image_items=" & CStr(inputImageCount) & _
+        " | has_input_file=" & IIf(hasInputFile, "SIM", "NAO") & _
+        " | has_input_image=" & IIf(hasInputImage, "SIM", "NAO") & _
+        " | has_file_data=" & IIf(hasFileData, "SIM", "NAO") & _
+        " | has_file_id=" & IIf(hasFileId, "SIM", "NAO")
+
+    M05_BuildContextLengthDetail = contextPart
 End Function
 
 ' ============================================================
@@ -910,6 +980,32 @@ On Error Resume Next
             End If
         Else
             resultado.Erro = "HTTP " & httpStatus & " - " & resposta
+
+            If httpStatus = 400 Then
+                Dim apiErrCode As String
+                Dim apiErrType As String
+                Dim apiErrParam As String
+                Dim apiErrMessage As String
+                Dim contextLengthDetail As String
+
+                apiErrCode = LCase$(Trim$(ExtrairCampoJsonSimples(resposta, """code"":")))
+                apiErrType = Trim$(ExtrairCampoJsonSimples(resposta, """type"":"))
+                apiErrParam = Trim$(ExtrairCampoJsonSimples(resposta, """param"":"))
+                apiErrMessage = Trim$(ExtrairCampoJsonSimples(resposta, """message"":"))
+
+                If apiErrCode = "context_length_exceeded" Then
+                    contextLengthDetail = M05_BuildContextLengthDetail(modelo, requestPayloadLen, Len(textoPrompt), Len(inputLit), maxOutputTokens, hasInputFile, hasInputImage, hasFileData, hasFileId, inputLit)
+                    On Error Resume Next
+                    Call Debug_Registar(0, dbgPromptId, "ERRO", "", "API_CONTEXT_LENGTH_EXCEEDED", _
+                        "FP=" & fpBase & " | http_status=400 | error_code=" & apiErrCode & " | error_type=" & apiErrType & " | param=" & apiErrParam & " | api_message=" & apiErrMessage & " | " & contextLengthDetail, _
+                        "A entrada excedeu a janela de contexto do modelo; reduzir texto de INPUTS/OUTPUTS, anexos em text_embed ou max_output_tokens antes de repetir.")
+                    Call Debug_Registar(0, dbgPromptId, "INFO", "", "API_CONTEXT_LENGTH_ACTION", _
+                        Diag_Format("M05_CONTEXT", "context window excedida", "Pedido recusado com HTTP 400", "Resumir input e limitar tamanho de anexos text_embed", "Se houver anexos, prefira PDF selecionado ou divida em passos menores."), _
+                        "Checklist: validar REQ_INPUT_JSON len, payload_len em M05_PAYLOAD_CHECK e FILES_TEXT_EMBED_MAX_CHARS.")
+                    On Error GoTo TrataErro
+                End If
+            End If
+
             OpenAI_Executar = resultado
             Exit Function
         End If

@@ -329,6 +329,27 @@ Leitura em 10 segundos (regra prática):
 - Se não há 2xx e surgem erros M05, então o problema está na camada de **transporte/payload/timeout**.
 - Em `text_embed`, a evidência correta é mensagem de anexação textual; não é esperado `file_id`.
 
+### Diagnóstico rápido: `HTTP 400` com `context_length_exceeded`
+
+Quando a API devolve `HTTP 400` com `"code":"context_length_exceeded"`, o pedido foi rejeitado por excesso de contexto total (input + anexos + instruções + tokens de saída reservados).
+
+Com a instrumentação atual, o `DEBUG` passa a registar:
+
+- `API_CONTEXT_LENGTH_EXCEEDED` com:
+  - `model`, `payload_len`, `prompt_len`, `input_array_len`;
+  - contagem de itens `input_text/input_file/input_image`;
+  - presença de `file_data` vs `file_id`;
+  - banda de risco por tamanho (`baixo|medio|alto|muito_alto`).
+- `API_CONTEXT_LENGTH_ACTION` com mensagem didática (`PROBLEMA|IMPACTO|ACAO|DETALHE`) e checklist curto para mitigação.
+
+Checklist de mitigação (ordem recomendada):
+
+1. Reduzir texto bruto de `INPUTS`/`OUTPUTS` e instruções repetitivas no prompt.
+2. Se houver `text_embed`, reduzir `FILES_TEXT_EMBED_MAX_CHARS` ou converter os anexos para PDF focado.
+3. Diminuir `MAX_OUTPUT_TOKENS` para o mínimo necessário ao passo.
+4. Dividir o passo em 2+ prompts (pré-resumo → análise) para repartir contexto.
+5. Confirmar no `DEBUG` a evolução de `payload_len` (`M05_PAYLOAD_CHECK`) e repetir apenas quando houver redução material.
+
 ### Diagnóstico rápido: `HTTP 429` com `insufficient_quota`
 
 Quando o `Seguimento` mostra `HTTP Status=429` e body com `"code":"insufficient_quota"`, o problema não é de formato do payload: a API rejeitou o pedido por falta de quota/crédito disponível no projeto/organização.
