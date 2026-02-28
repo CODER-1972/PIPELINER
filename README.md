@@ -245,6 +245,7 @@ Boas práticas de manutenção VBA (preventivas):
 - em padrões regex com aspas dentro de classe de caracteres (ex.: `[^\"]`), duplicar aspas no literal VBA (ex.: `"""([^""]+)"""`) para evitar erro de compilação;
 - em rotinas de escape/unescape JSON, validar o par inverso de `Replace` (escape: `\ -> \\`, `" -> \"`; unescape: `\\ -> \`, `\" -> "`) para não corromper conteúdo silenciosamente;
 - após alterações em módulos `.bas`, correr compilação do projeto (`Debug > Compile VBAProject`) para apanhar erros de sintaxe antes de execução.
+- em procedimentos com `Option Explicit`, qualquer identificador usado em mensagens/StatusBar (ex.: `promptId`) deve existir na assinatura ou em `Dim` local; quando o helper for reutilizável, preferir parâmetro opcional explícito para evitar `Compile error: Variable not defined`.
 
 
 ### Diagnóstico rápido: web_search + anexos + ContextKV
