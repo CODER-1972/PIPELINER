@@ -8,6 +8,15 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-01 | Codex | Breadcrumbs STEP_STAGE para diagnostico pre-API
+'   - Regista fases enter_step/catalog_loaded/config_parsed/files_prepare/before_api no DEBUG.
+'   - Facilita triagem quando a pipeline para sem erro e sem novas linhas em Seguimento.
+' - 2026-03-01 | Codex | Aumenta granularidade dos breadcrumbs para isolamento de bloqueios
+'   - Adiciona marcos antes/depois de ContextKV, anexacao de INPUTS e inicio do parse de Config extra.
+'   - Permite distinguir bloqueio em pre-processamento interno vs parse/FILES vs chamada API.
+' - 2026-03-01 | Codex | Evita falha silenciosa sem linha no Seguimento em erro inesperado
+'   - Captura ultimo stage do passo (mStepLastStage) e inclui no erro de excecao do pipeline.
+'   - Em `TrataErro`, tenta escrever linha tecnica no Seguimento com passo/prompt/stage para auditoria minima.
 ' - 2026-03-01 | Codex | Refina alerta de downgrade para reduzir falso positivo
 '   - Limita M07_FILEOUTPUT_MODE_MISMATCH a cenarios com intencao explicita de File Output no Config extra/outputKind.
 '   - Padroniza mensagem com PROBLEMA/IMPACTO/ACAO/DETALHE para triagem rapida no DEBUG.
@@ -72,6 +81,8 @@ Option Explicit
 ' - Painel_Click_Registar (Sub): rotina pública do módulo.
 ' - Painel_Click_SetDefault (Sub): rotina pública do módulo.
 ' - Painel_Click_CriarMapa (Sub): rotina pública do módulo.
+' - Painel_LogStepStage (Private Sub): breadcrumb de fase no DEBUG para troubleshooting pre-API.
+' - Painel_RegistarFalhaNoSeguimento (Private Sub): fallback de auditoria no Seguimento para erros inesperados.
 ' =============================================================================
 
 ' ============================================================
@@ -108,6 +119,8 @@ Private Const LIST_START_ROW As Long = 10
 Private Const LIST_MAX_ROWS As Long = 40
 
 Private Const PIPELINES As Long = 10
+
+Private mStepLastStage As String
 
 ' Prefixos de nomes de botoes (Shapes) criados no PAINEL
 Private Const BTN_PREFIX As String = "BTN_"
@@ -657,6 +670,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     Dim execCount As Long
     execCount = 0
 
+    mStepLastStage = "pipeline_start"
+
     ' Execucao
     Dim atual As String
     atual = startId
@@ -665,9 +680,16 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     cursorRow = LIST_START_ROW
 
     Dim passo As Long
+    Dim passoCtx As Long
+    Dim promptCtx As String
+    passoCtx = 0
+    promptCtx = ""
+
     For passo = 1 To maxSteps
 
 
+        passoCtx = passo
+        promptCtx = atual
         wsPainel.Cells(cursorRow, colIniciar).value = atual
 
         Dim rowPos As Long
@@ -679,6 +701,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         stepTotalVisivel = Painel_TotalVisivelStep(maxSteps, rowTotal, passo)
 
         Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "A preparar passo", rowPos, rowTotal, atual)
+        Call Painel_LogStepStage(passo, atual, "enter_step", "row=" & CStr(rowPos) & "/" & CStr(rowTotal))
+        Call Painel_LogStepStage(passo, atual, "before_context_inject", "")
         DoEvents
 
         ' Controlo de repeticoes por ID
@@ -698,6 +722,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         ' Ler definicao da prompt
         Dim prompt As PromptDefinicao
         prompt = Catalogo_ObterPromptPorID(atual)
+        Call Painel_LogStepStage(passo, atual, "catalog_loaded", "lenPrompt=" & CStr(Len(prompt.textoPrompt)))
 
         If Trim$(prompt.textoPrompt) = "" Then
             Call Debug_Registar(passo, atual, "ERRO", "", "Catalogo", _
@@ -735,6 +760,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             promptTextFinal = prompt.textoPrompt
         End If
         On Error GoTo TrataErro
+        Call Painel_LogStepStage(passo, prompt.Id, "after_context_inject", "injectOk=" & IIf(injectOk, "SIM", "NAO"))
 
         If injectOk = False Then
             Call Debug_Registar(passo, prompt.Id, "ERRO", "", "CONTEXT_KV", injectErro, "")
@@ -744,11 +770,16 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         ' INPUTS declarados no catalogo (incluindo FILES/FICHEIROS) seguem para o modelo.
         ' O bloco textual e informativo; o anexo tecnico de ficheiros continua em M09.
+        Call Painel_LogStepStage(passo, prompt.Id, "before_inputs_attach", "")
         Call Painel_AnexarInputsTextuaisAoPrompt(prompt.Id, promptTextFinal)
+        Call Painel_LogStepStage(passo, prompt.Id, "after_inputs_attach", "lenPrompt=" & CStr(Len(promptTextFinal)))
 
         ' Converter Config extra (amigavel) -> JSON (audit) / input override / extra fragment
         Dim auditJson As String, inputJsonLiteral As String, extraFragment As String
+        Call Painel_LogStepStage(passo, prompt.Id, "config_parse_start", "lenConfigExtra=" & CStr(Len(prompt.ConfigExtra)))
         Call ConfigExtra_Converter(prompt.ConfigExtra, promptTextFinal, passo, prompt.Id, auditJson, inputJsonLiteral, extraFragment)
+        Call Painel_LogStepStage(passo, prompt.Id, "config_parsed", _
+            "lenAudit=" & CStr(Len(auditJson)) & "|lenInputJson=" & CStr(Len(inputJsonLiteral)))
 
         ' Encadear previous_response_id, apenas se o config extra nao tiver conversation/previous_response_id
         If prevResponseId <> "" Then
@@ -787,6 +818,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Dim okFiles As Boolean
         If promptTemFiles Then
             Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "Uploading file", rowPos, rowTotal, prompt.Id)
+            Call Painel_LogStepStage(passo, prompt.Id, "files_prepare_start", "temFiles=SIM")
             DoEvents
 
             okFiles = Files_PrepararContextoDaPrompt( _
@@ -814,6 +846,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             fileIds = ""
             falhaCriticaFiles = False
             erroFiles = ""
+            Call Painel_LogStepStage(passo, prompt.Id, "files_prepare_skip", "temFiles=NAO")
         End If
 
         If (Not okFiles) Or falhaCriticaFiles Then
@@ -847,6 +880,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             " | has_text_embed=" & IIf(InStr(1, inputJsonFinal, "----- BEGIN FILE:", vbTextCompare) > 0, "SIM", "NAO") & _
             " | preview=" & Left$(inputJsonFinal, 350), _
             "Input final construído; este retrato confirma se anexos seguiram como file/image e/ou text_embed. Se esperava text_embed, validar has_text_embed=SIM e blocos BEGIN/END FILE no payload dump.")
+
+        Call Painel_LogStepStage(passo, prompt.Id, "before_api", "lenInputJsonFinal=" & CStr(Len(inputJsonFinal)))
 
         ' -------------------------------
         ' Chamada a API (1 chamada / passo)
@@ -885,6 +920,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 "Regra: uma linha = chave: valor; linhas sem ':' sao ignoradas com alerta.")
         End If
 
+        Call Painel_LogStepStage(passo, prompt.Id, "api_call_start", "model=" & modeloUsado)
         Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "A executar prompt", rowPos, rowTotal, prompt.Id)
         DoEvents
 
@@ -1087,9 +1123,17 @@ SaidaLimpa:
     Exit Sub
 
 TrataErro:
+    Dim errResumo As String
+    errResumo = "Erro inesperado: #" & CStr(Err.Number) & " | " & Err.Description & " | stage=" & mStepLastStage
+
     Call Debug_Registar(0, "PIPELINE_" & CStr(pipelineIndex), "ERRO", "", "VBA", _
-        "Erro inesperado: " & Err.Description, _
+        errResumo, _
         "Sugestao: verifique IDs, folhas e referencias. Compile o VBAProject.")
+
+    If passoCtx > 0 Then
+        Call Painel_RegistarFalhaNoSeguimento(passoCtx, promptCtx, modeloUsado, pipelineNome, errResumo)
+    End If
+
     Resume SaidaLimpa
 End Sub
 
@@ -1899,6 +1943,25 @@ Private Function Painel_AllowedContem(ByVal allowedList As String, ByVal candida
 
     Painel_AllowedContem = False
 End Function
+
+Private Sub Painel_LogStepStage(ByVal passo As Long, ByVal promptId As String, ByVal stageName As String, ByVal detail As String)
+    mStepLastStage = CStr(stageName)
+    On Error Resume Next
+    Call Debug_Registar(passo, promptId, "INFO", "", "STEP_STAGE", _
+        "stage=" & stageName & IIf(Trim$(detail) <> "", " | " & detail, ""), _
+        "Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.")
+    On Error GoTo 0
+End Sub
+
+Private Sub Painel_RegistarFalhaNoSeguimento(ByVal passo As Long, ByVal promptId As String, ByVal modelo As String, ByVal pipelineNome As String, ByVal erroResumo As String)
+    On Error Resume Next
+    Dim p As PromptDefinicao
+    p.Id = promptId
+    p.textoPrompt = ""
+    p.ConfigExtra = ""
+    Call Seguimento_Registar(passo, p, modelo, "", 0, "", "[ERRO VBA] " & erroResumo, pipelineNome, "", "", "", "")
+    On Error GoTo 0
+End Sub
 
 ' ============================================================
 ' 7) Utilitarios PAINEL
