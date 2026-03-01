@@ -740,3 +740,39 @@ Se surgir `Compile error: Sub or Function not defined` ao abrir `SelfTest_Output
 - `WriteTextUTF8`
 
 Regra prática: SelfTests do `M17_OutputOrdersExecutor` devem ser auto-contidos (helper local no mesmo módulo) ou chamar apenas procedimentos `Public` de outros módulos. Evitar dependência em `Private Sub/Function` externos, porque o compilador do VBA não os resolve fora do módulo de origem.
+
+## 13. DEBUG_SCHEMA_VERSION=2 (DEBUG_DIAG)
+
+Para reforçar troubleshooting sem quebrar o formato legado da folha `DEBUG`, o motor suporta diagnóstico adicional em folha paralela `DEBUG_DIAG`.
+
+### 13.1 Configuração (folha Config, coluna A/B)
+
+- `DEBUG_LEVEL` = `BASE | DIAG | TRACE` (default interno: `BASE`)
+- `DEBUG_BUNDLE` = `TRUE | FALSE` (default interno: `FALSE`)
+
+Comportamento:
+
+- `BASE`: mantém apenas o logging existente (compatível).
+- `DIAG/TRACE`: escreve também uma linha por passo em `DEBUG_DIAG` com `debug_schema_version=2`.
+
+### 13.2 Campos principais em DEBUG_DIAG
+
+A linha DIAG inclui, entre outros:
+
+- fingerprint (`fp`) e tempos (`elapsed_ms`, `elapsed_files_prepare_ms`, `elapsed_api_call_ms`, `elapsed_directive_parse_ms`);
+- inputs/files (`files_requested`, `files_resolved`, `files_effective_modes`, `has_input_file`, `has_text_embed`, `input_file_count`, `file_ids_used`);
+- CI/container (`ci_expected`, `ci_observed`, `container_id`, `container_list_total/elegible/matched`, `container_files`);
+- contrato de output (`manifesto_detected`, `manifesto_fields`, `execute_directives_found`, `execute_lines`);
+- classificação automática (`root_cause_code`, `root_cause_summary`, `suggested_fix`, `confidence`).
+
+### 13.3 DEBUG_BUNDLE (opcional)
+
+Com `DEBUG_BUNDLE=TRUE`, o motor cria artefactos por execução em `<OUTPUT_FOLDER>/DEBUG_BUNDLE/<timestamp>_<prompt>_<resp>/` (ou `%TEMP%` se OUTPUT Folder estiver vazio), incluindo:
+
+- `payload.json` (quando disponível em `C:\Temp\payload.json`),
+- `response.json`,
+- `extracted_manifest.json`,
+- `extracted_execute.txt`,
+- `debug_diag_row.tsv`.
+
+Os conteúdos são truncados/sanitizados para reduzir exposição e manter determinismo operacional.
