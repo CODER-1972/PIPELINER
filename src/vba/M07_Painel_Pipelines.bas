@@ -1406,10 +1406,10 @@ Private Function Painel_Files_Checks_Debug( _
 
         If missingNames.Count > 0 Then
             Dim gotInputFile As Long
-            gotInputFile = Painel_CountOccurrences(inputJsonFinal, """type"":""input_file"")
+            gotInputFile = Painel_CountOccurrences(inputJsonFinal, """type"":""input_file""")
 
             Dim gotInputImage As Long
-            gotInputImage = Painel_CountOccurrences(inputJsonFinal, """type"":""input_image"")
+            gotInputImage = Painel_CountOccurrences(inputJsonFinal, """type"":""input_image""")
 
             Dim gotTextEmbed As Long
             gotTextEmbed = Painel_CountOccurrences(inputJsonFinal, "----- BEGIN FILE:")
