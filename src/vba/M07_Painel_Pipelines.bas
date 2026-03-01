@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-01 | Codex | Corrige dependência inválida de helper privado entre módulos
+'   - Substitui chamadas `Nz(...)` por helper local `Painel_Nz(...)` nas rotinas de validação FILES do módulo.
+'   - Elimina `Compile error: Sub or Function not defined` sem alterar comportamento funcional.
 ' - 2026-03-01 | Codex | D1 bloqueante aware de wildcard/latest
 '   - Resolve padroes FILES com wildcard/latest para nomes reais antes da comparacao com filesUsed.
 '   - Evita falso negativo de INPUTFILES_MISSING quando M09 seleciona nome final por pattern.
@@ -2034,7 +2037,7 @@ Private Function Painel_Files_ExpectedNamesFromLista(ByVal listaFiles As String)
     Set seen = CreateObject("Scripting.Dictionary")
     seen.CompareMode = vbTextCompare
     Dim raw As String
-    raw = Nz(listaFiles)
+    raw = Painel_Nz(listaFiles)
     If Trim$(raw) = "" Then Exit Function
     Dim items() As String
     items = Split(raw, ";")
@@ -2065,6 +2068,12 @@ Private Function Painel_Files_NormalizeExpectedName(ByVal item As String) As Str
     Painel_Files_NormalizeExpectedName = Trim$(t)
 End Function
 
+Private Function Painel_Nz(ByVal v As Variant) As String
+    If IsError(v) Then Exit Function
+    If IsNull(v) Then Exit Function
+    Painel_Nz = CStr(v)
+End Function
+
 Private Function Painel_Files_FindMissingExpected(ByVal expectedNames As Collection, ByVal filesUsed As String, ByVal inputFolder As String) As Collection
     Set Painel_Files_FindMissingExpected = New Collection
     On Error GoTo Falha
@@ -2072,7 +2081,7 @@ Private Function Painel_Files_FindMissingExpected(ByVal expectedNames As Collect
     Set used = CreateObject("Scripting.Dictionary")
     used.CompareMode = vbTextCompare
     Dim rawUsed As String
-    rawUsed = Nz(filesUsed)
+    rawUsed = Painel_Nz(filesUsed)
     If Trim$(rawUsed) <> "" Then
         Dim parts() As String
         parts = Split(rawUsed, ";")
