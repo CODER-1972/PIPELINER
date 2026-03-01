@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-01 | Codex | D1 bloqueante aware de wildcard/latest
+'   - Resolve padroes FILES com wildcard/latest para nomes reais antes da comparacao com filesUsed.
+'   - Evita falso negativo de INPUTFILES_MISSING quando M09 seleciona nome final por pattern.
 ' - 2026-02-28 | Codex | Corrige compile error na status bar por variável não declarada
 '   - Adiciona parâmetro opcional promptId em Painel_StatusBar_Set para suportar exibição do ID atual.
 '   - Atualiza chamadas durante o passo (preparação/upload/execução/resposta) para passar prompt ID consistente.
@@ -1392,6 +1395,38 @@ Private Function Painel_Files_Checks_Debug( _
     End If
 
     ' ------------------------------------------------------------
+    ' D1) Validador bloqueante de payload para anexos declarados em FILES
+    ' ------------------------------------------------------------
+    Dim expectedNames As Collection
+    Set expectedNames = Painel_Files_ExpectedNamesFromLista(listaFiles)
+
+    If expectedNames.Count > 0 Then
+        Dim missingNames As Collection
+        Set missingNames = Painel_Files_FindMissingExpected(expectedNames, filesUsed, inputFolder)
+
+        If missingNames.Count > 0 Then
+            Dim gotInputFile As Long
+            gotInputFile = Painel_CountOccurrences(inputJsonFinal, """type"":""input_file"")
+
+            Dim gotInputImage As Long
+            gotInputImage = Painel_CountOccurrences(inputJsonFinal, """type"":""input_image"")
+
+            Dim gotTextEmbed As Long
+            gotTextEmbed = Painel_CountOccurrences(inputJsonFinal, "----- BEGIN FILE:")
+
+            Call Debug_Registar(passo, promptId, "ERRO", "", "INPUTFILES_MISSING", _
+                "expected=" & CStr(expectedNames.Count) & _
+                " got_input_file=" & CStr(gotInputFile) & _
+                " got_input_image=" & CStr(gotInputImage) & _
+                " got_text_embed=" & CStr(gotTextEmbed) & _
+                " missing=[" & Painel_JoinCollection(missingNames, ", ") & "]", _
+                "Bloqueado antes do envio: rever INPUTS: FILES e anexacao M09 para garantir contrato minimo do payload.")
+            Painel_Files_Checks_Debug = False
+            Exit Function
+        End If
+    End If
+
+    ' ------------------------------------------------------------
     ' Check 3 (CORRIGIDO): nao falhar em INLINE_BASE64 so por fileIds=""
     ' ------------------------------------------------------------
     If temInputFileOuImagem Then
@@ -1990,4 +2025,170 @@ End Function
 
 Private Function JsonEscaparSimples(ByVal s As String) As String
     JsonEscaparSimples = Json_EscapeString(CStr(s))
+End Function
+
+Private Function Painel_Files_ExpectedNamesFromLista(ByVal listaFiles As String) As Collection
+    Set Painel_Files_ExpectedNamesFromLista = New Collection
+    On Error GoTo Falha
+    Dim seen As Object
+    Set seen = CreateObject("Scripting.Dictionary")
+    seen.CompareMode = vbTextCompare
+    Dim raw As String
+    raw = Nz(listaFiles)
+    If Trim$(raw) = "" Then Exit Function
+    Dim items() As String
+    items = Split(raw, ";")
+    Dim i As Long
+    For i = LBound(items) To UBound(items)
+        Dim nm As String
+        nm = Painel_Files_NormalizeExpectedName(CStr(items(i)))
+        If nm <> "" Then
+            If Not seen.exists(LCase$(nm)) Then
+                seen.Add LCase$(nm), True
+                Painel_Files_ExpectedNamesFromLista.Add nm
+            End If
+        End If
+    Next i
+    Exit Function
+Falha:
+End Function
+
+Private Function Painel_Files_NormalizeExpectedName(ByVal item As String) As String
+    Dim t As String
+    t = Trim$(CStr(item))
+    If t = "" Then Exit Function
+    Dim p As Long
+    p = InStr(1, t, "(", vbTextCompare)
+    If p > 0 Then t = Trim$(Left$(t, p - 1))
+    If InStrRev(t, "\") > 0 Then t = Mid$(t, InStrRev(t, "\") + 1)
+    If InStrRev(t, "/") > 0 Then t = Mid$(t, InStrRev(t, "/") + 1)
+    Painel_Files_NormalizeExpectedName = Trim$(t)
+End Function
+
+Private Function Painel_Files_FindMissingExpected(ByVal expectedNames As Collection, ByVal filesUsed As String, ByVal inputFolder As String) As Collection
+    Set Painel_Files_FindMissingExpected = New Collection
+    On Error GoTo Falha
+    Dim used As Object
+    Set used = CreateObject("Scripting.Dictionary")
+    used.CompareMode = vbTextCompare
+    Dim rawUsed As String
+    rawUsed = Nz(filesUsed)
+    If Trim$(rawUsed) <> "" Then
+        Dim parts() As String
+        parts = Split(rawUsed, ";")
+        Dim i As Long
+        For i = LBound(parts) To UBound(parts)
+            Dim token As String
+            token = Trim$(CStr(parts(i)))
+            If InStr(1, token, "(", vbTextCompare) > 0 Then token = Trim$(Left$(token, InStr(1, token, "(", vbTextCompare) - 1))
+            If token <> "" Then used(LCase$(token)) = True
+        Next i
+    End If
+
+    Dim j As Long
+    For j = 1 To expectedNames.Count
+        Dim expName As String
+        expName = CStr(expectedNames(j))
+
+        Dim resolvedExpected As String
+        resolvedExpected = Painel_Files_ResolveExpectedName(expName, inputFolder)
+
+        If InStr(1, expName, "*", vbTextCompare) > 0 Then
+            If Not Painel_Files_AnyUsedMatchesWildcard(used, expName) Then
+                If resolvedExpected <> "" Then
+                    If Not used.exists(LCase$(resolvedExpected)) Then Painel_Files_FindMissingExpected.Add resolvedExpected
+                Else
+                    Painel_Files_FindMissingExpected.Add expName
+                End If
+            End If
+        Else
+            If resolvedExpected <> "" Then expName = resolvedExpected
+            If Not used.exists(LCase$(expName)) Then Painel_Files_FindMissingExpected.Add expName
+        End If
+    Next j
+    Exit Function
+Falha:
+End Function
+
+Private Function Painel_Files_ResolveExpectedName(ByVal expectedToken As String, ByVal inputFolder As String) As String
+    On Error GoTo Falha
+    Dim token As String
+    token = Trim$(expectedToken)
+    If token = "" Then Exit Function
+
+    Dim hasLatest As Boolean
+    hasLatest = (InStr(1, token, "(latest)", vbTextCompare) > 0) Or _
+                (InStr(1, token, "(mais recente)", vbTextCompare) > 0) Or _
+                (InStr(1, token, "(mais_recente)", vbTextCompare) > 0)
+
+    token = Painel_Files_NormalizeExpectedName(token)
+    If token = "" Then Exit Function
+
+    If InStr(1, token, "*", vbTextCompare) = 0 Then
+        Painel_Files_ResolveExpectedName = token
+        Exit Function
+    End If
+
+    If Trim$(inputFolder) = "" Or Dir$(inputFolder, vbDirectory) = "" Then Exit Function
+
+    Dim bestName As String
+    Dim bestDate As Date
+    Dim f As String
+    f = Dir$(inputFolder & "\" & token)
+
+    Do While f <> ""
+        If hasLatest Then
+            Dim dt As Date
+            On Error Resume Next
+            dt = FileDateTime(inputFolder & "\" & f)
+            On Error GoTo Falha
+            If bestName = "" Or dt > bestDate Then
+                bestName = f
+                bestDate = dt
+            End If
+        Else
+            If bestName = "" Then bestName = f
+        End If
+        f = Dir$()
+    Loop
+
+    Painel_Files_ResolveExpectedName = bestName
+    Exit Function
+Falha:
+    Painel_Files_ResolveExpectedName = ""
+End Function
+
+Private Function Painel_Files_AnyUsedMatchesWildcard(ByVal used As Object, ByVal wildcardPattern As String) As Boolean
+    On Error GoTo Falha
+    Dim normPattern As String
+    normPattern = LCase$(Painel_Files_NormalizeExpectedName(wildcardPattern))
+    If normPattern = "" Then Exit Function
+
+    Dim k As Variant
+    For Each k In used.Keys
+        If LCase$(CStr(k)) Like normPattern Then
+            Painel_Files_AnyUsedMatchesWildcard = True
+            Exit Function
+        End If
+    Next k
+    Exit Function
+Falha:
+    Painel_Files_AnyUsedMatchesWildcard = False
+End Function
+
+Private Function Painel_CountOccurrences(ByVal hay As String, ByVal needle As String) As Long
+    Dim p As Long
+    p = InStr(1, hay, needle, vbTextCompare)
+    Do While p > 0
+        Painel_CountOccurrences = Painel_CountOccurrences + 1
+        p = InStr(p + Len(needle), hay, needle, vbTextCompare)
+    Loop
+End Function
+
+Private Function Painel_JoinCollection(ByVal coll As Collection, ByVal sep As String) As String
+    Dim i As Long
+    For i = 1 To coll.Count
+        If i > 1 Then Painel_JoinCollection = Painel_JoinCollection & sep
+        Painel_JoinCollection = Painel_JoinCollection & CStr(coll(i))
+    Next i
 End Function
