@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-03-01 | Codex | Evita auto-injecao indevida de Code Interpreter com anexos
+'   - Quando ha input_file/input_image e nao existe intencao explicita de CI no extra, suprime auto-add de code_interpreter.
+'   - Regista alerta M05_CI_AUTO_SUPPRESS para troubleshooting quando Modos inclui Code Interpreter nestas condicoes.
 ' - 2026-02-28 | Codex | Diagnostico detalhado para context_length_exceeded (HTTP 400)
 '   - Regista evento dedicado `API_CONTEXT_LENGTH_EXCEEDED` com metrica de tamanho (payload/input/prompt), anexos e faixas de risco.
 '   - Emite mensagem didatica no DEBUG com ação recomendada (reduzir input, anexos text_embed ou max_output_tokens).
@@ -588,6 +591,34 @@ Private Function ExtraFragment_TemTools(ByVal extraFragmentSemInput As String) A
 End Function
 
 
+
+Private Function ExtraFragment_RequestsCodeInterpreter(ByVal extraFragmentSemInput As String) As Boolean
+    Dim t As String
+    t = LCase$(Trim$(CStr(extraFragmentSemInput)))
+
+    If t = "" Then
+        ExtraFragment_RequestsCodeInterpreter = False
+        Exit Function
+    End If
+
+    If InStr(1, t, """process_mode"":""code_interpreter""", vbTextCompare) > 0 Then
+        ExtraFragment_RequestsCodeInterpreter = True
+        Exit Function
+    End If
+
+    If InStr(1, t, """tool_choice"":""code_interpreter""", vbTextCompare) > 0 Then
+        ExtraFragment_RequestsCodeInterpreter = True
+        Exit Function
+    End If
+
+    If InStr(1, t, """tool_choice"":{""type"":""code_interpreter""", vbTextCompare) > 0 Then
+        ExtraFragment_RequestsCodeInterpreter = True
+        Exit Function
+    End If
+
+    ExtraFragment_RequestsCodeInterpreter = False
+End Function
+
 Private Function Modos_Contem(ByVal modos As String, ByVal token As String) As Boolean
     Dim m As String
     m = LCase$(Trim$(CStr(modos)))
@@ -724,12 +755,22 @@ Public Function OpenAI_Executar( _
         End If
     End If
 
+    Dim ciExplicitInExtra As Boolean
+    ciExplicitInExtra = ExtraFragment_RequestsCodeInterpreter(extraFragmentSemInput)
+
     Dim autoAddCodeInterpreter As Boolean
     autoAddCodeInterpreter = False
 
     If modosCodeInterpreter Then
         If extraTemTools Then
             autoAddCodeInterpreter = False
+        ElseIf (hasInputFile Or hasInputImage) And (Not ciExplicitInExtra) Then
+            autoAddCodeInterpreter = False
+            On Error Resume Next
+            Call Debug_Registar(0, dbgPromptId, "ALERTA", "", "M05_CI_AUTO_SUPPRESS", _
+                "Modos inclui Code Interpreter, mas auto-add foi suprimido: ha anexos input_file/input_image e o extra nao pede CI explicitamente.", _
+                "Se este passo precisar mesmo de Code Interpreter, definir process_mode: code_interpreter no Config extra (ou tools explicitas).")
+            On Error GoTo TrataErro
         Else
             autoAddCodeInterpreter = True
         End If

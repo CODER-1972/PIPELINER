@@ -273,6 +273,8 @@ Boas práticas de manutenção VBA (preventivas):
 
 Regra atual do PIPELINER: quando `Modos` contém `Web search`, o payload deve incluir `tools:[{"type":"web_search"}]` por auto-injeção, mesmo que existam anexos (`input_file`/`input_image`).
 
+Nota de segurança operacional (Code Interpreter): quando `Modos` contém `Code Interpreter` mas o passo já leva anexos (`input_file`/`input_image`) e não há pedido explícito de CI no `Config extra` (`process_mode: code_interpreter` ou `tool_choice` equivalente), o motor suprime a auto-injeção de `code_interpreter` e regista `M05_CI_AUTO_SUPPRESS` no DEBUG. Isto evita respostas falsas de “ficheiro em /mnt/data ausente” em passos que devem usar apenas o contexto anexado.
+
 Checklist objetivo:
 
 1. Confirmar `REQ_INPUT_JSON` com `has_input_file=SIM` e `file_id=file-...` quando o modo de transporte for `FILE_ID`.
