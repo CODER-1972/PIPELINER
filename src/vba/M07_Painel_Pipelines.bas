@@ -844,8 +844,9 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             "len=" & Len(inputJsonFinal) & _
             " | has_input_file=" & IIf(InStr(1, inputJsonFinal, """type"":""input_file""", vbTextCompare) > 0, "SIM", "NAO") & _
             " | has_input_image=" & IIf(InStr(1, inputJsonFinal, """type"":""input_image""", vbTextCompare) > 0, "SIM", "NAO") & _
+            " | has_text_embed=" & IIf(InStr(1, inputJsonFinal, "----- BEGIN FILE:", vbTextCompare) > 0, "SIM", "NAO") & _
             " | preview=" & Left$(inputJsonFinal, 350), _
-            "Input final construído; este retrato confirma se anexos seguiram como file/image ou apenas texto. Se esperava PDF e has_input_file=NAO, corrigir FILES/mode.")
+            "Input final construído; este retrato confirma se anexos seguiram como file/image e/ou text_embed. Se esperava text_embed, validar has_text_embed=SIM e blocos BEGIN/END FILE no payload dump.")
 
         ' -------------------------------
         ' Chamada a API (1 chamada / passo)
@@ -1489,11 +1490,15 @@ Private Function Painel_Files_Checks_Debug( _
                 "input_file/input_image presente, mas nao detetei file_id nem file_data/image_url data:. Formato inesperado.", _
                 "Sugestao: reveja o JSON final e M09 (construcao do input_file/input_image).")
         End If
+    End If
 
-    ElseIf temTextEmbed Then
+    If temTextEmbed Then
+        Dim countTextEmbed As Long
+        countTextEmbed = Painel_CountOccurrences(inputJsonFinal, "----- BEGIN FILE:")
+
         Call Debug_Registar(passo, promptId, "INFO", "", "FILES", _
-            "Anexo processado por extração/embebido de texto; neste modo não existe file_id.", _
-            "Se precisares de layout visual (ex.: PDF), mudar para modo upload.")
+            "Anexacao OK via text_embed. blocos_text_embed=" & CStr(countTextEmbed), _
+            "Nota: text_embed coexiste com input_file/input_image quando ha anexos mistos; neste modo nao existe file_id para os ficheiros textuais.")
     End If
 End Function
 
