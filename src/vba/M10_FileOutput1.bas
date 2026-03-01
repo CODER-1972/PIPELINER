@@ -8,6 +8,9 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-03-01 | Codex | Evita colisão com palavra reservada Enum
+'   - Renomeia eNum/eDesc para errNoCaptured/errDescCaptured em DownloadContainerFileEx.
+'   - Remove risco de "Syntax error" por tokenização case-insensitive (eNum ~ Enum).
 ' - 2026-03-01 | Codex | Compatibilidade de declarações VBA em DownloadContainerFileEx
 '   - Move todas as declarações Dim para o topo da rotina para compatibilidade com VBE que exige declarações antes de instruções executáveis.
 '   - Evita erro de compilação de sintaxe em ambientes VBA mais estritos.
@@ -1678,8 +1681,8 @@ Private Function DownloadContainerFileEx(ByVal apiKey As String, ByVal container
     Dim attempt As Long
     Dim lastErr As String
     Dim finalTempPath As String
-    Dim eNum As Long
-    Dim eDesc As String
+    Dim errNoCaptured As Long
+    Dim errDescCaptured As String
     Dim http As Object
     Dim st As Object
     Dim tempPath As String
@@ -1728,9 +1731,9 @@ Private Function DownloadContainerFileEx(ByVal apiKey As String, ByVal container
         Exit Function
 
 TentativaFalha:
-        eNum = Err.Number
-        eDesc = Err.Description
-        lastErr = "attempt=" & CStr(attempt) & " err=" & CStr(eNum) & " desc=" & eDesc
+        errNoCaptured = Err.Number
+        errDescCaptured = Err.Description
+        lastErr = "attempt=" & CStr(attempt) & " err=" & CStr(errNoCaptured) & " desc=" & errDescCaptured
         On Error Resume Next
         If Not st Is Nothing Then st.Close
         On Error GoTo 0
