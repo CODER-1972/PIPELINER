@@ -533,3 +533,4 @@ Se começar a ficar demasiado grande:
 - Quando um modulo precisar de utilitario simples (ex.: `Nz`), implementar helper local ou usar funcao `Public`; nao chamar `Private Function` de outro modulo para evitar `Compile error: Sub or Function not defined`.
 
 - Ao substituir dependências de helper (ex.: `Nz`), fazer varredura por todas as ocorrências no módulo e módulos adjacentes (`rg`) para evitar remanescentes que causem `Compile error: Sub or Function not defined`.
+- Em processamento `text_embed`, nunca marcar anexo como "OK" quando a extração devolve conteúdo vazio; registar `TEXT_EMBED_EMPTY` e, se o item for `(required)`, bloquear o passo para evitar falso sucesso no Seguimento/DEBUG.
