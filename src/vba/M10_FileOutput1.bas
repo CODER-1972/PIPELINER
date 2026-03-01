@@ -524,6 +524,11 @@ Private Function Process_CodeInterpreter( _
             "Usado como filtro preferencial quando houver fallback por listagem de container.")
     End If
 
+    Dim strongPatterns As String
+    strongPatterns = CI_GetStrongPatterns(pipelineNome, promptId)
+    Dim strongMode As String
+    strongMode = CI_GetStrongPatternMode()
+
     Dim usedFallback As Boolean
     usedFallback = False
     ' ------------------------------------------------------------
@@ -570,8 +575,31 @@ Private Function Process_CodeInterpreter( _
         Dim ciList2 As Collection
         Set ciList2 = CI_BuildCitationsFromContainerList(containerFromCall, files, eligible)
         Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_CONTAINER_LIST", _
-            "container_id=" & containerFromCall & " | total=" & CStr(files.Count) & " | elegíveis=" & CStr(eligible), _
+            "container_id=" & containerFromCall & " | total=" & CStr(files.Count) & " | elegíveis=" & CStr(eligible) & _
+            " | details=" & CI_ContainerListSummary(files, 8), _
             "Elegíveis = extensões típicas (docx/xlsx/pptx/pdf/imagens/txt/csv/...).")
+
+        If Trim$(strongPatterns) <> "" And ciList2.Count > 0 Then
+            Dim strongFiltered As Collection
+            Dim strongMatched As Long
+            Set strongFiltered = CI_FilterCitationsByRegexPatterns(ciList2, strongPatterns, strongMatched)
+            If strongMatched > 0 Then
+                Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_STRONG_PATTERN_MATCH", _
+                    "Filtro regex forte aplicado | mode=" & strongMode & " | matched=" & CStr(strongMatched) & _
+                    " | before=" & CStr(ciList2.Count) & " | after=" & CStr(strongFiltered.Count), _
+                    "Padrao forte reduziu ambiguidades de fallback por container list.")
+                Set ciList2 = strongFiltered
+            Else
+                Call Debug_Registar(passo, promptId, IIf(strongMode = "strict", "ERRO", "ALERTA"), "", "OUTPUT_CONTRACT_FAIL", _
+                    "Nenhum ficheiro do container cumpre o padrao forte configurado. mode=" & strongMode & " | patterns=" & strongPatterns, _
+                    "Ajuste regex por prompt/pipeline ou o naming do ficheiro produzido no CI.")
+                If strongMode = "strict" Then
+                    Process_CodeInterpreter = "[FILE OUTPUT/CI] OUTPUT_CONTRACT_FAIL (strong pattern sem match)."
+                    Exit Function
+                End If
+            End If
+        End If
+
         If expectedNames.Count > 0 And ciList2.Count > 0 Then
             Dim filtered As Collection
             Dim matched As Long
@@ -638,7 +666,7 @@ Private Function Process_CodeInterpreter( _
         End If
         Dim dlStatus As Long, dlErr As String
         Dim ok As Boolean
-        ok = DownloadContainerFileEx(apiKey, container_id, file_id, fullPath, dlStatus, dlErr)
+        ok = DownloadContainerFileEx(apiKey, container_id, file_id, fullPath, dlStatus, dlErr, 3)
         If Not ok Then
             Call Debug_Registar(passo, promptId, "ERRO", "", "M10_CI_DOWNLOAD_FAIL", _
                 "FP=" & ciFingerprintBase & " | Artefacto identificado, mas falhou transferência para disco local (HTTP " & CStr(dlStatus) & ") " & container_id & ":" & file_id & " -> " & fullPath & IIf(Trim$(dlErr) <> "", " | " & dlErr, ""), _
@@ -956,6 +984,7 @@ Private Function FlowTemplate_GetPromptRow(ByVal promptId As String) As Object
                 d("image_mode") = Flow_GetCell(ws, mapa, r, "image_mode")
 
                 d("structured_outputs_mode") = Flow_GetCell(ws, mapa, r, "structured_outputs_mode")
+                d("output_regex_patterns") = Flow_GetCell(ws, mapa, r, "output_regex_patterns")
 
             Else
 
@@ -1011,6 +1040,7 @@ Private Function FlowTemplate_GetPromptRow(ByVal promptId As String) As Object
                 d("image_mode") = ""
 
                 d("structured_outputs_mode") = ""
+                d("output_regex_patterns") = ""
 
 
 
@@ -1037,6 +1067,7 @@ Private Function FlowTemplate_GetPromptRow(ByVal promptId As String) As Object
                     If ov.exists("image_mode") Then d("image_mode") = CStr(ov("image_mode"))
 
                     If ov.exists("structured_outputs_mode") Then d("structured_outputs_mode") = CStr(ov("structured_outputs_mode"))
+                    If ov.exists("output_regex_patterns") Then d("output_regex_patterns") = CStr(ov("output_regex_patterns"))
 
                 End If
 
@@ -1214,7 +1245,7 @@ Private Function FO_IsFileOutputKey(ByVal k As String) As Boolean
 
 
 
-    FO_IsFileOutputKey = (kk = "output_kind" Or kk = "process_mode" Or kk = "auto_save" Or kk = "overwrite_mode" Or kk = "file_name_prefix_template" Or kk = "pptx_mode" Or kk = "xlsx_mode" Or kk = "pdf_mode" Or kk = "image_mode" Or kk = "structured_outputs_mode")
+    FO_IsFileOutputKey = (kk = "output_kind" Or kk = "process_mode" Or kk = "auto_save" Or kk = "overwrite_mode" Or kk = "file_name_prefix_template" Or kk = "pptx_mode" Or kk = "xlsx_mode" Or kk = "pdf_mode" Or kk = "image_mode" Or kk = "structured_outputs_mode" Or kk = "output_regex_patterns")
 
 
 End Function
@@ -1633,53 +1664,94 @@ End Function
 ' ============================================================
 ' CODE_INTERPRETER download
 ' ============================================================
-Private Function DownloadContainerFileEx(ByVal apiKey As String, ByVal containerId As String, ByVal fileId As String, ByVal savePath As String, ByRef outHttpStatus As Long, ByRef outErrText As String) As Boolean
+Private Function DownloadContainerFileEx(ByVal apiKey As String, ByVal containerId As String, ByVal fileId As String, ByVal savePath As String, ByRef outHttpStatus As Long, ByRef outErrText As String, Optional ByVal maxAttempts As Long = 3) As Boolean
     On Error GoTo Falha
     outHttpStatus = 0
     outErrText = ""
 
+    If maxAttempts < 1 Then maxAttempts = 1
+
     Dim url As String
     url = "https://api.openai.com/v1/containers/" & containerId & "/files/" & fileId & "/content"
 
-    Dim http As Object
-    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
-    http.Open "GET", url, False
-    http.SetRequestHeader "Authorization", "Bearer " & apiKey
-    http.Send
+    Dim tempFolder As String
+    tempFolder = CI_EnsureTempStagingFolder()
 
-    outHttpStatus = http.status
+    Dim attempt As Long
+    Dim lastErr As String
+    Dim finalTempPath As String
 
-    If outHttpStatus < 200 Or outHttpStatus >= 300 Then
-        On Error Resume Next
-        outErrText = http.ResponseText
-        DownloadContainerFileEx = False
+    For attempt = 1 To maxAttempts
+        Dim http As Object
+        Dim st As Object
+        Dim tempPath As String
+        tempPath = tempFolder & "\ci_" & Replace(fileId, "-", "") & "_" & Format$(attempt, "00") & "_" & Format$(Timer * 1000, "0") & ".tmp"
+
+        On Error GoTo TentativaFalha
+        Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+        http.Open "GET", url, False
+        http.SetTimeouts 15000, 15000, 45000, 120000
+        http.SetRequestHeader "Authorization", "Bearer " & apiKey
+        http.Send
+
+        outHttpStatus = http.status
+        If outHttpStatus < 200 Or outHttpStatus >= 300 Then
+            On Error Resume Next
+            lastErr = "attempt=" & CStr(attempt) & " http=" & CStr(outHttpStatus) & " body=" & Left$(Nz(http.ResponseText), 500)
+            On Error GoTo 0
+            GoTo ProximaTentativa
+        End If
+
+        Set st = CreateObject("ADODB.Stream")
+        st.Type = 1
+        st.Open
+        st.Write http.ResponseBody
+        st.Position = 0
+        st.SaveToFile tempPath, 2
+        st.Close
+        finalTempPath = tempPath
+
+        If Not CI_PromoteStagedFile(tempPath, savePath, lastErr) Then
+            lastErr = "attempt=" & CStr(attempt) & " promote_fail=" & lastErr
+            GoTo ProximaTentativa
+        End If
+
+        DownloadContainerFileEx = True
         Exit Function
-    End If
 
-    Dim st As Object
-    Set st = CreateObject("ADODB.Stream")
-    st.Type = 1
-    st.Open
-    st.Write http.ResponseBody
-    st.Position = 0
-    st.SaveToFile savePath, 2
-    st.Close
+TentativaFalha:
+        Dim eNum As Long, eDesc As String
+        eNum = Err.Number
+        eDesc = Err.Description
+        lastErr = "attempt=" & CStr(attempt) & " err=" & CStr(eNum) & " desc=" & eDesc
+        On Error Resume Next
+        If Not st Is Nothing Then st.Close
+        On Error GoTo 0
 
-    DownloadContainerFileEx = True
+ProximaTentativa:
+        On Error Resume Next
+        If tempPath <> "" Then Kill tempPath
+        On Error GoTo 0
+        If attempt < maxAttempts Then
+            Call CI_SleepSeconds(1)
+        End If
+    Next attempt
+
+    If outHttpStatus = 0 Then outHttpStatus = -1
+    outErrText = "download_failed after=" & CStr(maxAttempts) & " attempts | " & lastErr
+    DownloadContainerFileEx = False
     Exit Function
 
 Falha:
-    On Error Resume Next
-    If Not st Is Nothing Then st.Close
     If outHttpStatus = 0 Then outHttpStatus = -1
-    If outErrText = "" Then outErrText = Err.Description
+    If outErrText = "" Then outErrText = "fatal_err=" & CStr(Err.Number) & " desc=" & Err.Description
     DownloadContainerFileEx = False
 End Function
 
 ' Wrapper (mantido por compatibilidade interna)
 Private Function DownloadContainerFile(ByVal apiKey As String, ByVal containerId As String, ByVal fileId As String, ByVal savePath As String) As Boolean
     Dim st As Long, errT As String
-    DownloadContainerFile = DownloadContainerFileEx(apiKey, containerId, fileId, savePath, st, errT)
+    DownloadContainerFile = DownloadContainerFileEx(apiKey, containerId, fileId, savePath, st, errT, 1)
 End Function
 
 Private Function CI_ExtractCitations(ByVal rawJson As String) As Collection
@@ -1792,6 +1864,9 @@ Private Function CI_ListContainerFiles(ByVal apiKey As String, ByVal containerId
         Set d = CreateObject("Scripting.Dictionary")
         d("file_id") = CStr(m.SubMatches(0))
         d("path") = CStr(m.SubMatches(1))
+        d("filename") = CI_PathBaseName(CStr(m.SubMatches(1)))
+        d("bytes") = CI_ExtractNumericFieldNear(txt, CStr(m.SubMatches(0)), "bytes")
+        d("created_at") = CI_ExtractNumericFieldNear(txt, CStr(m.SubMatches(0)), "created_at")
         CI_ListContainerFiles.Add d
     Next m
 
@@ -2480,3 +2555,148 @@ Private Function FileOutput_BuildFingerprint( _
 End Function
 
 
+
+Private Function CI_EnsureTempStagingFolder() As String
+    On Error Resume Next
+    Dim base As String
+    base = Environ$("TEMP")
+    If Trim$(base) = "" Then base = ThisWorkbook.Path
+    CI_EnsureTempStagingFolder = base & "\PIPELINER_DL_STAGING"
+    If Dir$(CI_EnsureTempStagingFolder, vbDirectory) = "" Then MkDir CI_EnsureTempStagingFolder
+End Function
+
+Private Function CI_PromoteStagedFile(ByVal tempPath As String, ByVal finalPath As String, ByRef outErr As String) As Boolean
+    On Error GoTo Falha
+    outErr = ""
+    If Dir$(tempPath, vbNormal Or vbHidden Or vbSystem Or vbReadOnly) = "" Then
+        outErr = "staged file missing"
+        Exit Function
+    End If
+    On Error Resume Next
+    Kill finalPath
+    On Error GoTo 0
+    FileCopy tempPath, finalPath
+    On Error Resume Next
+    Kill tempPath
+    On Error GoTo 0
+    CI_PromoteStagedFile = True
+    Exit Function
+Falha:
+    outErr = "promote err=" & CStr(Err.Number) & " desc=" & Err.Description
+    CI_PromoteStagedFile = False
+End Function
+
+Private Sub CI_SleepSeconds(ByVal s As Long)
+    On Error Resume Next
+    Dim untilAt As Date
+    untilAt = DateAdd("s", s, Now)
+    Application.Wait untilAt
+End Sub
+
+Private Function CI_ContainerListSummary(ByVal files As Collection, Optional ByVal maxItems As Long = 8) As String
+    On Error GoTo Falha
+    Dim i As Long, lim As Long
+    lim = files.Count
+    If lim > maxItems Then lim = maxItems
+    For i = 1 To lim
+        Dim it As Object
+        Set it = files(i)
+        Dim piece As String
+        piece = "file=" & Nz(CStr(it("filename"))) & ",bytes=" & Nz(CStr(it("bytes"))) & ",created_at=" & Nz(CStr(it("created_at")))
+        If CI_ContainerListSummary <> "" Then CI_ContainerListSummary = CI_ContainerListSummary & " | "
+        CI_ContainerListSummary = CI_ContainerListSummary & piece
+    Next i
+    If files.Count > lim Then CI_ContainerListSummary = CI_ContainerListSummary & " | +" & CStr(files.Count - lim) & " item(ns)"
+    Exit Function
+Falha:
+    CI_ContainerListSummary = "summary_unavailable"
+End Function
+
+Private Function CI_GetStrongPatterns(ByVal pipelineNome As String, ByVal promptId As String) As String
+    On Error GoTo Falha
+    Dim ft As Object
+    Set ft = FlowTemplate_GetPromptRow(promptId)
+    If Not ft Is Nothing Then
+        On Error Resume Next
+        CI_GetStrongPatterns = Trim$(CStr(ft("output_regex_patterns")))
+        On Error GoTo Falha
+    End If
+    If Trim$(CI_GetStrongPatterns) = "" Then CI_GetStrongPatterns = Config_Get("FILE_OUTPUT_STRONG_PATTERN_REGEX", "")
+    If Trim$(CI_GetStrongPatterns) = "" Then
+        Dim keyPipeline As String
+        keyPipeline = "FILE_OUTPUT_STRONG_PATTERN_REGEX_" & UCase$(Replace(Replace(Replace(pipelineNome, " ", "_"), "-", "_"), "/", "_"))
+        CI_GetStrongPatterns = Config_Get(keyPipeline, "")
+    End If
+    Exit Function
+Falha:
+    CI_GetStrongPatterns = ""
+End Function
+
+Private Function CI_GetStrongPatternMode() As String
+    CI_GetStrongPatternMode = LCase$(Trim$(Config_Get("FILE_OUTPUT_STRONG_PATTERN_MODE", "warn")))
+    If CI_GetStrongPatternMode <> "strict" Then CI_GetStrongPatternMode = "warn"
+End Function
+
+Private Function CI_FilterCitationsByRegexPatterns(ByVal citations As Collection, ByVal regexPatterns As String, ByRef outMatched As Long) As Collection
+    Set CI_FilterCitationsByRegexPatterns = New Collection
+    outMatched = 0
+    On Error GoTo Falha
+    Dim pats() As String
+    pats = Split(regexPatterns, ";")
+    Dim i As Long
+    For i = 1 To citations.Count
+        Dim it As Object
+        Set it = citations(i)
+        Dim fn As String
+        fn = CStr(it("filename"))
+        If CI_FileNameMatchesAnyRegex(fn, pats) Then
+            CI_FilterCitationsByRegexPatterns.Add it
+            outMatched = outMatched + 1
+        End If
+    Next i
+    Exit Function
+Falha:
+End Function
+
+Private Function CI_FileNameMatchesAnyRegex(ByVal fileName As String, ByRef patterns() As String) As Boolean
+    On Error GoTo Falha
+    Dim re As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = False
+    re.IgnoreCase = True
+    Dim i As Long
+    For i = LBound(patterns) To UBound(patterns)
+        Dim p As String
+        p = Trim$(CStr(patterns(i)))
+        If p <> "" Then
+            re.Pattern = p
+            If re.Test(fileName) Then
+                CI_FileNameMatchesAnyRegex = True
+                Exit Function
+            End If
+        End If
+    Next i
+    Exit Function
+Falha:
+    CI_FileNameMatchesAnyRegex = False
+End Function
+
+Private Function CI_ExtractNumericFieldNear(ByVal textJson As String, ByVal anchorId As String, ByVal fieldName As String) As String
+    On Error GoTo Falha
+    Dim pos As Long
+    pos = InStr(1, textJson, "\"id\":\"" & anchorId & "\"", vbTextCompare)
+    If pos = 0 Then Exit Function
+    Dim win As String
+    win = Mid$(textJson, pos, 700)
+    Dim re As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = False
+    re.IgnoreCase = True
+    re.Pattern = "\"" & fieldName & "\"\s*:\s*([0-9]+)"
+    Dim ms As Object
+    Set ms = re.Execute(win)
+    If ms.Count > 0 Then CI_ExtractNumericFieldNear = CStr(ms(0).SubMatches(0))
+    Exit Function
+Falha:
+    CI_ExtractNumericFieldNear = ""
+End Function
