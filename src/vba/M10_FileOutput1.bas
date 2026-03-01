@@ -8,6 +8,9 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-03-01 | Codex | Compatibilidade de declarações VBA em DownloadContainerFileEx
+'   - Move todas as declarações Dim para o topo da rotina para compatibilidade com VBE que exige declarações antes de instruções executáveis.
+'   - Evita erro de compilação de sintaxe em ambientes VBA mais estritos.
 ' - 2026-03-01 | Codex | Correção de sintaxe VBA no handler TentativaFalha
 '   - Move declarações de eNum/eDesc para o início da rotina DownloadContainerFileEx (compatível com VBE).
 '   - Mantém captura de Err.Number/Err.Description antes de limpeza de erro para preservar causa raiz no lastErr.
@@ -1669,27 +1672,27 @@ End Function
 ' ============================================================
 Private Function DownloadContainerFileEx(ByVal apiKey As String, ByVal containerId As String, ByVal fileId As String, ByVal savePath As String, ByRef outHttpStatus As Long, ByRef outErrText As String, Optional ByVal maxAttempts As Long = 3) As Boolean
     On Error GoTo Falha
-    outHttpStatus = 0
-    outErrText = ""
-
-    If maxAttempts < 1 Then maxAttempts = 1
 
     Dim url As String
-    url = "https://api.openai.com/v1/containers/" & containerId & "/files/" & fileId & "/content"
-
     Dim tempFolder As String
-    tempFolder = CI_EnsureTempStagingFolder()
-
     Dim attempt As Long
     Dim lastErr As String
     Dim finalTempPath As String
     Dim eNum As Long
     Dim eDesc As String
+    Dim http As Object
+    Dim st As Object
+    Dim tempPath As String
+
+    outHttpStatus = 0
+    outErrText = ""
+
+    If maxAttempts < 1 Then maxAttempts = 1
+
+    url = "https://api.openai.com/v1/containers/" & containerId & "/files/" & fileId & "/content"
+    tempFolder = CI_EnsureTempStagingFolder()
 
     For attempt = 1 To maxAttempts
-        Dim http As Object
-        Dim st As Object
-        Dim tempPath As String
         tempPath = tempFolder & "\ci_" & Replace(fileId, "-", "") & "_" & Format$(attempt, "00") & "_" & Format$(Timer * 1000, "0") & ".tmp"
 
         On Error GoTo TentativaFalha
