@@ -453,6 +453,11 @@ Exemplo didático para erro de validação de payload:
 
 ### Diagnóstico rápido: `output_kind:file` + `process_mode:code_interpreter` com saída "desalinhada"
 
+**Sinal de downgrade silencioso (novo):** se aparecer `M05_PAYLOAD_CHECK` com `code_interpreter=ADICIONADO_AUTO` mas o fingerprint/`mode=` indicar `text/metadata`, o pipeline está a usar CI apenas como *tool* e não como contrato de output.
+- Verificar `DEBUG` por `M07_FILEOUTPUT_MODE_MISMATCH` e `M07_FILEOUTPUT_PARSE_GUARD` (emitidos quando há intenção de File Output para evitar falso positivo em prompts CI puramente textuais).
+- Causa comum: linha inválida no `Config extra` (ex.: `True` sem `chave:`), que impede aplicar `output_kind: file`/`process_mode: code_interpreter`.
+- Ação: corrigir sintaxe (uma linha por `chave: valor`) e confirmar novo `mode=file/code_interpreter` antes de validar o M10.
+
 Sintoma típico no `Seguimento`/`DEBUG`:
 
 - `HTTP Status=200`, mas o texto devolvido não respeita o contrato pedido (IDs de outro workflow, secções inesperadas, etc.);

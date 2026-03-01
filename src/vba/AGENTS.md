@@ -534,4 +534,4 @@ Se começar a ficar demasiado grande:
 
 - Ao substituir dependências de helper (ex.: `Nz`), fazer varredura por todas as ocorrências no módulo e módulos adjacentes (`rg`) para evitar remanescentes que causem `Compile error: Sub or Function not defined`.
 - Em processamento `text_embed`, nunca marcar anexo como "OK" quando a extração devolve conteúdo vazio; registar `TEXT_EMBED_EMPTY` e, se o item for `(required)`, bloquear o passo para evitar falso sucesso no Seguimento/DEBUG.
-- Em logs de anexação mista (ficheiros com `file_id` + `text_embed` no mesmo passo), registar explicitamente ambas as vias no DEBUG; nunca usar `ElseIf` que oculte `text_embed` quando `input_file` também está presente.
+- Em alertas de mismatch de File Output vs ferramentas (ex.: code_interpreter ativo), só emitir ALERTA quando houver intenção explícita de output em ficheiro (output_kind/process_mode no catálogo ou modo efetivo file), para evitar ruído em prompts CI textuais legítimos.
