@@ -8,6 +8,14 @@ Option Explicit
 ' - Aplicar effective_mode, robustez multipart e utilitários de ficheiros para pipeline.
 '
 ' Atualizações:
+' - 2026-03-01 | Codex | Diagnostico pedagogico por ficheiro na linha FILES_ITEM_TRACE
+'   - Diferencia causas provaveis (nao encontrado, ambiguidade, upload, formato, text_embed vazio, limites).
+'   - Adiciona problema_tipo, explicacao e acao recomendada em cada linha de trace por ficheiro.
+'   - Mantem full_path resolvido/esperado para facilitar triagem operativa no INPUT Folder.
+' - 2026-03-01 | Codex | Traco por ficheiro no DEBUG durante anexacao FILES
+'   - Regista 1 linha por ficheiro processado com status, modo, file_id e full_path resolvido.
+'   - Inclui fallback de caminho esperado quando o ficheiro nao e encontrado, para acelerar triagem.
+'   - Uniformiza etiqueta `FILES_ITEM_TRACE` para filtros de troubleshooting no DEBUG.
 ' - 2026-03-01 | Codex | Evita falso sucesso quando text_embed não produz conteúdo
 '   - Trata `text_embed` sem texto extraído como falha operacional (não marca anexo como usado).
 '   - Emite evento `TEXT_EMBED_EMPTY` no DEBUG com ação objetiva para TXT/CSV/JSON.
@@ -866,6 +874,7 @@ FicheiroFalhou:
         End If
 
 ProximoItem:
+        Call Files_DebugLogItemTrace(promptId, inputFolder, d, reqNome, resolvedPath, required, candidatosLog)
     Next i
 
     outFilesUsedResumo = filesUsedLista
@@ -912,6 +921,194 @@ TrataErro:
         "Sugestao: ative Break on All Errors no VBE para ver a linha exacta; verifique hashing/base64 e ficheiros grandes.")
 
     outInputJsonLiteralFinal = inputJsonLiteralBase
+End Function
+
+Private Sub Files_DebugLogItemTrace( _
+    ByVal promptId As String, _
+    ByVal inputFolder As String, _
+    ByVal d As Object, _
+    ByVal reqNome As String, _
+    ByVal resolvedPath As String, _
+    ByVal required As Boolean, _
+    ByVal candidatosLog As String)
+
+    On Error GoTo Fim
+
+    Dim st As String
+    st = UCase$(Trim$(CStr(d("resultado_status"))))
+    If st = "" Then st = "SKIPPED"
+
+    Dim sev As String
+    sev = Files_DebugTraceSeverity(st, required)
+
+    Dim nomeFinal As String
+    nomeFinal = Trim$(CStr(d("resultado_nome")))
+    If nomeFinal = "" Then nomeFinal = Trim$(reqNome)
+
+    Dim fullPathLog As String
+    fullPathLog = Trim$(resolvedPath)
+    If fullPathLog = "" Then fullPathLog = Files_ComporCaminhoEsperado(inputFolder, reqNome)
+
+    Dim problemType As String
+    Dim problemExplain As String
+    Dim problemAction As String
+    Call Files_DebugTraceClassificarProblema(st, d, reqNome, resolvedPath, fullPathLog, candidatosLog, _
+                                            problemType, problemExplain, problemAction)
+
+    Dim detalhe As String
+    detalhe = "status=" & st & " | required=" & IIf(required, "SIM", "NAO") & _
+              " | requested=" & reqNome & " | resolved=" & nomeFinal & _
+              " | mode=" & CStr(d("resultado_modo")) & _
+              " | file_id=" & CStr(d("resultado_file_id")) & _
+              " | full_path=" & fullPathLog & _
+              " | problema_tipo=" & problemType & _
+              " | explicacao=" & problemExplain
+
+    If Trim$(candidatosLog) <> "" Then detalhe = detalhe & " | candidatos=" & candidatosLog
+
+    Call Debug_Registar(0, promptId, sev, "", "FILES_ITEM_TRACE", detalhe, problemAction)
+
+Fim:
+End Sub
+
+Private Function Files_DebugTraceSeverity(ByVal statusNorm As String, ByVal required As Boolean) As String
+    Select Case UCase$(Trim$(statusNorm))
+        Case "OK"
+            Files_DebugTraceSeverity = "INFO"
+        Case "NOT_FOUND", "AMBIGUOUS", "UPLOAD_FAIL", "PDF_CONVERSION_FAIL", "UNSUPPORTED_EXT_AS_INPUT_FILE", _
+             "UNSUPPORTED_EXT_NO_FALLBACK", "UNSUPPORTED_EXT_PDF_CONVERSION_NOT_AVAILABLE", "TEXT_EMBED_EMPTY", _
+             "TEXT_EMBED_TOO_LARGE_STOP"
+            Files_DebugTraceSeverity = IIf(required, "ERRO", "ALERTA")
+        Case Else
+            If InStr(1, statusNorm, "FAIL", vbTextCompare) > 0 Or InStr(1, statusNorm, "ERROR", vbTextCompare) > 0 Then
+                Files_DebugTraceSeverity = IIf(required, "ERRO", "ALERTA")
+            ElseIf InStr(1, statusNorm, "TOO_LARGE", vbTextCompare) > 0 Or InStr(1, statusNorm, "UNSUPPORTED", vbTextCompare) > 0 Or InStr(1, statusNorm, "EMPTY", vbTextCompare) > 0 Then
+                Files_DebugTraceSeverity = IIf(required, "ERRO", "ALERTA")
+            Else
+                Files_DebugTraceSeverity = "INFO"
+            End If
+    End Select
+End Function
+
+Private Sub Files_DebugTraceClassificarProblema( _
+    ByVal statusNorm As String, _
+    ByVal d As Object, _
+    ByVal reqNome As String, _
+    ByVal resolvedPath As String, _
+    ByVal fullPathLog As String, _
+    ByVal candidatosLog As String, _
+    ByRef outType As String, _
+    ByRef outExplain As String, _
+    ByRef outAction As String)
+
+    Dim st As String
+    st = UCase$(Trim$(statusNorm))
+
+    Dim reqHasWildcard As Boolean
+    reqHasWildcard = (InStr(1, reqNome, "*", vbBinaryCompare) > 0) Or (InStr(1, reqNome, "?", vbBinaryCompare) > 0)
+
+    Dim latestFlag As Boolean
+    On Error Resume Next
+    latestFlag = CBool(d("latest"))
+    On Error GoTo 0
+
+    Select Case st
+        Case "OK"
+            outType = "ANEXADO_COM_SUCESSO"
+            outExplain = "Ficheiro resolvido e processado sem erro para o modo pedido/efetivo."
+            outAction = "Sem acao necessaria."
+
+        Case "NOT_FOUND"
+            outType = "FICHEIRO_NAO_ENCONTRADO"
+            If reqHasWildcard Then
+                outExplain = "O padrao FILES nao encontrou correspondencias no INPUT Folder."
+            Else
+                outExplain = "Nao existe ficheiro com este nome no INPUT Folder no momento da execucao."
+            End If
+            outAction = "Confirmar nome/extensao, pasta da pipeline e timing de geracao do ficheiro; usar (required) quando a falta deve bloquear."
+
+        Case "AMBIGUOUS"
+            outType = "AMBIGUIDADE_DE_SELECAO"
+            outExplain = "Ha mais de um candidato valido para os criterios de selecao (nome parcial/wildcard/latest)."
+            outAction = "Refinar nome do ficheiro, incluir extensao, usar nome unico ou manter (latest) apenas quando a regra de escolha estiver clara."
+
+        Case "UPLOAD_FAIL"
+            outType = "FALHA_NO_UPLOAD_OU_TRANSPORTE"
+            If Trim$(resolvedPath) = "" Then
+                outExplain = "O ficheiro nao chegou a fase de upload com caminho resolvido; houve falha em etapas anteriores."
+            ElseIf Dir(resolvedPath) = "" Then
+                outExplain = "O caminho foi resolvido, mas o ficheiro nao esta acessivel no disco no momento do upload (movido/removido/permissoes)."
+            Else
+                outExplain = "O ficheiro existe localmente, mas o upload para a API falhou (ex.: multipart/content-type/rede)."
+            End If
+            outAction = "Verificar permissao de leitura no caminho, tamanho, lock do ficheiro e eventos 'FILES UPLOAD' para HTTP status/engine/profile."
+
+        Case "PDF_CONVERSION_FAIL"
+            outType = "FALHA_CONVERSAO_PARA_PDF"
+            outExplain = "Foi pedido/necessario converter para PDF e a conversao nao concluiu com sucesso."
+            outAction = "Testar o documento de origem, verificar dependencias do host Office e usar (text) ou PDF pronto como fallback."
+
+        Case "TEXT_EMBED_EMPTY"
+            outType = "TEXT_EMBED_SEM_CONTEUDO"
+            outExplain = "A leitura/extracao textual devolveu vazio; o modelo nao recebeu contexto textual desse ficheiro."
+            outAction = "Rever encoding/conteudo real do ficheiro; se houver layout relevante, preferir (as pdf)."
+
+        Case "TEXT_EMBED_TOO_LARGE_STOP"
+            outType = "TEXT_EMBED_EXCEDEU_LIMITE"
+            outExplain = "O texto extraido ultrapassou FILES_TEXT_EMBED_MAX_CHARS e a politica configurada mandou parar."
+            outAction = "Reduzir conteudo, aumentar limite, usar TRUNCATE/ALERT_ONLY ou mudar para (as pdf)."
+
+        Case "UNSUPPORTED_EXT_AS_INPUT_FILE", "UNSUPPORTED_EXT_NO_FALLBACK", "UNSUPPORTED_EXT_PDF_CONVERSION_NOT_AVAILABLE"
+            outType = "FORMATO_INCOMPATIVEL_COM_INPUT_FILE"
+            outExplain = "A extensao do ficheiro nao e aceite diretamente em /v1/responses no modo atual e o fallback nao foi suficiente."
+            outAction = "Usar (as pdf) ou (text), ou ajustar FILES_DOCX_CONTEXT_MODE/FILES_DOCX_AS_PDF_FALLBACK na Config."
+
+        Case "SKIPPED"
+            outType = "SEM_ACAO"
+            outExplain = "O item FILES nao gerou acao efetiva nesta execucao (status vazio/ignorado)."
+            outAction = "Rever directiva FILES no catalogo e logs de parser para confirmar se o item foi reconhecido."
+
+        Case Else
+            outType = "ESTADO_NAO_CLASSIFICADO"
+            outExplain = "Ocorrencia nao mapeada explicitamente; consultar status e logs tecnicos complementares."
+            outAction = "Pesquisar no DEBUG pelo status e por eventos FILES/FILES UPLOAD do mesmo prompt para causa raiz."
+    End Select
+
+    If latestFlag Then
+        outExplain = outExplain & " Regra latest ativa."
+    End If
+
+    If Trim$(candidatosLog) <> "" And st <> "AMBIGUOUS" Then
+        outExplain = outExplain & " Candidatos observados: " & candidatosLog
+    End If
+
+    If Trim$(fullPathLog) <> "" And (st = "NOT_FOUND" Or st = "UPLOAD_FAIL") Then
+        outExplain = outExplain & " Caminho de referencia: " & fullPathLog
+    End If
+End Sub
+
+Private Function Files_ComporCaminhoEsperado(ByVal inputFolder As String, ByVal reqNome As String) As String
+    Dim folderNorm As String
+    folderNorm = Trim$(CStr(inputFolder))
+
+    Dim nameNorm As String
+    nameNorm = Trim$(CStr(reqNome))
+
+    If folderNorm = "" Then
+        Files_ComporCaminhoEsperado = nameNorm
+        Exit Function
+    End If
+
+    If nameNorm = "" Then
+        Files_ComporCaminhoEsperado = folderNorm
+        Exit Function
+    End If
+
+    If Right$(folderNorm, 1) = "\" Or Right$(folderNorm, 1) = "/" Then
+        Files_ComporCaminhoEsperado = folderNorm & nameNorm
+    Else
+        Files_ComporCaminhoEsperado = folderNorm & "\" & nameNorm
+    End If
 End Function
 
 ' ============================================================
