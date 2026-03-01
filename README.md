@@ -239,6 +239,25 @@ O módulo ContextKV permite:
 
 ## 9. Logs, troubleshooting e validação operacional
 
+### 9.0 Execução "presa" em `A preparar passo` (sem linhas novas em Seguimento)
+
+Se a status bar ficar em `A preparar passo` e não surgir nova linha no `Seguimento`, o bloqueio costuma estar **antes da chamada HTTP** (catálogo/config/inputs/files), e não no parsing da resposta.
+
+Diagnóstico recomendado (rápido):
+
+1. Abrir `DEBUG` e filtrar `Parâmetro = STEP_STAGE`.
+2. Usar o último `Problema` no formato `stage=<nome>` para localizar a fase onde o passo parou:
+   - `enter_step` (entrada no passo);
+   - `catalog_loaded` (lookup do ID no catálogo);
+   - `before_context_inject` / `after_context_inject` (injeção de ContextKV);
+   - `before_inputs_attach` / `after_inputs_attach` (anexação textual de INPUTS);
+   - `config_parse_start` / `config_parsed` (parse de Config extra);
+   - `files_prepare_start`/`files_prepare_skip` (pré-processamento de FILES);
+   - `before_api` (request pronto para envio) e `api_call_start` (entrada na chamada HTTP).
+3. Se não existir `before_api`, validar o stage anterior e corrigir nesse ponto (ID, Config extra, FILES/inputFolder, etc.).
+4. Se existir `before_api` e mesmo assim não houver `Seguimento`, o próximo foco é timeout/engine HTTP (ver secções 9.1+).
+5. Em caso de exceção inesperada do VBA no meio do passo, o motor tenta escrever uma linha técnica no `Seguimento` com `[ERRO VBA] ... stage=<...>` para evitar execução silenciosa sem auditoria.
+
 Boas práticas de manutenção VBA (preventivas):
 
 - em literais de string com aspas duplas, usar escaping válido do VBA (ex.: `""""`) ou `Chr$(34)`;
