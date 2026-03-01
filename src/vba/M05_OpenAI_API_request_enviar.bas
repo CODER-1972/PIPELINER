@@ -78,6 +78,40 @@ End Function
 
 
 
+Private Function M05_ValidateUtf8Roundtrip(ByVal textIn As String, ByRef outDiag As String) As Boolean
+    On Error GoTo Falha
+    outDiag = ""
+
+    Dim stm As Object
+    Set stm = CreateObject("ADODB.Stream")
+    stm.Type = 2
+    stm.Charset = "utf-8"
+    stm.Open
+    stm.WriteText CStr(textIn)
+    stm.Position = 0
+    Dim roundtrip As String
+    roundtrip = stm.ReadText(-1)
+    stm.Close
+
+    If Len(roundtrip) <> Len(textIn) Then
+        outDiag = "len_original=" & CStr(Len(textIn)) & " len_roundtrip=" & CStr(Len(roundtrip))
+        M05_ValidateUtf8Roundtrip = False
+        Exit Function
+    End If
+
+    If StrComp(roundtrip, textIn, vbBinaryCompare) <> 0 Then
+        outDiag = "binary_diff_detected"
+        M05_ValidateUtf8Roundtrip = False
+        Exit Function
+    End If
+
+    M05_ValidateUtf8Roundtrip = True
+    Exit Function
+Falha:
+    outDiag = "exception=" & CStr(Err.Number) & " desc=" & Err.Description
+    M05_ValidateUtf8Roundtrip = False
+End Function
+
 Private Function EncontrarFimStringJson(ByVal s As String, ByVal startPos As Long) As Long
     Dim i As Long, escaped As Boolean
     escaped = False
@@ -727,6 +761,25 @@ Public Function OpenAI_Executar( _
     End If
 
     json = json & "}"
+
+    Dim utf8Diag As String
+    If Not M05_ValidateUtf8Roundtrip(json, utf8Diag) Then
+        On Error Resume Next
+        Call Debug_Registar(0, dbgPromptId, "ERRO", "", "M05_UTF8_ROUNDTRIP", _
+            "Payload bloqueado: roundtrip UTF-8 falhou (" & utf8Diag & ")", _
+            "Rever origem de texto/codificacao dos INPUTS e evitar colagens com codificacao inconsistente.")
+        On Error GoTo TrataErro
+
+        resultado.Erro = "Payload invalido (utf8_roundtrip): " & utf8Diag
+        OpenAI_Executar = resultado
+        Exit Function
+    Else
+        On Error Resume Next
+        Call Debug_Registar(0, dbgPromptId, "INFO", "", "M05_UTF8_ROUNDTRIP", _
+            "roundtrip UTF-8 OK | payload_len=" & CStr(Len(json)), _
+            "Gate de codificacao concluido antes do envio HTTP.")
+        On Error GoTo TrataErro
+    End If
 
     Dim preflightDetail As String
     If M05_JsonHasRawControlInString(json, preflightDetail) Then
