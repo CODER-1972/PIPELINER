@@ -529,3 +529,5 @@ Se começar a ficar demasiado grande:
 - Para evitar falso sucesso em File Output CI, suportar filtro por padrão forte (regex configurável por prompt/pipeline) com modo `warn|strict`; em `strict`, ausência de match deve terminar com `OUTPUT_CONTRACT_FAIL`.
 - Em download de artefactos CI, usar staging temporário + promoção para destino final e retries curtos com erro consolidado por tentativa; evitar logs duplicados por retry e preservar causa raiz no `dlErr`.
 - Adotar gate de codificação UTF-8 (roundtrip) antes do envio HTTP para reduzir mojibake no payload; quando falhar, bloquear envio e registar diagnóstico acionável.
+- Em literais de pesquisa JSON (`InStr`, `Replace`, `Like`), preferir aspas duplicadas VBA (`"""id"":"""`) ou `Chr$(34)`; evitar C-style (`\"`) para garantir compatibilidade entre hosts/VBE.
+- Quando um modulo precisar de utilitario simples (ex.: `Nz`), implementar helper local ou usar funcao `Public`; nao chamar `Private Function` de outro modulo para evitar `Compile error: Sub or Function not defined`.
