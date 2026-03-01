@@ -8,6 +8,9 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-03-01 | Codex | Correção de sintaxe VBA no handler TentativaFalha
+'   - Move declarações de eNum/eDesc para o início da rotina DownloadContainerFileEx (compatível com VBE).
+'   - Mantém captura de Err.Number/Err.Description antes de limpeza de erro para preservar causa raiz no lastErr.
 ' - 2026-02-27 | Codex | Contrato CI com fingerprint e frases finais consolidadas
 '   - Introduz fingerprint textual (FP=...) nos principais eventos de diagnóstico do process_mode=code_interpreter.
 '   - Acrescenta estado final explícito para separar sucesso HTTP de sucesso de contrato de output.
@@ -1680,6 +1683,8 @@ Private Function DownloadContainerFileEx(ByVal apiKey As String, ByVal container
     Dim attempt As Long
     Dim lastErr As String
     Dim finalTempPath As String
+    Dim eNum As Long
+    Dim eDesc As String
 
     For attempt = 1 To maxAttempts
         Dim http As Object
@@ -1720,7 +1725,6 @@ Private Function DownloadContainerFileEx(ByVal apiKey As String, ByVal container
         Exit Function
 
 TentativaFalha:
-        Dim eNum As Long, eDesc As String
         eNum = Err.Number
         eDesc = Err.Description
         lastErr = "attempt=" & CStr(attempt) & " err=" & CStr(eNum) & " desc=" & eDesc
