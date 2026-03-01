@@ -8,6 +8,10 @@ Option Explicit
 ' - Aplicar effective_mode, robustez multipart e utilitários de ficheiros para pipeline.
 '
 ' Atualizações:
+' - 2026-03-01 | Codex | Evita falso sucesso quando text_embed não produz conteúdo
+'   - Trata `text_embed` sem texto extraído como falha operacional (não marca anexo como usado).
+'   - Emite evento `TEXT_EMBED_EMPTY` no DEBUG com ação objetiva para TXT/CSV/JSON.
+'   - Quando o ficheiro é `(required)`, bloqueia o passo com erro explícito para evitar respostas sem contexto.
 ' - 2026-02-26 | Codex | Normalização visual de alturas na FILES_MANAGEMENT
 '   - Garante altura mínima para linhas de registo (não separadoras) para evitar herança visual de 6 pt.
 '   - Mantém separador por run com altura fixa de 6 pt e registos com altura normal legível.
@@ -651,122 +655,142 @@ Public Function Files_PrepararContextoDaPrompt( _
                     "Sugestao: confirme extensao e permissao. Se for binario, use (as_pdf) ou (as_is).")
             End If
 
-            If textoExtraDeste <> "" Then
-                Dim charsExtra As Long
-                charsExtra = Len(textoExtraDeste)
-
-                If textEmbedMaxChars > 0 And charsExtra > textEmbedMaxChars Then
-                    Dim overflowAction As String
-                    overflowAction = UCase$(Trim$(textEmbedOverflowAction))
-
-                    Call Debug_Registar(0, promptId, "ALERTA", "", "TEXT_EMBED_TOO_LARGE", _
-                        "text_embed grande: " & resolvedName & " | chars=" & charsExtra & " | max=" & textEmbedMaxChars & " | action=" & overflowAction, _
-                        "Sugestao: use (as pdf); ou aumente FILES_TEXT_EMBED_MAX_CHARS; ou mude FILES_TEXT_EMBED_OVERFLOW_ACTION.")
-
-                    Select Case overflowAction
-                        Case "ALERT_ONLY"
-                            ' Só alerta
-
-                        Case "TRUNCATE"
-                            textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: excedeu FILES_TEXT_EMBED_MAX_CHARS]"
-
-                        Case "STOP"
-                            Call Files_OperacoesAdicionarResultado(d, "TEXT_EMBED_TOO_LARGE_STOP", resolvedName, "text_embed", _
-                                "text_embed excede máximo (" & charsExtra & " > " & textEmbedMaxChars & ")", False, True, required)
-
-                            If required Then
-                                outFalhaCritica = True
-                                outErroMsg = "text_embed demasiado grande para ficheiro obrigatório: " & resolvedName & " (chars=" & charsExtra & ")."
-                            End If
-                            GoTo ProximoItem
-
-                        Case Else ' RETRY_AS_PDF
-                            filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload: " & resolvedName & vbCrLf
-
-                            usoFinal = "pdf_upload"
-                            dbgUsoFinal = usoFinal
-
-                            If LCase$(Files_ObterExtensao(caminhoUsado)) <> EXT_PDF Then
-                                If Files_PodeConverterParaPDF(LCase$(ext)) Then
-                                    sourceHash = Files_SHA256_File(resolvedPath)
-
-                                    Dim pdfPath2 As String
-                                    pdfPath2 = Files_ComporCaminhoPdfConvertido(pdfCacheFolder, resolvedName)
-
-                                    Dim okConv2 As Boolean
-                                    Dim usedCache2 As Boolean
-                                    Dim convertedNow2 As Boolean
-                                    Dim erroConv2 As String
-
-                                    usedCache2 = False
-                                    convertedNow2 = False
-                                    erroConv2 = ""
-
-                                    okConv2 = Files_PdfCache_GetOrConvertPdf( _
-                                                promptId, _
-                                                resolvedName, _
-                                                resolvedPath, _
-                                                pdfPath2, _
-                                                sourceHash, _
-                                                usedCache2, _
-                                                convertedNow2, _
-                                                erroConv2 _
-                                            )
-
-                                    If okConv2 Then
-                                        caminhoUsado = pdfPath2
-                                        convertido = True
-
-                                        If convertedNow2 Then
-                                            filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload (PDF gerado): " & resolvedName & vbCrLf
-                                        ElseIf usedCache2 Then
-                                            filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload (PDF em cache): " & resolvedName & vbCrLf
-                                        Else
-                                            filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload (estado indeterminado): " & resolvedName & vbCrLf
-                                        End If
-
-                                    Else
-                                        If UCase$(Trim$(docxAsPdfFallback)) = "ERROR" Then
-                                            Call Files_OperacoesAdicionarResultado(d, "PDF_CONVERSION_FAIL", resolvedName, "pdf_upload", _
-                                                "Falha conversão PDF: " & erroConv2, False, True, required)
-
-                                            If required Then
-                                                outFalhaCritica = True
-                                                outErroMsg = "Falha conversão PDF (overflow) para ficheiro obrigatório: " & resolvedName & " | " & erroConv2
-                                            End If
-                                            GoTo ProximoItem
-                                        Else
-                                            textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: conversão PDF falhou]"
-                                            usoFinal = "text_embed"
-                                            dbgUsoFinal = usoFinal
-                                            convertido = False
-                                        End If
-                                    End If
-                                Else
-                                    textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: não é possível converter para PDF]"
-                                    usoFinal = "text_embed"
-                                    dbgUsoFinal = usoFinal
-                                    convertido = False
-                                End If
-                            End If
-
-                            If usoFinal = "pdf_upload" Then
-                                GoTo ProcessarComoInputFile
-                            End If
-                    End Select
+            If Trim$(textoExtraDeste) = "" Then
+                Dim textEmbedFailMsg As String
+                If Trim$(erroLocal) <> "" Then
+                    textEmbedFailMsg = "text_embed sem conteudo para: " & resolvedName & " | " & erroLocal
+                Else
+                    textEmbedFailMsg = "text_embed sem conteudo para: " & resolvedName & " | extracao devolveu vazio"
                 End If
+
+                filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " text_embed vazio: " & resolvedName & vbCrLf
+                Call Files_OperacoesAdicionarResultado(d, "TEXT_EMBED_EMPTY", resolvedName, "text_embed", "", convertido, (overrideUsado Or overrideModo), False)
+
+                If required Then
+                    outFalhaCritica = True
+                    outErroMsg = "Falha ao anexar ficheiro obrigatorio em text_embed: " & resolvedName & " | sem conteudo extraido"
+                    Call Debug_Registar(0, promptId, "ERRO", "", "TEXT_EMBED_EMPTY", _
+                        textEmbedFailMsg, _
+                        "Sugestao: marcar ficheiro como (as pdf) ou validar codificacao/permissoes do TXT/CSV/JSON antes de repetir.")
+                Else
+                    Call Debug_Registar(0, promptId, "ALERTA", "", "TEXT_EMBED_EMPTY", _
+                        textEmbedFailMsg, _
+                        "Sugestao: marcar ficheiro como (required) para bloquear ou rever modo de anexacao/encoding.")
+                End If
+
+                GoTo ProximoItem
             End If
 
-            If textoExtraDeste <> "" Then
-                textoEmbedTotal = textoEmbedTotal & vbCrLf & vbCrLf & _
-                    "----- BEGIN FILE: " & resolvedName & " -----" & vbCrLf & _
-                    textoExtraDeste & vbCrLf & _
-                    "----- END FILE: " & resolvedName & " -----" & vbCrLf
+            Dim charsExtra As Long
+            charsExtra = Len(textoExtraDeste)
 
-                hashUsado = Files_SHA256_Text(textoExtraDeste)
-            Else
-                hashUsado = Files_SHA256_File(caminhoUsado)
+            If textEmbedMaxChars > 0 And charsExtra > textEmbedMaxChars Then
+                Dim overflowAction As String
+                overflowAction = UCase$(Trim$(textEmbedOverflowAction))
+
+                Call Debug_Registar(0, promptId, "ALERTA", "", "TEXT_EMBED_TOO_LARGE", _
+                    "text_embed grande: " & resolvedName & " | chars=" & charsExtra & " | max=" & textEmbedMaxChars & " | action=" & overflowAction, _
+                    "Sugestao: use (as pdf); ou aumente FILES_TEXT_EMBED_MAX_CHARS; ou mude FILES_TEXT_EMBED_OVERFLOW_ACTION.")
+
+                Select Case overflowAction
+                    Case "ALERT_ONLY"
+                        ' Só alerta
+
+                    Case "TRUNCATE"
+                        textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: excedeu FILES_TEXT_EMBED_MAX_CHARS]"
+
+                    Case "STOP"
+                        Call Files_OperacoesAdicionarResultado(d, "TEXT_EMBED_TOO_LARGE_STOP", resolvedName, "text_embed", _
+                            "text_embed excede máximo (" & charsExtra & " > " & textEmbedMaxChars & ")", False, True, required)
+
+                        If required Then
+                            outFalhaCritica = True
+                            outErroMsg = "text_embed demasiado grande para ficheiro obrigatório: " & resolvedName & " (chars=" & charsExtra & ")."
+                        End If
+                        GoTo ProximoItem
+
+                    Case Else ' RETRY_AS_PDF
+                        filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload: " & resolvedName & vbCrLf
+
+                        usoFinal = "pdf_upload"
+                        dbgUsoFinal = usoFinal
+
+                        If LCase$(Files_ObterExtensao(caminhoUsado)) <> EXT_PDF Then
+                            If Files_PodeConverterParaPDF(LCase$(ext)) Then
+                                sourceHash = Files_SHA256_File(resolvedPath)
+
+                                Dim pdfPath2 As String
+                                pdfPath2 = Files_ComporCaminhoPdfConvertido(pdfCacheFolder, resolvedName)
+
+                                Dim okConv2 As Boolean
+                                Dim usedCache2 As Boolean
+                                Dim convertedNow2 As Boolean
+                                Dim erroConv2 As String
+
+                                usedCache2 = False
+                                convertedNow2 = False
+                                erroConv2 = ""
+
+                                okConv2 = Files_PdfCache_GetOrConvertPdf( _
+                                            promptId, _
+                                            resolvedName, _
+                                            resolvedPath, _
+                                            pdfPath2, _
+                                            sourceHash, _
+                                            usedCache2, _
+                                            convertedNow2, _
+                                            erroConv2 _
+                                        )
+
+                                If okConv2 Then
+                                    caminhoUsado = pdfPath2
+                                    convertido = True
+
+                                    If convertedNow2 Then
+                                        filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload (PDF gerado): " & resolvedName & vbCrLf
+                                    ElseIf usedCache2 Then
+                                        filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload (PDF em cache): " & resolvedName & vbCrLf
+                                    Else
+                                        filesOpsCurto = filesOpsCurto & Files_TimestampCurto() & " override text_embed->pdf_upload (estado indeterminado): " & resolvedName & vbCrLf
+                                    End If
+
+                                Else
+                                    If UCase$(Trim$(docxAsPdfFallback)) = "ERROR" Then
+                                        Call Files_OperacoesAdicionarResultado(d, "PDF_CONVERSION_FAIL", resolvedName, "pdf_upload", _
+                                            "Falha conversão PDF: " & erroConv2, False, True, required)
+
+                                        If required Then
+                                            outFalhaCritica = True
+                                            outErroMsg = "Falha conversão PDF (overflow) para ficheiro obrigatório: " & resolvedName & " | " & erroConv2
+                                        End If
+                                        GoTo ProximoItem
+                                    Else
+                                        textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: conversão PDF falhou]"
+                                        usoFinal = "text_embed"
+                                        dbgUsoFinal = usoFinal
+                                        convertido = False
+                                    End If
+                                End If
+                            Else
+                                textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: não é possível converter para PDF]"
+                                usoFinal = "text_embed"
+                                dbgUsoFinal = usoFinal
+                                convertido = False
+                            End If
+                        End If
+
+                        If usoFinal = "pdf_upload" Then
+                            GoTo ProcessarComoInputFile
+                        End If
+                End Select
             End If
+
+            textoEmbedTotal = textoEmbedTotal & vbCrLf & vbCrLf & _
+                "----- BEGIN FILE: " & resolvedName & " -----" & vbCrLf & _
+                textoExtraDeste & vbCrLf & _
+                "----- END FILE: " & resolvedName & " -----" & vbCrLf
+
+            hashUsado = Files_SHA256_Text(textoExtraDeste)
 
             Call Files_UpsertFilesManagement(wsFiles, mapaCab, pipelineNome, promptId, resolvedName, _
                 inputFolder, caminhoUsado, "", "text_embed", False, sourceHash, lastMod, sizeBytesUsado, hashUsado, _

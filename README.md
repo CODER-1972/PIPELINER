@@ -441,13 +441,14 @@ Exemplo didático para erro de validação de payload:
 
 
 
-### Novos guardrails de diagnóstico (D1–D5)
+### Novos guardrails de diagnóstico (D1–D6)
 
 - **D1 — Validador bloqueante de anexos esperados**: antes da chamada HTTP, o pipeline cruza `INPUTS: FILES` com os anexos efetivamente preparados e bloqueia com `INPUTFILES_MISSING` quando houver falta (`expected`, `got_input_file`, `got_input_image`, `got_text_embed`, `missing=[...]`). O comparador agora é *aware* de `wildcard`/`(latest)`, resolvendo o padrão para nome real antes da validação para evitar falso negativo.
 - **D2 — Container list verboso**: o evento `M10_CI_CONTAINER_LIST` passou a incluir amostra com `filename`, `bytes` e `created_at` por item para auditoria rápida.
 - **D3 — Padrão forte para seleção de artefacto**: em `output_kind:file` + `process_mode:code_interpreter`, o fallback por listagem pode aplicar regex forte configurável por prompt/pipeline (`output_regex_patterns` no Config extra; ou `FILE_OUTPUT_STRONG_PATTERN_REGEX[_<PIPELINE>]` na Config) com modo `FILE_OUTPUT_STRONG_PATTERN_MODE=warn|strict`. Em `strict`, sem match gera `OUTPUT_CONTRACT_FAIL`.
 - **D4 — Download robusto com staging/retry**: downloads de CI usam staging em pasta temporária, promoção para destino final e até 3 tentativas curtas com erro consolidado por tentativa (sem duplicar logs por retry).
 - **D5 — Gate UTF-8 roundtrip**: antes do envio para `/v1/responses`, o payload final passa por validação de roundtrip UTF-8 (`M05_UTF8_ROUNDTRIP`), bloqueando envio quando houver corrupção detectável de codificação.
+- **D6 — Guardrail para text_embed vazio**: quando um anexo em modo `text_embed` não produzir conteúdo (ficheiro vazio, encoding incompatível ou leitura falhada), o motor deixa de o marcar como anexado com sucesso e regista `TEXT_EMBED_EMPTY`; se o ficheiro estiver como `(required)`, o passo é bloqueado antes da chamada HTTP para evitar respostas com contexto incompleto.
 
 ### Diagnóstico rápido: `output_kind:file` + `process_mode:code_interpreter` com saída "desalinhada"
 
