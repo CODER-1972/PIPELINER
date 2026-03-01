@@ -8,6 +8,9 @@ Option Explicit
 ' - Registar resultados PASS/FAIL/ALERTA no DEBUG para diagnóstico rápido.
 '
 ' Atualizações:
+' - 2026-03-01 | Codex | SelfTests do classificador DEBUG_DIAG (RC)
+'   - Adiciona 3 cenários simulados (sucesso, apenas input no container, text_embed com risco /mnt/data).
+'   - Valida código RC esperado via DebugDiag_ClassifyForSelfTest sem dependência de API/rede.
 ' - 2026-02-18 | Codex | SelfTest automático para wildcard FILES (GUIA_DE_ESTILO)
 '   - Cria pasta temporária + PDFs dummy e valida resolução `GUIA_DE_ESTILO*.pdf` com latest.
 '   - Integra resultado PASS/FAIL no ciclo SelfTest_RunAll sem dependência de API.
@@ -26,6 +29,7 @@ Option Explicit
 ' - SelfTest_RunAll (Sub): rotina pública do módulo.
 ' - SELFTEST_FILEOUTPUT_SCHEMA (Sub): valida schema strict do manifest de File Output.
 ' - SELFTEST_FILES_WILDCARD_RESOLUTION (Sub): valida resolução automática de wildcard FILES em pasta temporária.
+' - SELFTEST_DEBUG_DIAG_CLASSIFIER (Sub): valida regras mínimas de root cause do DEBUG_DIAG.
 ' =============================================================================
 
 ' =============================================================================
@@ -84,6 +88,9 @@ Public Sub SelfTest_RunAll()
 
     ' 8) File Output json_schema strict (required alinhado com properties)
     SELFTEST_FILEOUTPUT_SCHEMA
+
+    ' 9) Classificador DEBUG_DIAG (cenários simulados)
+    SELFTEST_DEBUG_DIAG_CLASSIFIER
 
     SelfTest_Log SEV_INFO, "SELFTEST_RUN", "Fim dos testes internos.", "OK"
     Exit Sub
@@ -864,6 +871,41 @@ NextI:
 
     BytesLastIndexOf = -1
 End Function
+
+
+Public Sub SELFTEST_DEBUG_DIAG_CLASSIFIER()
+    On Error GoTo EH
+
+    Dim rc As String, sum As String, fix As String, conf As Long
+
+    ' Cenário 1: sucesso (CSV+DOCX + EXECUTE)
+    Call DebugDiag_ClassifyForSelfTest("code_interpreter", "SIM", "2", "report.csv|summary.docx", "input_file", "EXECUTE: LOAD_CSV report.csv", 1, "", "{""type"":""code_interpreter_call""}", rc, sum, fix, conf)
+    If Trim$(rc) = "" Then
+        SelfTest_Log SEV_INFO, "SELFTEST_DEBUG_DIAG", "DEBUG_DIAG_SUCCESS_CASE PASS (sem root cause crítica)", "OK"
+    Else
+        SelfTest_Log SEV_ALERTA, "SELFTEST_DEBUG_DIAG", "DEBUG_DIAG_SUCCESS_CASE FAIL rc=" & rc, "Esperado rc vazio no cenário de sucesso."
+    End If
+
+    ' Cenário 2: container com apenas input
+    Call DebugDiag_ClassifyForSelfTest("code_interpreter", "SIM", "1", "input.pdf", "input_file", "Gerar output", 0, "", "{""type"":""code_interpreter_call""}", rc, sum, fix, conf)
+    If rc = "RC_ONLY_INPUTS_IN_CONTAINER" Then
+        SelfTest_Log SEV_INFO, "SELFTEST_DEBUG_DIAG", "DEBUG_DIAG_ONLY_INPUTS PASS rc=" & rc, "OK"
+    Else
+        SelfTest_Log SEV_ERRO, "SELFTEST_DEBUG_DIAG", "DEBUG_DIAG_ONLY_INPUTS FAIL rc=" & rc, "Esperado RC_ONLY_INPUTS_IN_CONTAINER."
+    End If
+
+    ' Cenário 3: text_embed + tentativa de abrir ficheiro
+    Call DebugDiag_ClassifyForSelfTest("code_interpreter", "SIM", "0", "", "text_embed", "Abrir /mnt/data/dados.csv e processar", 0, "", "{""type"":""code_interpreter_call""}", rc, sum, fix, conf)
+    If rc = "RC_TEXT_EMBED_FILE_NOT_FOUND_RISK" Then
+        SelfTest_Log SEV_INFO, "SELFTEST_DEBUG_DIAG", "DEBUG_DIAG_TEXT_EMBED_RISK PASS rc=" & rc, "OK"
+    Else
+        SelfTest_Log SEV_ERRO, "SELFTEST_DEBUG_DIAG", "DEBUG_DIAG_TEXT_EMBED_RISK FAIL rc=" & rc, "Esperado RC_TEXT_EMBED_FILE_NOT_FOUND_RISK."
+    End If
+
+    Exit Sub
+EH:
+    SelfTest_Log SEV_ERRO, "SELFTEST_DEBUG_DIAG", "Exceção no SELFTEST_DEBUG_DIAG_CLASSIFIER: " & Err.Number & " - " & Err.Description, "Rever M18_DebugDiagnostics e chamadas do selftest."
+End Sub
 
 ' =============================================================================
 ' Helpers: COM

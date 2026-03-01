@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-01 | Codex | DEBUG_SCHEMA_VERSION=2 com relatório paralelo DEBUG_DIAG
+'   - Mede tempos de subfases (files/api/directives) e regista diagnóstico aditivo em DEBUG_DIAG quando DEBUG_LEVEL>=DIAG.
+'   - Mantém DEBUG legado intacto e adiciona bundle opcional via DEBUG_BUNDLE sem impacto em BASE.
 ' - 2026-03-01 | Codex | Passa intencao CI resolvida para o M05 (debug e anti-falso-supressao)
 '   - Calcula ciIntentResolved via modo efetivo file/code_interpreter e envia para OpenAI_Executar.
 '   - Mantem compatibilidade para chamadas antigas (parametro opcional no M05).
@@ -685,6 +688,9 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     Dim passo As Long
     Dim passoCtx As Long
     Dim promptCtx As String
+    Dim stepStartAt As Date, stepEndAt As Date
+    Dim filesPrepareMs As Long, apiCallMs As Long, directiveParseMs As Long
+    Dim tMark As Double
     passoCtx = 0
     promptCtx = ""
 
@@ -693,6 +699,10 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         passoCtx = passo
         promptCtx = atual
+        stepStartAt = Now
+        filesPrepareMs = 0
+        apiCallMs = 0
+        directiveParseMs = 0
         wsPainel.Cells(cursorRow, colIniciar).value = atual
 
         Dim rowPos As Long
@@ -819,6 +829,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         End If
 
         Dim okFiles As Boolean
+        tMark = Timer
         If promptTemFiles Then
             Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "Uploading file", rowPos, rowTotal, prompt.Id)
             Call Painel_LogStepStage(passo, prompt.Id, "files_prepare_start", "temFiles=SIM")
@@ -875,6 +886,9 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 GoTo SaidaLimpa
             End If
         End If
+
+        filesPrepareMs = CLng((Timer - tMark) * 1000)
+        If filesPrepareMs < 0 Then filesPrepareMs = 0
 
         Call Debug_Registar(passo, prompt.Id, "INFO", "", "REQ_INPUT_JSON", _
             "len=" & Len(inputJsonFinal) & _
@@ -933,8 +947,11 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Dim ciIntentResolved As Boolean
         ciIntentResolved = (LCase$(Trim$(fo_outputKind)) = "file" And LCase$(Trim$(fo_processMode)) = "code_interpreter")
 
+        tMark = Timer
         resultado = OpenAI_Executar(apiKey, modeloUsado, promptTextFinal, temperaturaDefault, maxTokensDefault, _
                                     modosEfetivo, prompt.storage, inputJsonFinal, extraFragmentFO, prompt.Id, debugFingerprintSeed, ciIntentResolved)
+        apiCallMs = CLng((Timer - tMark) * 1000)
+        If apiCallMs < 0 Then apiCallMs = 0
 
         execCount = execCount + 1
         Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "Resposta recebida", rowPos, rowTotal, prompt.Id)
@@ -949,6 +966,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             fo_pptxMode, fo_xlsxMode, fo_pdfMode, fo_imageMode, fo_filesUsedOut, fo_filesOpsOut)
         Dim fo_executeOpsLog As String
         fo_executeOpsLog = ""
+        tMark = Timer
         If Trim$(resultado.Erro) = "" And resultado.httpStatus >= 200 And resultado.httpStatus < 300 Then
             fo_executeOpsLog = OutputOrders_TryExecute(passo, prompt.Id, resultado.responseId, resultado.outputText, outputFolderBase, fo_filesOpsOut)
             If Trim$(fo_executeOpsLog) <> "" Then
@@ -959,6 +977,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 End If
             End If
         End If
+        directiveParseMs = CLng((Timer - tMark) * 1000)
+        If directiveParseMs < 0 Then directiveParseMs = 0
 
         If Trim$(resultado.Erro) <> "" Then
             textoSeguimento = "[ERRO] " & resultado.Erro
@@ -985,6 +1005,11 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 filesOpsResumo = fo_filesOpsOut
             End If
         End If
+
+        stepEndAt = Now
+        Call DebugDiag_RecordStep(pipelineNome, pipelineIndex, passo, prompt.Id, modeloUsado, fo_outputKind, fo_processMode, _
+            stepStartAt, stepEndAt, filesPrepareMs, apiCallMs, directiveParseMs, inputJsonFinal, filesUsedResumo, filesOpsResumo, fileIds, linhaFilesLista, _
+            resultado, promptTextFinal, outputFolderBase)
 
         Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, resultado.httpStatus, resultado.responseId, _
             textoSeguimento, pipelineNome, "", filesUsedResumo, filesOpsResumo, fileIds)
