@@ -215,6 +215,7 @@ Capacidades principais:
 - flags por ficheiro (`required`, `latest`, `as pdf`, `as is`, `text`);
 - suporte a wildcard em `FILES:` (ex.: `GUIA_DE_ESTILO*.pdf`), com tentativa inicial por `Dir` e fallback de correspondência flexível para nomes com `_`, `-` e espaço;
 - upload para `/v1/files` com reutilização por hash (quando configurado);
+- rastreio por ficheiro no `DEBUG` com etiqueta `FILES_ITEM_TRACE` (1 linha por item declarado, incluindo `full_path`, `status`, `mode`, `file_id` quando existir e diagnóstico pedagógico: `problema_tipo`, `explicacao`, `acao`);
 - fallback entre engines/perfis de upload.
 
 Nota de compatibilidade importante:
