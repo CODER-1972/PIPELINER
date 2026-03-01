@@ -34,7 +34,7 @@ Public Sub DebugDiag_RecordStep( _
     ByVal elapsedFilesPrepareMs As Long, ByVal elapsedApiCallMs As Long, _
     ByVal elapsedDirectiveParseMs As Long, ByVal inputJsonFinal As String, _
     ByVal filesUsedResumo As String, ByVal filesOpsResumo As String, ByVal fileIds As String, _
-    ByVal filesRequestedRaw As String, ByVal resultado As ApiResultado, _
+    ByVal filesRequestedRaw As String, ByRef resultado As ApiResultado, _
     ByVal promptTextFinal As String, ByVal outputFolderBase As String)
 
     On Error GoTo EH
@@ -551,7 +551,7 @@ Private Function DebugDiag_Preview(ByVal txt As String, ByVal maxLen As Long) As
     End If
 End Function
 
-Private Sub DebugDiag_WriteBundle(ByVal pipelineName As String, ByVal passo As Long, ByVal promptId As String, ByVal responseId As String, ByVal outputFolderBase As String, ByVal rowMap As Object, ByVal resultado As ApiResultado)
+Private Sub DebugDiag_WriteBundle(ByVal pipelineName As String, ByVal passo As Long, ByVal promptId As String, ByVal responseId As String, ByVal outputFolderBase As String, ByVal rowMap As Object, ByRef resultado As ApiResultado)
     On Error GoTo EH
 
     Dim baseFolder As String
