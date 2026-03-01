@@ -329,6 +329,7 @@ Leitura em 10 segundos (regra prática):
 - Se `M05_HTTP_RESULT` indica 2xx (`ok_http=SIM`) e `M10_CI_CONTRACT_STATUS` indica falha, então o problema é **contrato/output**, não transporte.
 - Se não há 2xx e surgem erros M05, então o problema está na camada de **transporte/payload/timeout**.
 - Em `text_embed`, a evidência correta é mensagem de anexação textual; não é esperado `file_id`.
+- Em anexação mista (`input_file` + `text_embed`), o DEBUG deve mostrar ambos os sinais: `has_input_file=SIM` **e** `has_text_embed=SIM` no `REQ_INPUT_JSON`, além de linha `FILES` com `blocos_text_embed=N`.
 
 ### Diagnóstico rápido: `HTTP 400` com `context_length_exceeded`
 
