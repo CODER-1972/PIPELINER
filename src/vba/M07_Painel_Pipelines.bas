@@ -8,6 +8,12 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-01 | Codex | Refina alerta de downgrade para reduzir falso positivo
+'   - Limita M07_FILEOUTPUT_MODE_MISMATCH a cenarios com intencao explicita de File Output no Config extra/outputKind.
+'   - Padroniza mensagem com PROBLEMA/IMPACTO/ACAO/DETALHE para triagem rapida no DEBUG.
+' - 2026-03-01 | Codex | Alerta preventivo para downgrade silencioso de modo de File Output
+'   - Regista M07_FILEOUTPUT_MODE_MISMATCH quando Code Interpreter está ativo nos modos mas o modo efetivo não é file/code_interpreter.
+'   - Regista M07_FILEOUTPUT_PARSE_GUARD quando Config extra menciona output_kind/process_mode mas cai em text/metadata por parseável inválido.
 ' - 2026-03-01 | Codex | Corrige dependência inválida de helper privado entre módulos
 '   - Substitui chamadas `Nz(...)` por helper local `Painel_Nz(...)` nas rotinas de validação FILES do módulo.
 '   - Elimina `Compile error: Sub or Function not defined` sem alterar comportamento funcional.
@@ -856,6 +862,27 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         extraFragmentFO = extraFragment
         Call FileOutput_PrepareRequest(fo_outputKind, fo_processMode, fo_structuredMode, modosEfetivo, extraFragmentFO)
 
+        Dim ciModoAtivo As Boolean
+        Dim cfgExtraL As String
+        Dim fileOutputIntent As Boolean
+        ciModoAtivo = (InStr(1, modosEfetivo, "Code Interpreter", vbTextCompare) > 0)
+        cfgExtraL = LCase$(prompt.ConfigExtra)
+        fileOutputIntent = (LCase$(Trim$(fo_outputKind)) = "file" Or _
+                            InStr(1, cfgExtraL, "output_kind", vbTextCompare) > 0 Or _
+                            InStr(1, cfgExtraL, "process_mode", vbTextCompare) > 0)
+
+        If ciModoAtivo And fileOutputIntent And (LCase$(Trim$(fo_outputKind)) <> "file" Or LCase$(Trim$(fo_processMode)) <> "code_interpreter") Then
+            Call Debug_Registar(passo, prompt.Id, "ALERTA", "", "M07_FILEOUTPUT_MODE_MISMATCH", _
+                "PROBLEMA=Code Interpreter ativo, mas modo efetivo=" & LCase$(Trim$(fo_outputKind)) & "/" & LCase$(Trim$(fo_processMode)) & _
+                " | IMPACTO=contrato de output pode cair para texto/metadata | ACAO=validar output_kind:file + process_mode:code_interpreter no catalogo/Config extra | DETALHE=linhas invalidas sem chave:valor (ex.: True) impedem aplicacao.", _
+                "Conferir M05_PAYLOAD_CHECK (mode=...) e corrigir Config extra com uma linha por chave: valor.")
+        End If
+
+        If fileOutputIntent And LCase$(Trim$(fo_outputKind)) = "text" And LCase$(Trim$(fo_processMode)) = "metadata" Then
+            Call Debug_Registar(passo, prompt.Id, "ALERTA", "", "M07_FILEOUTPUT_PARSE_GUARD", _
+                "PROBLEMA=Config extra/output intent para File Output, mas efetivo caiu em text/metadata | IMPACTO=pos-processamento M10 pode nao gerar ficheiro | ACAO=normalizar sintaxe do Config extra | DETALHE=usar output_kind: file e process_mode: code_interpreter em linhas parseaveis.", _
+                "Regra: uma linha = chave: valor; linhas sem ':' sao ignoradas com alerta.")
+        End If
 
         Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "A executar prompt", rowPos, rowTotal, prompt.Id)
         DoEvents
