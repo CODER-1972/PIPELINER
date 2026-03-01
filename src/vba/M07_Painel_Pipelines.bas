@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-01 | Codex | Passa intencao CI resolvida para o M05 (debug e anti-falso-supressao)
+'   - Calcula ciIntentResolved via modo efetivo file/code_interpreter e envia para OpenAI_Executar.
+'   - Mantem compatibilidade para chamadas antigas (parametro opcional no M05).
 ' - 2026-03-01 | Codex | Breadcrumbs STEP_STAGE para diagnostico pre-API
 '   - Regista fases enter_step/catalog_loaded/config_parsed/files_prepare/before_api no DEBUG.
 '   - Facilita triagem quando a pipeline para sem erro e sem novas linhas em Seguimento.
@@ -927,8 +930,11 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Dim debugFingerprintSeed As String
         debugFingerprintSeed = "pipeline=" & pipelineNome & "|step=" & CStr(passo) & "|prompt=" & prompt.Id & "|mode=" & LCase$(Trim$(fo_outputKind)) & "/" & LCase$(Trim$(fo_processMode))
 
+        Dim ciIntentResolved As Boolean
+        ciIntentResolved = (LCase$(Trim$(fo_outputKind)) = "file" And LCase$(Trim$(fo_processMode)) = "code_interpreter")
+
         resultado = OpenAI_Executar(apiKey, modeloUsado, promptTextFinal, temperaturaDefault, maxTokensDefault, _
-                                    modosEfetivo, prompt.storage, inputJsonFinal, extraFragmentFO, prompt.Id, debugFingerprintSeed)
+                                    modosEfetivo, prompt.storage, inputJsonFinal, extraFragmentFO, prompt.Id, debugFingerprintSeed, ciIntentResolved)
 
         execCount = execCount + 1
         Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "Resposta recebida", rowPos, rowTotal, prompt.Id)

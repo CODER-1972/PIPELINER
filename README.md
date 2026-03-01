@@ -477,6 +477,7 @@ Exemplo didático para erro de validação de payload:
 
 **Sinal de downgrade silencioso (novo):** se aparecer `M05_PAYLOAD_CHECK` com `code_interpreter=ADICIONADO_AUTO` mas o fingerprint/`mode=` indicar `text/metadata`, o pipeline está a usar CI apenas como *tool* e não como contrato de output.
 - Verificar `DEBUG` por `M07_FILEOUTPUT_MODE_MISMATCH` e `M07_FILEOUTPUT_PARSE_GUARD` (emitidos quando há intenção de File Output para evitar falso positivo em prompts CI puramente textuais).
+- Verificar também `M05_CI_INTENT_EVAL` para confirmar a origem da intenção de CI: `ci_in_extra`, `ci_intent_resolved` e `ci_explicit_intent`. Se `ci_explicit_intent=NAO` com anexos, o motor pode suprimir auto-add (`M05_CI_AUTO_SUPPRESS`).
 - Causa comum: linha inválida no `Config extra` (ex.: `True` sem `chave:`), que impede aplicar `output_kind: file`/`process_mode: code_interpreter`.
 - Ação: corrigir sintaxe (uma linha por `chave: valor`) e confirmar novo `mode=file/code_interpreter` antes de validar o M10.
 
@@ -535,6 +536,26 @@ RELATORIO_WORD_PARA_COLAR_END
 4) É proibido devolver qualquer texto fora desses formatos (sem preâmbulo, sem explicações extra).
 5) Antes de responder, valida: (a) ficheiros existem; (b) size_bytes > 0; (c) nomes finais correspondem ao padrão pedido.
 ```
+
+#### Onde configurar (copiar/colar) para File Output com CI
+
+Quando quiseres forçar geração de ficheiros no passo do catálogo, coloca este bloco **na coluna `Config extra (amigável)` da linha principal do prompt** (coluna H):
+
+```text
+instructions: Responde em Português de Portugal. Web=Não.
+output_kind: file
+process_mode: code_interpreter
+auto_save: Sim
+overwrite_mode: suffix
+```
+
+Opcional (recomendado para reduzir falsos positivos no fallback por listagem de container):
+
+```text
+output_regex_patterns: [PROMPTS_PIPELINER_LAYOUT\\d{8}v1\\.2\\.txt, PROMPTS_PIPELINER_LAYOUT\\d{8}_v1\\.2_RELATORIO\\.docx]
+```
+
+> Nota: o texto acima sobre `sandbox:/mnt/data/...` e “nome final exato” **não vai no Config extra**; isso deve ficar no **Texto prompt** (coluna D), em bloco de contrato de saída no final da instrução.
 
 Regra prática de escrita para equipas mistas (técnico + negócio):
 - 1 linha técnica padronizada (`PROBLEMA|IMPACTO|ACAO|DETALHE`) +
