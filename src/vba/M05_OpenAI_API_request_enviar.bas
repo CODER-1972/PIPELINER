@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos úteis da resposta JSON para consumo da orquestração.
 '
 ' Atualizações:
+' - 2026-03-01 | Codex | Evita falso M05_CI_AUTO_SUPPRESS quando CI vem do modo efetivo
+'   - OpenAI_Executar passa a aceitar sinal opcional de intencao CI ja resolvida pelo orquestrador (File Output).
+'   - Regista M05_CI_INTENT_EVAL com origem da decisao (extra vs modo efetivo) para diagnostico mais objetivo.
 ' - 2026-03-01 | Codex | Evita auto-injecao indevida de Code Interpreter com anexos
 '   - Quando ha input_file/input_image e nao existe intencao explicita de CI no extra, suprime auto-add de code_interpreter.
 '   - Regista alerta M05_CI_AUTO_SUPPRESS para troubleshooting quando Modos inclui Code Interpreter nestas condicoes.
@@ -646,7 +649,8 @@ Public Function OpenAI_Executar( _
     ByVal inputJsonLiteralOpcional As String, _
     ByVal extraFragmentSemInput As String, _
     Optional ByVal promptIdForDebug As String = "", _
-    Optional ByVal debugFingerprintSeed As String = "" _
+    Optional ByVal debugFingerprintSeed As String = "", _
+    Optional ByVal ciIntentResolved As Boolean = False _
 ) As ApiResultado
 
     Dim resultado As ApiResultado
@@ -758,18 +762,32 @@ Public Function OpenAI_Executar( _
     Dim ciExplicitInExtra As Boolean
     ciExplicitInExtra = ExtraFragment_RequestsCodeInterpreter(extraFragmentSemInput)
 
+    Dim ciExplicitIntent As Boolean
+    ciExplicitIntent = (ciExplicitInExtra Or ciIntentResolved)
+
+    On Error Resume Next
+    Call Debug_Registar(0, dbgPromptId, "INFO", "", "M05_CI_INTENT_EVAL", _
+        "ci_in_extra=" & IIf(ciExplicitInExtra, "SIM", "NAO") & _
+        " | ci_intent_resolved=" & IIf(ciIntentResolved, "SIM", "NAO") & _
+        " | ci_explicit_intent=" & IIf(ciExplicitIntent, "SIM", "NAO") & _
+        " | modos_ci=" & IIf(modosCodeInterpreter, "SIM", "NAO") & _
+        " | has_input_file=" & IIf(hasInputFile, "SIM", "NAO") & _
+        " | has_input_image=" & IIf(hasInputImage, "SIM", "NAO"), _
+        "Diagnostico de origem da intencao de CI (extraFragment vs modo efetivo resolvido no orquestrador).")
+    On Error GoTo TrataErro
+
     Dim autoAddCodeInterpreter As Boolean
     autoAddCodeInterpreter = False
 
     If modosCodeInterpreter Then
         If extraTemTools Then
             autoAddCodeInterpreter = False
-        ElseIf (hasInputFile Or hasInputImage) And (Not ciExplicitInExtra) Then
+        ElseIf (hasInputFile Or hasInputImage) And (Not ciExplicitIntent) Then
             autoAddCodeInterpreter = False
             On Error Resume Next
             Call Debug_Registar(0, dbgPromptId, "ALERTA", "", "M05_CI_AUTO_SUPPRESS", _
-                "Modos inclui Code Interpreter, mas auto-add foi suprimido: ha anexos input_file/input_image e o extra nao pede CI explicitamente.", _
-                "Se este passo precisar mesmo de Code Interpreter, definir process_mode: code_interpreter no Config extra (ou tools explicitas).")
+                "Modos inclui Code Interpreter, mas auto-add foi suprimido: ha anexos input_file/input_image e nao foi encontrada intencao explicita de CI (extra ou modo efetivo).", _
+                "Se este passo precisar mesmo de Code Interpreter, definir process_mode: code_interpreter no Config extra (ou tools explicitas) e confirmar M05_CI_INTENT_EVAL com ci_explicit_intent=SIM.")
             On Error GoTo TrataErro
         Else
             autoAddCodeInterpreter = True
