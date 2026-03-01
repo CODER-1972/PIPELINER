@@ -531,3 +531,5 @@ Se começar a ficar demasiado grande:
 - Adotar gate de codificação UTF-8 (roundtrip) antes do envio HTTP para reduzir mojibake no payload; quando falhar, bloquear envio e registar diagnóstico acionável.
 - Em literais de pesquisa JSON (`InStr`, `Replace`, `Like`), preferir aspas duplicadas VBA (`"""id"":"""`) ou `Chr$(34)`; evitar C-style (`\"`) para garantir compatibilidade entre hosts/VBE.
 - Quando um modulo precisar de utilitario simples (ex.: `Nz`), implementar helper local ou usar funcao `Public`; nao chamar `Private Function` de outro modulo para evitar `Compile error: Sub or Function not defined`.
+
+- Ao substituir dependências de helper (ex.: `Nz`), fazer varredura por todas as ocorrências no módulo e módulos adjacentes (`rg`) para evitar remanescentes que causem `Compile error: Sub or Function not defined`.

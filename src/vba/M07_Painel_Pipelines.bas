@@ -9,7 +9,7 @@ Option Explicit
 '
 ' Atualizações:
 ' - 2026-03-01 | Codex | Corrige dependência inválida de helper privado entre módulos
-'   - Substitui chamada `Nz(...)` por helper local `Painel_Nz(...)` em `Painel_Files_ExpectedNamesFromLista`.
+'   - Substitui chamadas `Nz(...)` por helper local `Painel_Nz(...)` nas rotinas de validação FILES do módulo.
 '   - Elimina `Compile error: Sub or Function not defined` sem alterar comportamento funcional.
 ' - 2026-03-01 | Codex | D1 bloqueante aware de wildcard/latest
 '   - Resolve padroes FILES com wildcard/latest para nomes reais antes da comparacao com filesUsed.
@@ -2081,7 +2081,7 @@ Private Function Painel_Files_FindMissingExpected(ByVal expectedNames As Collect
     Set used = CreateObject("Scripting.Dictionary")
     used.CompareMode = vbTextCompare
     Dim rawUsed As String
-    rawUsed = Nz(filesUsed)
+    rawUsed = Painel_Nz(filesUsed)
     If Trim$(rawUsed) <> "" Then
         Dim parts() As String
         parts = Split(rawUsed, ";")
