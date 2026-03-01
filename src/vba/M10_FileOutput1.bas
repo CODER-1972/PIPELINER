@@ -8,6 +8,9 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-03-01 | Codex | Compatibilidade de literal JSON no InStr
+'   - Substitui escape com barra invertida (\") por aspas duplicadas VBA no padrão de busca de "id".
+'   - Evita falso `Syntax error` em VBE/hosts que não aceitam notação C-style em literais.
 ' - 2026-03-01 | Codex | Evita colisão com palavra reservada Enum
 '   - Renomeia eNum/eDesc para errNoCaptured/errDescCaptured em DownloadContainerFileEx.
 '   - Remove risco de "Syntax error" por tokenização case-insensitive (eNum ~ Enum).
@@ -2694,7 +2697,7 @@ End Function
 Private Function CI_ExtractNumericFieldNear(ByVal textJson As String, ByVal anchorId As String, ByVal fieldName As String) As String
     On Error GoTo Falha
     Dim pos As Long
-    pos = InStr(1, textJson, "\"id\":\"" & anchorId & "\"", vbTextCompare)
+    pos = InStr(1, textJson, """id"":""" & anchorId & """", vbTextCompare)
     If pos = 0 Then Exit Function
     Dim win As String
     win = Mid$(textJson, pos, 700)
