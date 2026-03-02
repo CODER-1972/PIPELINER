@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-02 | Codex | Foco inicial no DEBUG e destaque visual de fim de prompt
+'   - Ao clicar INICIAR, ativa DEBUG!A1 para acompanhar novas linhas em tempo real.
+'   - Regista stage=step_completed no fim de cada passo para suportar destaque verde no DEBUG.
 ' - 2026-03-01 | Codex | DEBUG_SCHEMA_VERSION=2 com relatório paralelo DEBUG_DIAG
 '   - Mede tempos de subfases (files/api/directives) e regista diagnóstico aditivo em DEBUG_DIAG quando DEBUG_LEVEL>=DIAG.
 '   - Mantém DEBUG legado intacto e adiciona bundle opcional via DEBUG_BUNDLE sem impacto em BASE.
@@ -629,8 +632,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     ' Limpar/arquivar Seguimento (rotina existente)
     Seguimento_ArquivarLimpar
 
-    ' Garantir foco em Seguimento (pedido do utilizador)
-    Call Painel_FocarSeguimentoA1
+    ' Garantir foco no DEBUG (monitorização em tempo real)
+    Call Painel_FocarDebugA1
 
     ' Determinar ID inicial
     Dim startId As String
@@ -1013,6 +1016,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, resultado.httpStatus, resultado.responseId, _
             textoSeguimento, pipelineNome, "", filesUsedResumo, filesOpsResumo, fileIds)
+        Call Painel_LogStepStage(passo, prompt.Id, "step_completed", "http=" & CStr(resultado.httpStatus) & " | response_id=" & Left$(Trim$(resultado.responseId), 24))
 
         ' ================================
         ' CONTEXTKV - REGISTAR + CAPTURAR
@@ -1172,11 +1176,11 @@ End Sub
 ' 4.x) Ajudas pedidas: foco/DEBUG/status bar/checks de FILES
 ' ============================================================
 
-Private Sub Painel_FocarSeguimentoA1()
+Private Sub Painel_FocarDebugA1()
     On Error Resume Next
 
     Dim ws As Worksheet
-    Set ws = ThisWorkbook.Worksheets(SHEET_SEGUIMENTO)
+    Set ws = ThisWorkbook.Worksheets(SHEET_DEBUG)
 
     ws.Activate
 

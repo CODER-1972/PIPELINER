@@ -8,6 +8,9 @@ Option Explicit
 ' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
 '
 ' Atualizações:
+' - 2026-03-02 | Codex | Formatacao visual automatica no DEBUG
+'   - Aplica negrito/cor por severidade (ERRO=vermelho, ALERTA=azul).
+'   - Destaca STEP_STAGE stage=step_completed em verde e mantem a ultima linha visivel/ativa.
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
 '   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
 '   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
@@ -55,6 +58,9 @@ Public Sub Debug_Registar( _
     Debug_SetValue ws, mapa, novaLinha, "Parametro", parametro          ' aceita "Parâmetro" no Excel
     Debug_SetValue ws, mapa, novaLinha, "Problema", problema
     Debug_SetValue ws, mapa, novaLinha, "Sugestao", sugestao            ' aceita "Sugestão" no Excel
+
+    Call Debug_AplicarEstiloLinha(ws, mapa, novaLinha, severidade, parametro, problema)
+    Call Debug_FocarUltimaLinha(ws, novaLinha)
 End Sub
 
 
@@ -70,6 +76,50 @@ Private Sub Debug_SetValue(ByVal ws As Worksheet, ByVal mapa As Object, ByVal li
     End If
 End Sub
 
+
+
+Private Sub Debug_AplicarEstiloLinha(ByVal ws As Worksheet, ByVal mapa As Object, ByVal linha As Long, ByVal severidade As String, ByVal parametro As String, ByVal problema As String)
+    On Error Resume Next
+
+    Dim ultimaColuna As Long
+    ultimaColuna = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+    If ultimaColuna <= 0 Then Exit Sub
+
+    With ws.Range(ws.Cells(linha, 1), ws.Cells(linha, ultimaColuna)).Font
+        .Bold = False
+        .ColorIndex = xlColorIndexAutomatic
+    End With
+
+    Dim sev As String
+    sev = UCase$(Trim$(severidade))
+
+    If sev = "ERRO" Then
+        ws.Range(ws.Cells(linha, 1), ws.Cells(linha, ultimaColuna)).Font.Bold = True
+        ws.Range(ws.Cells(linha, 1), ws.Cells(linha, ultimaColuna)).Font.Color = RGB(192, 0, 0)
+        Exit Sub
+    End If
+
+    If sev = "ALERTA" Then
+        ws.Range(ws.Cells(linha, 1), ws.Cells(linha, ultimaColuna)).Font.Bold = True
+        ws.Range(ws.Cells(linha, 1), ws.Cells(linha, ultimaColuna)).Font.Color = RGB(0, 102, 204)
+        Exit Sub
+    End If
+
+    If UCase$(Trim$(parametro)) = "STEP_STAGE" And InStr(1, LCase$(problema), "stage=step_completed", vbTextCompare) > 0 Then
+        ws.Range(ws.Cells(linha, 1), ws.Cells(linha, ultimaColuna)).Font.Bold = True
+        ws.Range(ws.Cells(linha, 1), ws.Cells(linha, ultimaColuna)).Font.Color = RGB(0, 128, 0)
+    End If
+
+    On Error GoTo 0
+End Sub
+
+Private Sub Debug_FocarUltimaLinha(ByVal ws As Worksheet, ByVal linha As Long)
+    On Error Resume Next
+    ws.Activate
+    Application.Goto ws.Cells(linha, 1), True
+    ws.Cells(linha, 1).Select
+    On Error GoTo 0
+End Sub
 
 Private Function Debug_MapaCabecalhos(ByVal ws As Worksheet) As Object
     Dim d As Object
