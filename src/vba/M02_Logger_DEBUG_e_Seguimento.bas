@@ -8,6 +8,9 @@ Option Explicit
 ' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
 '
 ' Atualizações:
+' - 2026-03-02 | Codex | Adiciona coluna Funcionalidade no DEBUG com descricao leiga
+'   - Garante criacao automatica da coluna entre Parametro e Problema quando em falta.
+'   - Passa a preencher Funcionalidade em todas as entradas via mapeamento por parametro.
 ' - 2026-03-02 | Codex | Torna pausa de render no DEBUG configuravel pela folha Config
 '   - Le o parametro DEBUG_RENDER_PAUSE_MS (coluna A/B) com fallback interno para 3 ms.
 '   - Mantem compatibilidade retroativa quando a chave nao existe ou e invalida.
@@ -26,6 +29,7 @@ Option Explicit
 ' - Seguimento_Registar (Sub): rotina pública do módulo.
 ' - Seguimento_ArquivarLimpar (Sub): rotina pública do módulo.
 ' - Debug_GetRenderPauseSeconds (Function): helper de leitura da Config para pausa de render no DEBUG.
+' - Debug_DeduzirFuncionalidade (Function): descreve em linguagem simples o processo associado ao parametro.
 ' =============================================================================
 
 Private Const SHEET_DEBUG As String = "DEBUG"
@@ -48,7 +52,8 @@ Public Sub Debug_Registar( _
     ByVal linhaConfigExtra As Variant, _
     ByVal parametro As String, _
     ByVal problema As String, _
-    ByVal sugestao As String _
+    ByVal sugestao As String, _
+    Optional ByVal funcionalidade As String = "" _
 )
     Dim ws As Worksheet
     Set ws = ThisWorkbook.Worksheets(SHEET_DEBUG)
@@ -56,8 +61,14 @@ Public Sub Debug_Registar( _
     Dim mapa As Object
     Set mapa = Debug_MapaCabecalhos(ws)
 
+    Call Debug_GarantirColunaFuncionalidade(ws, mapa)
+
     Dim novaLinha As Long
     novaLinha = ws.Cells(ws.rowS.Count, 1).End(xlUp).Row + 1
+
+    If Len(Trim$(funcionalidade)) = 0 Then
+        funcionalidade = Debug_DeduzirFuncionalidade(parametro)
+    End If
 
     Debug_SetValue ws, mapa, novaLinha, "Timestamp", Now
     Debug_SetValue ws, mapa, novaLinha, "Passo", passo
@@ -65,12 +76,93 @@ Public Sub Debug_Registar( _
     Debug_SetValue ws, mapa, novaLinha, "Severidade", severidade
     Debug_SetValue ws, mapa, novaLinha, "Linha (Config extra)", linhaConfigExtra
     Debug_SetValue ws, mapa, novaLinha, "Parametro", parametro          ' aceita "Parâmetro" no Excel
+    Debug_SetValue ws, mapa, novaLinha, "Funcionalidade", funcionalidade
     Debug_SetValue ws, mapa, novaLinha, "Problema", problema
     Debug_SetValue ws, mapa, novaLinha, "Sugestao", sugestao            ' aceita "Sugestão" no Excel
 
     Call Debug_AplicarEstiloLinha(ws, mapa, novaLinha, severidade, parametro, problema)
     Call Debug_FocarUltimaLinha(ws, novaLinha)
 End Sub
+
+Private Sub Debug_GarantirColunaFuncionalidade(ByVal ws As Worksheet, ByRef mapa As Object)
+    On Error GoTo Fim
+
+    Dim keyFunc As String
+    keyFunc = Debug_NormalizarCabecalho("Funcionalidade")
+    If mapa.exists(keyFunc) Then Exit Sub
+
+    Dim keyParam As String
+    keyParam = Debug_NormalizarCabecalho("Parametro")
+
+    Dim keyProb As String
+    keyProb = Debug_NormalizarCabecalho("Problema")
+
+    Dim colInsert As Long
+    colInsert = 0
+
+    If mapa.exists(keyProb) Then
+        colInsert = CLng(mapa(keyProb))
+    ElseIf mapa.exists(keyParam) Then
+        colInsert = CLng(mapa(keyParam)) + 1
+    End If
+
+    If colInsert <= 0 Then Exit Sub
+
+    ws.Columns(colInsert).Insert Shift:=xlToRight
+    ws.Cells(1, colInsert).value = "Funcionalidade"
+
+    Set mapa = Debug_MapaCabecalhos(ws)
+
+Fim:
+    On Error GoTo 0
+End Sub
+
+Private Function Debug_DeduzirFuncionalidade(ByVal parametro As String) As String
+    Dim p As String
+    p = UCase$(Trim$(parametro))
+
+    If p = "" Then
+        Debug_DeduzirFuncionalidade = "Registo tecnico do passo da pipeline."
+        Exit Function
+    End If
+
+    If InStr(1, p, "FILE", vbTextCompare) > 0 Or InStr(1, p, "UPLOAD", vbTextCompare) > 0 Or InStr(1, p, "PDF", vbTextCompare) > 0 Or InStr(1, p, "DOCX", vbTextCompare) > 0 Or InStr(1, p, "TEXT_EMBED", vbTextCompare) > 0 Then
+        Debug_DeduzirFuncionalidade = "Gestao de anexos e transformacao de ficheiros da pipeline."
+        Exit Function
+    End If
+
+    If InStr(1, p, "OUTPUT", vbTextCompare) > 0 Or InStr(1, p, "CHAIN", vbTextCompare) > 0 Then
+        Debug_DeduzirFuncionalidade = "Geracao e validacao dos ficheiros de saida."
+        Exit Function
+    End If
+
+    If InStr(1, p, "API", vbTextCompare) > 0 Or InStr(1, p, "HTTP", vbTextCompare) > 0 Or InStr(1, p, "JSON", vbTextCompare) > 0 Or InStr(1, p, "UTF8", vbTextCompare) > 0 Or InStr(1, p, "PAYLOAD", vbTextCompare) > 0 Or InStr(1, p, "TIMEOUT", vbTextCompare) > 0 Then
+        Debug_DeduzirFuncionalidade = "Comunicacao com a API e validacao tecnica do pedido."
+        Exit Function
+    End If
+
+    If InStr(1, p, "NEXT PROMPT", vbTextCompare) > 0 Or InStr(1, p, "MAX", vbTextCompare) > 0 Or InStr(1, p, "STEP", vbTextCompare) > 0 Or InStr(1, p, "PIPELINE", vbTextCompare) > 0 Or InStr(1, p, "STARTID", vbTextCompare) > 0 Then
+        Debug_DeduzirFuncionalidade = "Controlo do fluxo e dos limites de execucao da pipeline."
+        Exit Function
+    End If
+
+    If InStr(1, p, "CONFIG", vbTextCompare) > 0 Or InStr(1, p, "PARAM", vbTextCompare) > 0 Or InStr(1, p, "OPENAI_API_KEY", vbTextCompare) > 0 Then
+        Debug_DeduzirFuncionalidade = "Leitura e validacao das configuracoes necessarias para correr a pipeline."
+        Exit Function
+    End If
+
+    If InStr(1, p, "CONTEXT", vbTextCompare) > 0 Or InStr(1, p, "KV", vbTextCompare) > 0 Then
+        Debug_DeduzirFuncionalidade = "Partilha de contexto entre passos para manter continuidade."
+        Exit Function
+    End If
+
+    If InStr(1, p, "SELFTEST", vbTextCompare) > 0 Or InStr(1, p, "DEBUG_DIAG", vbTextCompare) > 0 Then
+        Debug_DeduzirFuncionalidade = "Autotestes e diagnostico interno para detetar regressões."
+        Exit Function
+    End If
+
+    Debug_DeduzirFuncionalidade = "Monitorizacao tecnica de uma etapa da execucao."
+End Function
 
 
 ' ============================================================================
