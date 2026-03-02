@@ -8,6 +8,9 @@ Option Explicit
 ' - Registar resultados PASS/FAIL/ALERTA no DEBUG para diagnóstico rápido.
 '
 ' Atualizações:
+' - 2026-03-02 | Codex | Correção de compile error no selftest DEBUG_DIAG
+'   - Renomeia variáveis locais `sum`/`fix` para `rcSummary`/`rcFixSuggestion` para evitar colisão com nomes reservados.
+'   - Mantém assinatura e cobertura dos cenários de classificação sem alteração funcional.
 ' - 2026-03-03 | Codex | SelfTest do resolvedor CI de output
 '   - Adiciona 5 cenários mínimos (citation, marker, fallback limpo, apenas inputs, ambiguidade).
 '   - Valida que fallback não escolhe `file-*` e falha quando não há desambiguação determinística.
@@ -942,10 +945,10 @@ End Function
 Public Sub SELFTEST_DEBUG_DIAG_CLASSIFIER()
     On Error GoTo EH
 
-    Dim rc As String, sum As String, fix As String, conf As Long
+    Dim rc As String, rcSummary As String, rcFixSuggestion As String, conf As Long
 
     ' Cenário 1: sucesso (CSV+DOCX + EXECUTE)
-    Call DebugDiag_ClassifyForSelfTest("code_interpreter", "SIM", "2", "report.csv|summary.docx", "input_file", "EXECUTE: LOAD_CSV report.csv", 1, "", "{""type"":""code_interpreter_call""}", rc, sum, fix, conf)
+    Call DebugDiag_ClassifyForSelfTest("code_interpreter", "SIM", "2", "report.csv|summary.docx", "input_file", "EXECUTE: LOAD_CSV report.csv", 1, "", "{""type"":""code_interpreter_call""}", rc, rcSummary, rcFixSuggestion, conf)
     If Trim$(rc) = "" Then
         SelfTest_Log SEV_INFO, "SELFTEST_DEBUG_DIAG", "DEBUG_DIAG_SUCCESS_CASE PASS (sem root cause crítica)", "OK"
     Else
@@ -953,7 +956,7 @@ Public Sub SELFTEST_DEBUG_DIAG_CLASSIFIER()
     End If
 
     ' Cenário 2: container com apenas input
-    Call DebugDiag_ClassifyForSelfTest("code_interpreter", "SIM", "1", "input.pdf", "input_file", "Gerar output", 0, "", "{""type"":""code_interpreter_call""}", rc, sum, fix, conf)
+    Call DebugDiag_ClassifyForSelfTest("code_interpreter", "SIM", "1", "input.pdf", "input_file", "Gerar output", 0, "", "{""type"":""code_interpreter_call""}", rc, rcSummary, rcFixSuggestion, conf)
     If rc = "RC_ONLY_INPUTS_IN_CONTAINER" Then
         SelfTest_Log SEV_INFO, "SELFTEST_DEBUG_DIAG", "DEBUG_DIAG_ONLY_INPUTS PASS rc=" & rc, "OK"
     Else
@@ -961,7 +964,7 @@ Public Sub SELFTEST_DEBUG_DIAG_CLASSIFIER()
     End If
 
     ' Cenário 3: text_embed + tentativa de abrir ficheiro
-    Call DebugDiag_ClassifyForSelfTest("code_interpreter", "SIM", "0", "", "text_embed", "Abrir /mnt/data/dados.csv e processar", 0, "", "{""type"":""code_interpreter_call""}", rc, sum, fix, conf)
+    Call DebugDiag_ClassifyForSelfTest("code_interpreter", "SIM", "0", "", "text_embed", "Abrir /mnt/data/dados.csv e processar", 0, "", "{""type"":""code_interpreter_call""}", rc, rcSummary, rcFixSuggestion, conf)
     If rc = "RC_TEXT_EMBED_FILE_NOT_FOUND_RISK" Then
         SelfTest_Log SEV_INFO, "SELFTEST_DEBUG_DIAG", "DEBUG_DIAG_TEXT_EMBED_RISK PASS rc=" & rc, "OK"
     Else
