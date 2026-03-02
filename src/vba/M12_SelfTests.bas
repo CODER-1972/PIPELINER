@@ -8,6 +8,9 @@ Option Explicit
 ' - Registar resultados PASS/FAIL/ALERTA no DEBUG para diagnóstico rápido.
 '
 ' Atualizações:
+' - 2026-03-03 | Codex | SelfTest do resolvedor CI de output
+'   - Adiciona 5 cenários mínimos (citation, marker, fallback limpo, apenas inputs, ambiguidade).
+'   - Valida que fallback não escolhe `file-*` e falha quando não há desambiguação determinística.
 ' - 2026-03-02 | Codex | Cobertura agnostica para 1, 2+ wildcards em FILES
 '   - Amplia SELFTEST_FILES_WILDCARD_RESOLUTION para padroes com 1, 2 e 3+ asteriscos (`*`).
 '   - Valida comportamento agnostico ao texto de procura com multiplos nomes de ficheiro no mesmo lote.
@@ -33,6 +36,7 @@ Option Explicit
 ' - SELFTEST_FILEOUTPUT_SCHEMA (Sub): valida schema strict do manifest de File Output.
 ' - SELFTEST_FILES_WILDCARD_RESOLUTION (Sub): valida resolução automática de wildcard FILES em pasta temporária.
 ' - SELFTEST_DEBUG_DIAG_CLASSIFIER (Sub): valida regras mínimas de root cause do DEBUG_DIAG.
+' - SELFTEST_CI_OUTPUT_RESOLVER (Sub): valida resolução determinística do ficheiro de output em CI.
 ' =============================================================================
 
 ' =============================================================================
@@ -94,6 +98,9 @@ Public Sub SelfTest_RunAll()
 
     ' 9) Classificador DEBUG_DIAG (cenários simulados)
     SELFTEST_DEBUG_DIAG_CLASSIFIER
+
+    ' 10) Resolvedor determinístico de output CI
+    SELFTEST_CI_OUTPUT_RESOLVER
 
     SelfTest_Log SEV_INFO, "SELFTEST_RUN", "Fim dos testes internos.", "OK"
     Exit Sub
@@ -965,6 +972,70 @@ Public Sub SELFTEST_DEBUG_DIAG_CLASSIFIER()
 EH:
     SelfTest_Log SEV_ERRO, "SELFTEST_DEBUG_DIAG", "Exceção no SELFTEST_DEBUG_DIAG_CLASSIFIER: " & Err.Number & " - " & Err.Description, "Rever M18_DebugDiagnostics e chamadas do selftest."
 End Sub
+
+
+Public Sub SELFTEST_CI_OUTPUT_RESOLVER()
+    On Error GoTo EH
+
+    Dim ok As Boolean, rule As String, fname As String
+    Dim files As Collection
+
+    ' 1) citation vence tudo
+    Set files = SelfTest_BuildCiFiles(Array(Array("f-out", "/mnt/data/out.tsv", "assistant"), Array("f-in", "/mnt/data/file-abc-input.csv", "user")))
+    ok = CI_ResolveOutputCandidateForSelfTest("{""output"": [{""type"": ""message"", ""content"": [{""type"": ""output_text"", ""annotations"": [{""type"": ""container_file_citation"", ""filename"": ""out.tsv"", ""file_id"": ""f-out"", ""container_id"": ""ctr-1""}]}]}]}", "", files, "run-1", rule, fname)
+    SelfTest_AssertCiResolver "CASE1_CITATION", ok And rule = "citation" And LCase$(fname) = "out.tsv"
+
+    ' 2) marker canonico
+    Set files = SelfTest_BuildCiFiles(Array(Array("f-1", "/mnt/data/catalogo__run2__TSV_CATALOGO_FINAL.tsv", "assistant"), Array("f-2", "/mnt/data/other.tsv", "assistant")))
+    ok = CI_ResolveOutputCandidateForSelfTest("{}", "CI_OUTPUT_FILE: catalogo__run2__TSV_CATALOGO_FINAL.tsv", files, "run2", rule, fname)
+    SelfTest_AssertCiResolver "CASE2_MARKER", ok And rule = "marker" And InStr(1, fname, "TSV_CATALOGO_FINAL.tsv", vbTextCompare) > 0
+
+    ' 3) fallback limpo ignora file-* e source=user
+    Set files = SelfTest_BuildCiFiles(Array(Array("f-1", "/mnt/data/output_assistant.tsv", "assistant"), Array("f-2", "/mnt/data/file-aaa-input.csv", "user")))
+    ok = CI_ResolveOutputCandidateForSelfTest("{}", "", files, "", rule, fname)
+    SelfTest_AssertCiResolver "CASE3_FALLBACK_CLEAN", ok And Left$(LCase$(fname), 5) <> "file-" And rule = "fallback"
+
+    ' 4) so inputs -> falha
+    Set files = SelfTest_BuildCiFiles(Array(Array("f-1", "/mnt/data/file-a-input.csv", "user"), Array("f-2", "/mnt/data/file-b-input.pdf", "user")))
+    ok = CI_ResolveOutputCandidateForSelfTest("{}", "", files, "", rule, fname)
+    SelfTest_AssertCiResolver "CASE4_ONLY_INPUTS", (Not ok)
+
+    ' 5) dois outputs assistant sem desambiguacao -> falha
+    Set files = SelfTest_BuildCiFiles(Array(Array("f-1", "/mnt/data/out_a.tsv", "assistant"), Array("f-2", "/mnt/data/out_b.tsv", "assistant")))
+    ok = CI_ResolveOutputCandidateForSelfTest("{}", "", files, "", rule, fname)
+    SelfTest_AssertCiResolver "CASE5_AMBIGUOUS", (Not ok)
+
+    Exit Sub
+EH:
+    SelfTest_Log SEV_ERRO, "SELFTEST_CI_OUTPUT_RESOLVER", "Exceção no SELFTEST_CI_OUTPUT_RESOLVER: " & Err.Number & " - " & Err.Description, "Rever resolvedor CI no M10_FileOutput1."
+End Sub
+
+Private Function SelfTest_BuildCiFiles(ByVal rows As Variant) As Collection
+    Set SelfTest_BuildCiFiles = New Collection
+    On Error GoTo EH
+    Dim i As Long
+    For i = LBound(rows) To UBound(rows)
+        Dim d As Object
+        Set d = CreateObject("Scripting.Dictionary")
+        d("file_id") = CStr(rows(i)(0))
+        d("path") = CStr(rows(i)(1))
+        d("source") = CStr(rows(i)(2))
+        d("filename") = CStr(rows(i)(1))
+        SelfTest_BuildCiFiles.Add d
+    Next i
+    Exit Function
+EH:
+End Function
+
+Private Sub SelfTest_AssertCiResolver(ByVal caseName As String, ByVal conditionOk As Boolean)
+    If conditionOk Then
+        SelfTest_Log SEV_INFO, "SELFTEST_CI_OUTPUT_RESOLVER", caseName & " PASS", "OK"
+    Else
+        SelfTest_Log SEV_ERRO, "SELFTEST_CI_OUTPUT_RESOLVER", caseName & " FAIL", "Verificar regras citation/marker/fallback no M10_FileOutput1."
+    End If
+End Sub
+
+
 
 ' =============================================================================
 ' Helpers: COM

@@ -500,6 +500,9 @@ Porque acontece:
 1. `output_kind:file` + `process_mode:code_interpreter` força o modelo a operar via CI; se a prompt não impuser um contrato mínimo de saída na conversa (ex.: "APENAS 2 linhas: link sandbox + ok"), o modelo pode responder em Markdown livre.
 2. Sem `container_file_citation`/diretiva explícita, o motor entra em fallback e tenta "adivinhar" um ficheiro elegível no container.
 3. Esse fallback pode apanhar um ficheiro de entrada (já montado no container) e registá-lo como output, criando falsa perceção de sucesso funcional.
+4. Regra atual de resolução (determinística): `container_file_citation` > marcador textual `CI_OUTPUT_FILE:` > fallback por listagem.
+   - No fallback, o motor **nunca** escolhe basenames `file-*` e privilegia `source=assistant` sobre `source=user`.
+   - Se restarem múltiplos candidatos após filtros (regex forte/nomes esperados/run_id), a execução falha com erro explícito (`M10_CI_AMBIGUOUS_FALLBACK`) em vez de escolher ao acaso.
 
 Checklist objetivo:
 
