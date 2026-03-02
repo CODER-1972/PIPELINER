@@ -8,6 +8,10 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-03-03 | Codex | Resolver determinístico do output de Code Interpreter
+'   - Prioriza `container_file_citation` como verdade absoluta e ignora fallback/listagem quando existe citação válida.
+'   - Adiciona marcador canónico `CI_OUTPUT_FILE:` como segunda prioridade de resolução.
+'   - No fallback, exclui `file-*`, prefere `source=assistant` e falha em ambiguidades sem escolher ao acaso.
 ' - 2026-03-02 | Codex | Elegibilidade de TSV no fallback CI
 '   - Inclui `tsv` na whitelist de extensoes descarregaveis via listagem do container.
 '   - Evita falso `File not found` quando o artefacto final e tabular (`FILE_TSV`).
@@ -65,6 +69,7 @@ Option Explicit
 ' - FileOutput_ResolveEffectiveConfig (Sub): rotina pública do módulo.
 ' - FileOutput_PrepareRequest (Sub): rotina pública do módulo.
 ' - FileOutput_ProcessAfterResponse (Function): rotina pública do módulo.
+' - CI_ResolveOutputCandidateForSelfTest (Function): selftest do resolvedor determinístico CI.
 ' - Test_FileOutput (Sub): rotina pública do módulo.
 ' =============================================================================
 
@@ -544,6 +549,9 @@ Private Function Process_CodeInterpreter( _
     Dim expectedNames As Collection
     Set expectedNames = CI_ExtractExpectedFileNamesFromOutputText(Nz(resultado.outputText))
 
+    Dim canonicalMarker As String
+    canonicalMarker = CI_ExtractCanonicalOutputMarker(Nz(resultado.outputText))
+
     Dim ciFingerprintBase As String
     ciFingerprintBase = FileOutput_BuildFingerprint(pipelineNome, passo, promptId, resultado.responseId, "[n/d]", "SIM", "file/code_interpreter")
 
@@ -570,31 +578,31 @@ Private Function Process_CodeInterpreter( _
 
     Dim usedFallback As Boolean
     usedFallback = False
-    ' ------------------------------------------------------------
-    ' FALLBACK robusto:
-    ' - Quando não há container_file_citation, tenta obter container_id
-    '   a partir de code_interpreter_call e listar ficheiros no container.
-    ' ------------------------------------------------------------
-    If ciList.Count = 0 Then
+
+    If ciList.Count > 0 Then
+        Set ciList = CI_KeepFirstCitation(ciList)
+        Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_RESOLVE_RULE", _
+            "rule=citation | filename=" & Nz(CStr(ciList(1)("filename"))) & " | file_id=" & Nz(CStr(ciList(1)("file_id")), "(n/d)"), _
+            "Citation valida no response.json; fallback por listagem foi ignorado.")
+    Else
         Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_NO_CITATION", _
-            "FP=" & ciFingerprintBase & " | Resposta veio sem citação de ficheiro do container; o sistema tenta recuperação por listagem.", _
-            "Reforçar prompt para citar explicitamente o artefacto final.")
+            "FP=" & ciFingerprintBase & " | Resposta veio sem citacao de ficheiro do container; o sistema tenta recuperacao por listagem.", _
+            "Reforcar prompt para citar explicitamente o artefacto final.")
+
         Dim containerFromCall As String
         containerFromCall = CI_ExtractContainerIdFromCall(rawJson)
         If Trim$(containerFromCall) = "" Then
             Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_NO_CONTAINER_ID", _
-                "FP=" & ciFingerprintBase & " | Resposta não trouxe nem citação nem identificador de container; não foi possível provar execução útil do CI.", _
-                "Repetir com instrução explícita de geração + citação de ficheiro, e rever compatibilidade do modelo. Se persistir, tratar como possível mudança de formato da resposta.")
-            Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_CONTRACT_STATUS", _
-                "FP=" & ciFingerprintBase & " | HTTP OK, mas contrato de output CI falhou: sem citation e sem container_id.", _
-                "Impacto: sem artefacto comprovável para download. Ação: repetir execução com instrução explícita de citação e rever compatibilidade do modelo/conta.")
+                "FP=" & ciFingerprintBase & " | Resposta nao trouxe nem citacao nem identificador de container; nao foi possivel provar execucao util do CI.", _
+                "Repetir com instrucao explicita de geracao + citacao de ficheiro, e rever compatibilidade do modelo.")
             Process_CodeInterpreter = "[FILE OUTPUT/CI] Sem container_file_citation e sem container_id (code_interpreter_call)."
             Exit Function
         End If
+
         Dim listStatus As Long, listJson As String
         Dim files As Collection
         Set files = CI_ListContainerFiles(apiKey, containerFromCall, listStatus, listJson)
-        ' Auditoria: guardar listagem do container
+
         Dim listRawPath As String, msgPath As String
         listRawPath = rawFolder & "\" & FileOutput_SafeFileName("step_" & Format$(passo, "00") & "_" & Replace(promptId, "/", "_") & "_ci_container_files.json")
         If FileOutput_PathLenOK(listRawPath, maxPath, msgPath) Then
@@ -603,30 +611,57 @@ Private Function Process_CodeInterpreter( _
             Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_PATH_TOO_LONG", msgPath, _
                 "Encurtar OUTPUT Folder no PAINEL e/ou reduzir prefix/subfolder.")
         End If
+
         If listStatus < 200 Or listStatus >= 300 Then
             Call Debug_Registar(passo, promptId, "ERRO", "", "M10_CI_LIST_FAIL", _
-                "FP=" & ciFingerprintBase & " | Falhou o acesso à listagem de ficheiros do container; diagnóstico bloqueado por API/permissão (HTTP " & CStr(listStatus) & "). container_id=" & containerFromCall, _
-                "Confirmar permissões/chave e disponibilidade do endpoint de container.")
+                "FP=" & ciFingerprintBase & " | Falhou o acesso a listagem de ficheiros do container (HTTP " & CStr(listStatus) & "). container_id=" & containerFromCall, _
+                "Confirmar permissoes/chave e disponibilidade do endpoint de container.")
             Process_CodeInterpreter = "[FILE OUTPUT/CI] Fallback list container falhou (HTTP " & CStr(listStatus) & ")."
             Exit Function
         End If
+
         Dim eligible As Long
         Dim ciList2 As Collection
         Set ciList2 = CI_BuildCitationsFromContainerList(containerFromCall, files, eligible)
+
         Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_CONTAINER_LIST", _
-            "container_id=" & containerFromCall & " | total=" & CStr(files.Count) & " | elegíveis=" & CStr(eligible) & _
+            "container_id=" & containerFromCall & " | total=" & CStr(files.Count) & " | elegiveis=" & CStr(eligible) & _
             " | details=" & CI_ContainerListSummary(files, 8), _
-            "Elegíveis = extensões típicas (docx/xlsx/pptx/pdf/imagens/txt/csv/...).")
+            "Elegiveis excluem file-* e privilegiam source=assistant quando disponivel.")
         Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_CONTAINER_SELECT_DIAG", _
             "container_id=" & containerFromCall & " | selecao=" & CI_ContainerListSelectionDiagnostics(files, 8), _
             "Diagnostico por item (selecionado/motivo), sem depender de bytes para elegibilidade.")
 
         Dim inputLikeCount As Long
-        inputLikeCount = CI_CountInputLikeCandidates(ciList2)
-        If inputLikeCount > 0 Then
+        inputLikeCount = CI_CountInputLikeFromFiles(files)
+        If inputLikeCount > 0 And Trim$(canonicalMarker) = "" Then
             Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_CONTAINER_INPUT_LIKE", _
-                "Fallback CI encontrou " & CStr(inputLikeCount) & " candidato(s) com padrao de input (prefixo file-...).", _
-                "Confirme marcador textual/contrato de output para evitar download de ficheiro de entrada.")
+                "Fallback CI encontrou " & CStr(inputLikeCount) & " item(ns) tipo input (prefixo file-...) na listagem.", _
+                "Regra de seguranca exclui estes itens da selecao automatica.")
+        End If
+
+        If Trim$(canonicalMarker) <> "" And ciList2.Count > 0 Then
+            Dim markerFiltered As Collection
+            Dim markerMatched As Long
+            Set markerFiltered = CI_FilterCitationsBySingleName(ciList2, canonicalMarker, markerMatched)
+            If markerMatched = 1 Then
+                Set ciList2 = markerFiltered
+                Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_RESOLVE_RULE", _
+                    "rule=marker | filename=" & canonicalMarker & " | matched=1", _
+                    "Selecao deterministica por CI_OUTPUT_FILE sem heuristica adicional.")
+            ElseIf markerMatched > 1 Then
+                Call Debug_Registar(passo, promptId, "ERRO", "", "M10_CI_AMBIGUOUS_MARKER", _
+                    "CI_OUTPUT_FILE indicou '" & canonicalMarker & "' mas ha " & CStr(markerMatched) & " candidatos com o mesmo basename.", _
+                    "Garantir basename unico no container para o artefacto final.")
+                Process_CodeInterpreter = "[FILE OUTPUT/CI] Marker CI_OUTPUT_FILE ambiguo: " & canonicalMarker
+                Exit Function
+            Else
+                Call Debug_Registar(passo, promptId, "ERRO", "", "M10_CI_MARKER_NOT_FOUND", _
+                    "CI_OUTPUT_FILE indicou '" & canonicalMarker & "' mas o ficheiro nao existe na listagem filtrada do container.", _
+                    "Alinhar nome anunciado e nome efetivamente gravado pelo CI.")
+                Process_CodeInterpreter = "[FILE OUTPUT/CI] Marker CI_OUTPUT_FILE nao encontrado: " & canonicalMarker
+                Exit Function
+            End If
         End If
 
         If Trim$(strongPatterns) <> "" And ciList2.Count > 0 Then
@@ -634,51 +669,53 @@ Private Function Process_CodeInterpreter( _
             Dim strongMatched As Long
             Set strongFiltered = CI_FilterCitationsByRegexPatterns(ciList2, strongPatterns, strongMatched)
             If strongMatched > 0 Then
-                Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_STRONG_PATTERN_MATCH", _
-                    "Filtro regex forte aplicado | mode=" & strongMode & " | matched=" & CStr(strongMatched) & _
-                    " | before=" & CStr(ciList2.Count) & " | after=" & CStr(strongFiltered.Count), _
-                    "Padrao forte reduziu ambiguidades de fallback por container list.")
                 Set ciList2 = strongFiltered
-            Else
-                Call Debug_Registar(passo, promptId, IIf(strongMode = "strict", "ERRO", "ALERTA"), "", "OUTPUT_CONTRACT_FAIL", _
+            ElseIf strongMode = "strict" Then
+                Call Debug_Registar(passo, promptId, "ERRO", "", "OUTPUT_CONTRACT_FAIL", _
                     "Nenhum ficheiro do container cumpre o padrao forte configurado. mode=" & strongMode & " | patterns=" & strongPatterns, _
                     "Ajuste regex por prompt/pipeline ou o naming do ficheiro produzido no CI.")
-                If strongMode = "strict" Then
-                    Process_CodeInterpreter = "[FILE OUTPUT/CI] OUTPUT_CONTRACT_FAIL (strong pattern sem match)."
-                    Exit Function
-                End If
+                Process_CodeInterpreter = "[FILE OUTPUT/CI] OUTPUT_CONTRACT_FAIL (strong pattern sem match)."
+                Exit Function
             End If
         End If
 
-        If expectedNames.Count > 0 And ciList2.Count > 0 Then
+        If expectedNames.Count > 0 And ciList2.Count > 1 Then
             Dim filtered As Collection
             Dim matched As Long
             Set filtered = CI_FilterCitationsByExpectedNames(ciList2, expectedNames, matched)
-            If matched > 0 Then
-                Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_TEXT_FILTER_APPLIED", _
-                    "Filtro por output_text aplicado no fallback CI | esperados=" & CStr(expectedNames.Count) & _
-                    " | matched=" & CStr(matched) & " | antes=" & CStr(ciList2.Count) & " | depois=" & CStr(filtered.Count), _
-                    "Reduz risco de descarregar ficheiros não pretendidos quando faltam citations.")
+            If matched = 1 Then
                 Set ciList2 = filtered
-            Else
-                Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_TEXT_FILTER_MISS", _
-                    "FP=" & ciFingerprintBase & " | O texto sugeriu nomes de ficheiro que não existem na listagem do container.", _
-                    "Alinhar nome anunciado no output com nome real gerado no CI.")
             End If
+        End If
+
+        If ciList2.Count > 1 Then
+            Dim runIdFiltered As Collection
+            Dim runIdMatched As Long
+            Set runIdFiltered = CI_FilterCitationsByRunId(ciList2, runId, runIdMatched)
+            If runIdMatched = 1 Then Set ciList2 = runIdFiltered
         End If
 
         If ciList2.Count = 0 Then
             Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_CONTAINER_EMPTY", _
-                "FP=" & ciFingerprintBase & " | Container acessível, mas sem artefactos elegíveis para download.", _
+                "FP=" & ciFingerprintBase & " | Container acessivel, mas sem artefactos elegiveis para download.", _
                 "Garantir que a tool grava ficheiro em /mnt/data antes da resposta final.")
-            Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_CONTRACT_STATUS", _
-                "FP=" & ciFingerprintBase & " | HTTP OK, mas contrato de output CI falhou: container sem ficheiros elegíveis.", _
-                "Impacto: sem ficheiro final utilizável. Ação: validar geração do ficheiro no CI e repetir execução.")
-            Process_CodeInterpreter = "[FILE OUTPUT/CI] Sem container_file_citation; container_id=" & containerFromCall & "; 0 ficheiros elegíveis."
+            Process_CodeInterpreter = "[FILE OUTPUT/CI] Sem container_file_citation; container_id=" & containerFromCall & "; 0 ficheiros elegiveis."
             Exit Function
         End If
+
+        If ciList2.Count > 1 Then
+            Call Debug_Registar(passo, promptId, "ERRO", "", "M10_CI_AMBIGUOUS_FALLBACK", _
+                "Fallback por listagem ficou ambiguo com " & CStr(ciList2.Count) & " candidatos elegiveis.", _
+                "Definir CI_OUTPUT_FILE no output ou reforcar regex forte por prompt/pipeline.")
+            Process_CodeInterpreter = "[FILE OUTPUT/CI] Fallback ambiguo: mais de 1 candidato elegivel."
+            Exit Function
+        End If
+
         Set ciList = ciList2
         usedFallback = True
+        Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_RESOLVE_RULE", _
+            "rule=fallback_list | filename=" & Nz(CStr(ciList(1)("filename"))), _
+            "Selecao deterministica por filtros de fallback (sem aleatoriedade).")
     End If
     Dim savedCount As Long
     savedCount = 0
@@ -1948,18 +1985,24 @@ Private Function CI_BuildCitationsFromContainerList(ByVal containerId As String,
 
     On Error GoTo Falha
 
+    Dim assistantPool As Collection
+    Dim genericPool As Collection
+    Set assistantPool = New Collection
+    Set genericPool = New Collection
+
     Dim i As Long
     For i = 1 To files.Count
         Dim it As Object
         Set it = files(i)
 
         Dim p As String
-        p = ""
-        On Error Resume Next
-        p = CStr(it("path"))
-        On Error GoTo Falha
+        Dim base As String
+        Dim src As String
+        p = Nz(CStr(it("path")))
+        base = LCase$(Trim$(CI_PathBaseName(p)))
+        src = LCase$(Trim$(Nz(CStr(it("source")))))
 
-        If CI_ShouldDownloadPath(p) Then
+        If CI_ShouldDownloadPath(p) And Left$(base, 5) <> "file-" Then
             outEligible = outEligible + 1
 
             Dim d As Object
@@ -1967,12 +2010,116 @@ Private Function CI_BuildCitationsFromContainerList(ByVal containerId As String,
             d("container_id") = containerId
             d("file_id") = CStr(it("file_id"))
             d("filename") = CI_PathBaseName(p)
-            CI_BuildCitationsFromContainerList.Add d
+            d("source") = src
+
+            If src = "assistant" Then
+                assistantPool.Add d
+            ElseIf src <> "user" Then
+                genericPool.Add d
+            End If
         End If
     Next i
 
+    If assistantPool.Count > 0 Then
+        Set CI_BuildCitationsFromContainerList = assistantPool
+    Else
+        Set CI_BuildCitationsFromContainerList = genericPool
+    End If
+
     Exit Function
 
+Falha:
+End Function
+
+Private Function CI_KeepFirstCitation(ByVal citations As Collection) As Collection
+    Set CI_KeepFirstCitation = New Collection
+    On Error GoTo Falha
+    If citations Is Nothing Then Exit Function
+    If citations.Count = 0 Then Exit Function
+    CI_KeepFirstCitation.Add citations(1)
+    Exit Function
+Falha:
+End Function
+
+Private Function CI_ExtractCanonicalOutputMarker(ByVal outputText As String) As String
+    On Error GoTo Falha
+    Dim txt As String
+    txt = Replace(Nz(outputText), vbCr, vbLf)
+    If Trim$(txt) = "" Then Exit Function
+
+    Dim re As Object, ms As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = False
+    re.IgnoreCase = True
+    re.Pattern = "(?:^|\n)\s*CI_OUTPUT_FILE\s*:\s*([^\r\n]+)"
+    Set ms = re.Execute(txt)
+    If ms.Count > 0 Then CI_ExtractCanonicalOutputMarker = Trim$(CI_PathBaseName(CStr(ms(0).SubMatches(0))))
+    Exit Function
+Falha:
+    CI_ExtractCanonicalOutputMarker = ""
+End Function
+
+Private Function CI_FilterCitationsBySingleName(ByVal citations As Collection, ByVal expectedFileName As String, ByRef outMatched As Long) As Collection
+    Set CI_FilterCitationsBySingleName = New Collection
+    outMatched = 0
+    On Error GoTo Falha
+
+    Dim target As String
+    target = LCase$(Trim$(CI_PathBaseName(expectedFileName)))
+    If target = "" Then Exit Function
+
+    Dim i As Long
+    For i = 1 To citations.Count
+        Dim it As Object
+        Set it = citations(i)
+        Dim nm As String
+        nm = LCase$(Trim$(CI_PathBaseName(CStr(it("filename")))))
+        If nm = target Then
+            CI_FilterCitationsBySingleName.Add it
+            outMatched = outMatched + 1
+        End If
+    Next i
+    Exit Function
+Falha:
+End Function
+
+Private Function CI_FilterCitationsByRunId(ByVal citations As Collection, ByVal runId As String, ByRef outMatched As Long) As Collection
+    Set CI_FilterCitationsByRunId = New Collection
+    outMatched = 0
+    On Error GoTo Falha
+
+    Dim target As String
+    target = LCase$(Trim$(runId))
+    If target = "" Then Exit Function
+
+    Dim i As Long
+    For i = 1 To citations.Count
+        Dim it As Object
+        Set it = citations(i)
+        Dim nm As String
+        nm = LCase$(Trim$(CStr(it("filename"))))
+        If InStr(1, nm, target, vbTextCompare) > 0 Then
+            CI_FilterCitationsByRunId.Add it
+            outMatched = outMatched + 1
+        End If
+    Next i
+    Exit Function
+Falha:
+End Function
+
+Private Function CI_CountInputLikeFromFiles(ByVal files As Collection) As Long
+    CI_CountInputLikeFromFiles = 0
+    On Error GoTo Falha
+
+    Dim i As Long
+    For i = 1 To files.Count
+        Dim it As Object
+        Set it = files(i)
+        Dim nm As String
+        nm = LCase$(Trim$(CI_PathBaseName(Nz(CStr(it("path"))))))
+        If Left$(nm, 5) = "file-" Then CI_CountInputLikeFromFiles = CI_CountInputLikeFromFiles + 1
+    Next i
+    Exit Function
 Falha:
 End Function
 
@@ -2915,6 +3062,69 @@ Private Function CI_FileNameMatchesAnyRegex(ByVal fileName As String, ByRef patt
     Exit Function
 Falha:
     CI_FileNameMatchesAnyRegex = False
+End Function
+
+
+Public Function CI_ResolveOutputCandidateForSelfTest( _
+    ByVal rawJson As String, _
+    ByVal outputText As String, _
+    ByVal files As Collection, _
+    ByVal runId As String, _
+    ByRef outRule As String, _
+    ByRef outFileName As String _
+) As Boolean
+    On Error GoTo Falha
+    outRule = ""
+    outFileName = ""
+
+    Dim citations As Collection
+    Set citations = CI_ExtractCitations(Nz(rawJson))
+    If citations.Count > 0 Then
+        outRule = "citation"
+        outFileName = CStr(citations(1)("filename"))
+        CI_ResolveOutputCandidateForSelfTest = True
+        Exit Function
+    End If
+
+    Dim marker As String
+    marker = CI_ExtractCanonicalOutputMarker(Nz(outputText))
+
+    Dim eligible As Long
+    Dim candidates As Collection
+    Set candidates = CI_BuildCitationsFromContainerList("ctr-selftest", files, eligible)
+
+    If marker <> "" Then
+        Dim markerFiltered As Collection
+        Dim markerMatched As Long
+        Set markerFiltered = CI_FilterCitationsBySingleName(candidates, marker, markerMatched)
+        If markerMatched = 1 Then
+            outRule = "marker"
+            outFileName = CStr(markerFiltered(1)("filename"))
+            CI_ResolveOutputCandidateForSelfTest = True
+        End If
+        Exit Function
+    End If
+
+    If candidates.Count = 1 Then
+        outRule = "fallback"
+        outFileName = CStr(candidates(1)("filename"))
+        CI_ResolveOutputCandidateForSelfTest = True
+        Exit Function
+    End If
+
+    If candidates.Count > 1 Then
+        Dim byRun As Collection
+        Dim matched As Long
+        Set byRun = CI_FilterCitationsByRunId(candidates, runId, matched)
+        If matched = 1 Then
+            outRule = "fallback_runid"
+            outFileName = CStr(byRun(1)("filename"))
+            CI_ResolveOutputCandidateForSelfTest = True
+        End If
+    End If
+    Exit Function
+Falha:
+    CI_ResolveOutputCandidateForSelfTest = False
 End Function
 
 Private Function CI_ExtractNumericFieldNear(ByVal textJson As String, ByVal anchorId As String, ByVal fieldName As String) As String
