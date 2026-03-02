@@ -8,6 +8,12 @@ Option Explicit
 ' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
 '
 ' Atualizações:
+' - 2026-03-02 | Codex | Torna pausa de render no DEBUG configuravel pela folha Config
+'   - Le o parametro DEBUG_RENDER_PAUSE_MS (coluna A/B) com fallback interno para 3 ms.
+'   - Mantem compatibilidade retroativa quando a chave nao existe ou e invalida.
+' - 2026-03-02 | Codex | Ajusta auto-scroll do DEBUG para manter contexto visual
+'   - Adiciona pausa curta (~3 ms) apos cada nova linha para favorecer refresh no ecra.
+'   - Mantem a linha mais recente visivel no limite inferior da janela (sem saltar para o topo).
 ' - 2026-03-02 | Codex | Formatacao visual automatica no DEBUG
 '   - Aplica negrito/cor por severidade (ERRO=vermelho, ALERTA=azul).
 '   - Destaca STEP_STAGE stage=step_completed em verde e mantem a ultima linha visivel/ativa.
@@ -19,11 +25,14 @@ Option Explicit
 ' - Debug_Registar (Sub): rotina pública do módulo.
 ' - Seguimento_Registar (Sub): rotina pública do módulo.
 ' - Seguimento_ArquivarLimpar (Sub): rotina pública do módulo.
+' - Debug_GetRenderPauseSeconds (Function): helper de leitura da Config para pausa de render no DEBUG.
 ' =============================================================================
 
 Private Const SHEET_DEBUG As String = "DEBUG"
 Private Const SHEET_SEGUIMENTO As String = "Seguimento"
 Private Const SHEET_HISTORICO As String = "HISTÓRICO"
+Private Const DEFAULT_DEBUG_RENDER_PAUSE_S As Double = 0.003
+Private Const CFG_DEBUG_RENDER_PAUSE_MS As String = "DEBUG_RENDER_PAUSE_MS"
 
 ' ============================================================================
 ' Debug_Registar (robusto)
@@ -115,10 +124,77 @@ End Sub
 
 Private Sub Debug_FocarUltimaLinha(ByVal ws As Worksheet, ByVal linha As Long)
     On Error Resume Next
+
+    Dim oldScreenUpdating As Boolean
+    oldScreenUpdating = Application.ScreenUpdating
+
+    Application.ScreenUpdating = True
     ws.Activate
-    Application.Goto ws.Cells(linha, 1), True
+
+    Dim visRows As Long
+    visRows = 0
+    If Not ActiveWindow Is Nothing Then
+        visRows = ActiveWindow.VisibleRange.Rows.Count
+    End If
+    If visRows <= 0 Then visRows = 1
+
+    If Not ActiveWindow Is Nothing Then
+        ActiveWindow.ScrollRow = Application.Max(1, linha - visRows + 1)
+        ActiveWindow.ScrollColumn = 1
+    End If
+
     ws.Cells(linha, 1).Select
+
+    Call Debug_PausaCurta(Debug_GetRenderPauseSeconds())
+
+    Application.ScreenUpdating = oldScreenUpdating
     On Error GoTo 0
+End Sub
+
+
+Private Function Debug_GetRenderPauseSeconds() As Double
+    On Error GoTo Falha
+
+    Dim wsCfg As Worksheet
+    Set wsCfg = ThisWorkbook.Worksheets("Config")
+
+    Dim lr As Long
+    lr = wsCfg.Cells(wsCfg.rowS.Count, 1).End(xlUp).Row
+
+    Dim r As Long
+    For r = 1 To lr
+        If StrComp(Trim$(CStr(wsCfg.Cells(r, 1).value)), CFG_DEBUG_RENDER_PAUSE_MS, vbTextCompare) = 0 Then
+            Dim ms As Double
+            ms = CDbl(Val(Replace(Trim$(CStr(wsCfg.Cells(r, 2).value)), ",", ".")))
+            If ms < 0 Then ms = 0
+            Debug_GetRenderPauseSeconds = ms / 1000#
+            Exit Function
+        End If
+    Next r
+
+Falha:
+    Debug_GetRenderPauseSeconds = DEFAULT_DEBUG_RENDER_PAUSE_S
+End Function
+
+Private Sub Debug_PausaCurta(ByVal segundos As Double)
+    On Error Resume Next
+
+    If segundos <= 0 Then Exit Sub
+
+    Dim limite As Double
+    limite = Timer + segundos
+
+    If limite >= 86400# Then
+        limite = limite - 86400#
+        Do While Timer >= 0 And Timer < limite
+            DoEvents
+        Loop
+        Exit Sub
+    End If
+
+    Do While Timer < limite
+        DoEvents
+    Loop
 End Sub
 
 Private Function Debug_MapaCabecalhos(ByVal ws As Worksheet) As Object

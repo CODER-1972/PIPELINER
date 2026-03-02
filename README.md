@@ -81,7 +81,7 @@ Ponto de operação principal:
 
 Comportamentos esperados:
 
-- foco em `DEBUG!A1` no arranque, com auto-scroll para a última linha escrita;
+- foco em `DEBUG!A1` no arranque; durante a execução, cada nova linha no DEBUG fica visível sem saltar para o topo (alinhada ao fundo da janela sempre que possível) e é aplicada uma pausa curta para facilitar o refresh visual (configurável por `DEBUG_RENDER_PAUSE_MS` na folha `Config`, em milissegundos; fallback interno: 3 ms);
 - limpeza de DEBUG da execução anterior;
 - status bar com progresso de execução.
 - no formato `Step x of y`, o `y` mostra o total planeado da lista ativa no PAINEL (`Row n de z`) e não apenas o limite técnico de `Max Steps`.
