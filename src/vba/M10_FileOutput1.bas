@@ -8,6 +8,13 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-03-02 | Codex | Diagnóstico adicional no fallback CI sem citation
+'   - Regista qualidade dos marcadores textuais (validos vs malformados) via `M10_CI_TEXT_MARKER_DIAG`.
+'   - Em fallback por listagem, sinaliza quando os candidatos parecem ficheiros de input (`file-...`) para evitar falso sucesso silencioso.
+' - 2026-03-02 | Codex | Reforço de deteção de artefacto CI via marcadores textuais
+'   - Expande extração de nomes esperados no output_text para aceitar `CI_OUTPUT_FILE:`/`FILE_TSV:`/`OUTPUT_FILE:`.
+'   - Aceita caminhos `sandbox:/mnt/data/...` e extrai basename para filtrar fallback por container list.
+'   - Reduz falso `File not found` quando o CI cria ficheiro mas não devolve `container_file_citation`.
 ' - 2026-03-01 | Codex | Compatibilidade de literal JSON no InStr
 '   - Substitui escape com barra invertida (\") por aspas duplicadas VBA no padrão de busca de "id".
 '   - Evita falso `Syntax error` em VBE/hosts que não aceitam notação C-style em literais.
@@ -530,6 +537,17 @@ Private Function Process_CodeInterpreter( _
 
     Dim ciFingerprintBase As String
     ciFingerprintBase = FileOutput_BuildFingerprint(pipelineNome, passo, promptId, resultado.responseId, "[n/d]", "SIM", "file/code_interpreter")
+
+    Dim markerRaw As Long, markerValid As Long, markerInvalid As Long
+    Dim markerInvalidSamples As String
+    Call CI_InspectOutputMarkers(Nz(resultado.outputText), markerRaw, markerValid, markerInvalid, markerInvalidSamples)
+
+    If markerRaw > 0 Then
+        Call Debug_Registar(passo, promptId, IIf(markerInvalid > 0, "ALERTA", "INFO"), "", "M10_CI_TEXT_MARKER_DIAG", _
+            "Marcadores textuais CI detectados: raw=" & CStr(markerRaw) & " | validos=" & CStr(markerValid) & " | invalidos=" & CStr(markerInvalid) & _
+            IIf(Trim$(markerInvalidSamples) <> "", " | invalid_samples=" & markerInvalidSamples, ""), _
+            "Use CI_OUTPUT_FILE/FILE_TSV/OUTPUT_FILE com extensao suportada e nome sem espacos finais.")
+    End If
     If expectedNames.Count > 0 Then
         Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_TEXT_FILENAME_HINTS", _
             "output_text sugeriu " & CStr(expectedNames.Count) & " nome(s): " & CI_JoinCollection(expectedNames, " | "), _
@@ -590,6 +608,14 @@ Private Function Process_CodeInterpreter( _
             "container_id=" & containerFromCall & " | total=" & CStr(files.Count) & " | elegíveis=" & CStr(eligible) & _
             " | details=" & CI_ContainerListSummary(files, 8), _
             "Elegíveis = extensões típicas (docx/xlsx/pptx/pdf/imagens/txt/csv/...).")
+
+        Dim inputLikeCount As Long
+        inputLikeCount = CI_CountInputLikeCandidates(ciList2)
+        If inputLikeCount > 0 Then
+            Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_CONTAINER_INPUT_LIKE", _
+                "Fallback CI encontrou " & CStr(inputLikeCount) & " candidato(s) com padrao de input (prefixo file-...).", _
+                "Confirme marcador textual/contrato de output para evitar download de ficheiro de entrada.")
+        End If
 
         If Trim$(strongPatterns) <> "" And ciList2.Count > 0 Then
             Dim strongFiltered As Collection
@@ -1938,22 +1964,39 @@ Private Function CI_ExtractExpectedFileNamesFromOutputText(ByVal outputText As S
     re.Global = True
     re.IgnoreCase = True
 
+    ' Marcadores de contrato textual (mais robusto para fallback sem citation):
+    ' - CI_OUTPUT_FILE: nome.ext
+    ' - FILE_TSV: nome.tsv
+    ' - OUTPUT_FILE: nome.ext
+    re.Pattern = "(?:^|\s)(CI_OUTPUT_FILE|FILE_TSV|OUTPUT_FILE)\s*:\s*([^\s\]\)\""']+\.(docx|pptx|xlsx|pdf|txt|md|csv|png|jpg|jpeg|webp|gif|zip|json|tsv))"
+    Set ms = re.Execute(txt)
+    For Each m In ms
+        Call CI_AddExpectedFileName(CI_ExtractExpectedFileNamesFromOutputText, seen, CI_PathBaseName(CStr(m.SubMatches(1))))
+    Next m
+
+    ' Caminhos sandbox:/mnt/data/... (com ou sem markdown link)
+    re.Pattern = "sandbox:/mnt/data/([^\s\]\)\""']+\.(docx|pptx|xlsx|pdf|txt|md|csv|png|jpg|jpeg|webp|gif|zip|json|tsv))"
+    Set ms = re.Execute(txt)
+    For Each m In ms
+        Call CI_AddExpectedFileName(CI_ExtractExpectedFileNamesFromOutputText, seen, CI_PathBaseName(CStr(m.SubMatches(0))))
+    Next m
+
     ' Markdown links: [texto](ficheiro.ext)
-    re.Pattern = "\[[^\]]*\]\(([^\)\s]+\.(docx|pptx|xlsx|pdf|txt|md|csv|png|jpg|jpeg|webp|gif|zip|json))\)"
+    re.Pattern = "\[[^\]]*\]\(([^\)\s]+\.(docx|pptx|xlsx|pdf|txt|md|csv|tsv|png|jpg|jpeg|webp|gif|zip|json))\)"
     Set ms = re.Execute(txt)
     For Each m In ms
         Call CI_AddExpectedFileName(CI_ExtractExpectedFileNamesFromOutputText, seen, CI_PathBaseName(CStr(m.SubMatches(0))))
     Next m
 
     ' Nomes entre aspas
-    re.Pattern = """""([^""]+\.(docx|pptx|xlsx|pdf|txt|md|csv|png|jpg|jpeg|webp|gif|zip|json))"""""
+    re.Pattern = """""([^""]+\.(docx|pptx|xlsx|pdf|txt|md|csv|tsv|png|jpg|jpeg|webp|gif|zip|json))"""""
     Set ms = re.Execute(txt)
     For Each m In ms
         Call CI_AddExpectedFileName(CI_ExtractExpectedFileNamesFromOutputText, seen, CI_PathBaseName(CStr(m.SubMatches(0))))
     Next m
 
     ' Tokens soltos com extensão
-    re.Pattern = "\b([A-Za-z0-9_\-\.]+\.(docx|pptx|xlsx|pdf|txt|md|csv|png|jpg|jpeg|webp|gif|zip|json))\b"
+    re.Pattern = "\b([A-Za-z0-9_\-\.]+\.(docx|pptx|xlsx|pdf|txt|md|csv|tsv|png|jpg|jpeg|webp|gif|zip|json))\b"
     Set ms = re.Execute(txt)
     For Each m In ms
         Call CI_AddExpectedFileName(CI_ExtractExpectedFileNamesFromOutputText, seen, CI_PathBaseName(CStr(m.SubMatches(0))))
@@ -1979,6 +2022,61 @@ Private Sub CI_AddExpectedFileName(ByRef coll As Collection, ByRef seen As Objec
     Exit Sub
 Falha:
 End Sub
+
+Private Sub CI_InspectOutputMarkers(ByVal outputText As String, ByRef outRaw As Long, ByRef outValid As Long, ByRef outInvalid As Long, ByRef outInvalidSamples As String)
+    outRaw = 0: outValid = 0: outInvalid = 0: outInvalidSamples = ""
+    On Error GoTo Falha
+
+    Dim txt As String
+    txt = Replace(Replace(Nz(outputText), vbCr, " "), vbLf, " ")
+    If Trim$(txt) = "" Then Exit Sub
+
+    Dim reRaw As Object, reValid As Object
+    Dim ms As Object, m As Object
+    Set reRaw = CreateObject("VBScript.RegExp")
+    reRaw.Global = True: reRaw.IgnoreCase = True
+    reRaw.Pattern = "(?:^|\s)(CI_OUTPUT_FILE|FILE_TSV|OUTPUT_FILE)\s*:\s*([^\s\]\)\""']+)"
+
+    Set reValid = CreateObject("VBScript.RegExp")
+    reValid.Global = False: reValid.IgnoreCase = True
+    reValid.Pattern = "^([^\s\]\)\""']+)\.(docx|pptx|xlsx|pdf|txt|md|csv|tsv|png|jpg|jpeg|webp|gif|zip|json)$"
+
+    Set ms = reRaw.Execute(txt)
+    outRaw = ms.Count
+    For Each m In ms
+        Dim candidate As String
+        candidate = Trim$(CStr(m.SubMatches(1)))
+        If reValid.Test(candidate) Then
+            outValid = outValid + 1
+        Else
+            outInvalid = outInvalid + 1
+            If outInvalid <= 3 Then
+                If outInvalidSamples <> "" Then outInvalidSamples = outInvalidSamples & " | "
+                outInvalidSamples = outInvalidSamples & candidate
+            End If
+        End If
+    Next m
+    Exit Sub
+Falha:
+End Sub
+
+Private Function CI_CountInputLikeCandidates(ByVal citations As Collection) As Long
+    CI_CountInputLikeCandidates = 0
+    On Error GoTo Falha
+
+    Dim i As Long
+    For i = 1 To citations.Count
+        Dim it As Object
+        Set it = citations(i)
+        Dim nm As String
+        nm = LCase$(Trim$(CStr(it("filename"))))
+        If Left$(nm, 5) = "file-" Then
+            CI_CountInputLikeCandidates = CI_CountInputLikeCandidates + 1
+        End If
+    Next i
+    Exit Function
+Falha:
+End Function
 
 Private Function CI_FilterCitationsByExpectedNames(ByVal citations As Collection, ByVal expectedNames As Collection, ByRef outMatched As Long) As Collection
     Set CI_FilterCitationsByExpectedNames = New Collection
