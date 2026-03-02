@@ -8,6 +8,12 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-03-02 | Codex | Remoção de uso inválido de IsMissing no helper `Nz`
+'   - Remove verificação `IsMissing(v)` em argumento não-Optional para evitar `Compile error: Invalid use of IsMissing`.
+'   - Mantém fallback para Error/Null/string vazia sem alterar contratos de chamada existentes.
+' - 2026-03-02 | Codex | Correção de assinatura do helper `Nz`
+'   - Torna `Nz` compatível com fallback opcional (`Optional fallback As String = ""`) para evitar erro de compilação por número inválido de argumentos.
+'   - Preserva comportamento anterior nas chamadas de 1 argumento e corrige chamadas existentes de 2 argumentos no módulo.
 ' - 2026-03-03 | Codex | Resolver determinístico do output de Code Interpreter
 '   - Prioriza `container_file_citation` como verdade absoluta e ignora fallback/listagem quando existe citação válida.
 '   - Adiciona marcador canónico `CI_OUTPUT_FILE:` como segunda prioridade de resolução.
@@ -2774,15 +2780,14 @@ End Function
 ' ============================================================
 ' Util
 ' ============================================================
-Private Function Nz(ByVal v As Variant) As String
+Private Function Nz(ByVal v As Variant, Optional ByVal fallback As String = "") As String
     If IsError(v) Then
-        Nz = ""
-    ElseIf IsMissing(v) Then
-        Nz = ""
+        Nz = fallback
     ElseIf IsNull(v) Then
-        Nz = ""
+        Nz = fallback
     Else
         Nz = CStr(v)
+        If Nz = "" Then Nz = fallback
     End If
 End Function
 
