@@ -107,6 +107,9 @@ Regras visuais de leitura rápida: linhas `ERRO` são mostradas em **negrito ver
 
 Registo curto e acionável de erros/alertas/info de parsing, validação de encadeamento, limites e troubleshooting técnico.
 
+A folha DEBUG inclui a coluna `Funcionalidade` (entre `Parâmetro` e `Problema`) para explicar em linguagem simples, para utilizadores não técnicos, que processo está a ser registado em cada linha.
+O preenchimento desta coluna cobre explicitamente eventos de `INFO/ALERTA`, catálogo/encadeamento e diagnósticos de output/Code Interpreter (`M05_CI_*`, `M07_*`, `M10_*`, `OUTPUT_EXECUTE_*`), reduzindo classificações genéricas em troubleshooting.
+
 ## 3.5 Folhas de catálogo
 
 Cada folha contém prompts executáveis. O prefixo do ID deve corresponder ao nome da folha.
