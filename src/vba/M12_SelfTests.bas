@@ -8,6 +8,9 @@ Option Explicit
 ' - Registar resultados PASS/FAIL/ALERTA no DEBUG para diagnóstico rápido.
 '
 ' Atualizações:
+' - 2026-03-02 | Codex | Cobertura agnostica para 1, 2+ wildcards em FILES
+'   - Amplia SELFTEST_FILES_WILDCARD_RESOLUTION para padroes com 1, 2 e 3+ asteriscos (`*`).
+'   - Valida comportamento agnostico ao texto de procura com multiplos nomes de ficheiro no mesmo lote.
 ' - 2026-03-01 | Codex | SelfTests do classificador DEBUG_DIAG (RC)
 '   - Adiciona 3 cenários simulados (sucesso, apenas input no container, text_embed com risco /mnt/data).
 '   - Valida código RC esperado via DebugDiag_ClassifyForSelfTest sem dependência de API/rede.
@@ -291,9 +294,18 @@ Public Sub SELFTEST_FILES_WILDCARD_RESOLUTION()
     oldFile = testFolder & "\GUIA_DE_ESTILO_v1.pdf"
     newFile = testFolder & "\GUIA_DE_ESTILO_Guia_Geracao_Noticias_LLM_v1_8_1_links_clicaveis.pdf"
 
+    Dim csvOldFile As String
+    Dim csvNewFile As String
+    csvOldFile = testFolder & "\catalogo_pipeliner__20260201_083000.csv"
+    csvNewFile = testFolder & "\catalogo_pipeliner__20260201_093000.csv"
+
     Call SelfTest_WriteDummyPdf(oldFile, "v1")
     Application.Wait Now + TimeSerial(0, 0, 1)
     Call SelfTest_WriteDummyPdf(newFile, "v1_8_1")
+
+    Call SelfTest_WriteDummyCsv(csvOldFile, "name;value" & vbCrLf & "old;1")
+    Application.Wait Now + TimeSerial(0, 0, 1)
+    Call SelfTest_WriteDummyCsv(csvNewFile, "name;value" & vbCrLf & "new;2")
 
     Dim resolvedName As String
     Dim status As String
@@ -309,15 +321,62 @@ Public Sub SELFTEST_FILES_WILDCARD_RESOLUTION()
         SelfTest_Log SEV_ERRO, "SELFTEST_FILES_WILDCARD", "WILDCARD_RESOLUTION FAIL: " & detail & " | resolved=" & resolvedName & " | candidates=" & candidates, "Validar matching de wildcard/normalizacao e regra (latest) no M09."
     End If
 
+    Dim expectedCsvName As String
+    expectedCsvName = SelfTest_GetFileName(csvNewFile)
+
+    Call SelfTest_AssertWildcardLatest(testFolder, "catalogo*.csv", expectedCsvName, "CSV_WILDCARD_1_STAR")
+    Call SelfTest_AssertWildcardLatest(testFolder, "*pipeliner__*.csv", expectedCsvName, "CSV_WILDCARD_2_STARS")
+    Call SelfTest_AssertWildcardLatest(testFolder, "*catalogo*__*093000*.csv", expectedCsvName, "CSV_WILDCARD_4_STARS")
+    Call SelfTest_AssertWildcardLatest(testFolder, "*20260201*93000*.csv", expectedCsvName, "CSV_WILDCARD_AGNOSTIC_TEXT")
+
     On Error Resume Next
     Kill oldFile
     Kill newFile
+    Kill csvOldFile
+    Kill csvNewFile
     RmDir testFolder
     On Error GoTo 0
     Exit Sub
 
 EH:
     SelfTest_Log SEV_ERRO, "SELFTEST_FILES_WILDCARD", "Excecao no SELFTEST_FILES_WILDCARD_RESOLUTION: " & Err.Number & " - " & Err.Description, "Rever criacao de pasta temporaria e Files_Diag_ResolverWildcard."
+End Sub
+
+Private Sub SelfTest_AssertWildcardLatest(ByVal testFolder As String, ByVal pattern As String, ByVal expectedName As String, ByVal testKey As String)
+    On Error GoTo EH
+
+    Dim resolvedName As String
+    Dim status As String
+    Dim detail As String
+    Dim candidates As String
+    Dim okCall As Boolean
+
+    okCall = Files_Diag_ResolverWildcard(testFolder, pattern, True, resolvedName, status, detail, candidates)
+
+    If okCall And status = "OK" And StrComp(resolvedName, expectedName, vbTextCompare) = 0 Then
+        SelfTest_Log SEV_INFO, "SELFTEST_FILES_WILDCARD", testKey & " PASS: pattern=" & pattern & " | " & detail & " | resolved=" & resolvedName, "OK"
+    Else
+        SelfTest_Log SEV_ERRO, "SELFTEST_FILES_WILDCARD", testKey & " FAIL: pattern=" & pattern & " | " & detail & " | resolved=" & resolvedName & " | candidates=" & candidates, "Validar suporte a multiplos '*' e escolha (latest) no M09."
+    End If
+    Exit Sub
+
+EH:
+    SelfTest_Log SEV_ERRO, "SELFTEST_FILES_WILDCARD", testKey & " EXCEPTION: " & Err.Number & " - " & Err.Description, "Rever SelfTest_AssertWildcardLatest e Files_Diag_ResolverWildcard."
+End Sub
+
+Private Sub SelfTest_WriteDummyCsv(ByVal filePath As String, ByVal csvText As String)
+    On Error GoTo EH
+
+    Dim ff As Integer
+    ff = FreeFile
+    Open filePath For Output As #ff
+    Print #ff, csvText
+    Close #ff
+    Exit Sub
+
+EH:
+    On Error Resume Next
+    If ff > 0 Then Close #ff
 End Sub
 
 Public Sub SELFTEST_FILEOUTPUT_SCHEMA()
