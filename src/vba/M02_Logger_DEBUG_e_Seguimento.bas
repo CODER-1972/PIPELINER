@@ -8,6 +8,9 @@ Option Explicit
 ' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
 '
 ' Atualizações:
+' - 2026-03-02 | Codex | Completa mapeamento da coluna Funcionalidade para eventos DEBUG sem contexto claro
+'   - Cobre codigos de CI/container (M10_* e M05_CI_*), catalogo/fluxo e sinalizacao INFO/ALERTA.
+'   - Reduz quedas para descricao generica em eventos de erro/alerta/info com parametro tecnico curto.
 ' - 2026-03-02 | Codex | Adiciona coluna Funcionalidade no DEBUG com descricao leiga
 '   - Garante criacao automatica da coluna entre Parametro e Problema quando em falta.
 '   - Passa a preencher Funcionalidade em todas as entradas via mapeamento por parametro.
@@ -123,6 +126,36 @@ Private Function Debug_DeduzirFuncionalidade(ByVal parametro As String) As Strin
 
     If p = "" Then
         Debug_DeduzirFuncionalidade = "Registo tecnico do passo da pipeline."
+        Exit Function
+    End If
+
+    If p = "INFO" Or p = "ALERTA" Then
+        Debug_DeduzirFuncionalidade = "Sinalizacao operacional para acompanhamento rapido da execucao."
+        Exit Function
+    End If
+
+    If Left$(p, 4) = "M10_" Or InStr(1, p, "_CI_", vbTextCompare) > 0 Then
+        Debug_DeduzirFuncionalidade = "Download, validacao e contrato dos ficheiros finais gerados pelo Code Interpreter."
+        Exit Function
+    End If
+
+    If Left$(p, 4) = "M07_" Or Left$(p, 15) = "OUTPUT_EXECUTE_" Then
+        Debug_DeduzirFuncionalidade = "Aplicacao do plano de output e validacao dos artefactos guardados no OUTPUT Folder."
+        Exit Function
+    End If
+
+    If InStr(1, p, "CATALOGO", vbTextCompare) > 0 Or InStr(1, p, "CRIAR MAPA", vbTextCompare) > 0 Or InStr(1, p, "SET DEFAULT", vbTextCompare) > 0 Then
+        Debug_DeduzirFuncionalidade = "Leitura do catalogo de prompts e preparacao dos defaults estruturais de execucao."
+        Exit Function
+    End If
+
+    If InStr(1, p, "NEXTDEFAULT", vbTextCompare) > 0 Or InStr(1, p, "NEXT ALLOWED", vbTextCompare) > 0 Or InStr(1, p, "CICLOS", vbTextCompare) > 0 Or InStr(1, p, "LIMITELISTA", vbTextCompare) > 0 Then
+        Debug_DeduzirFuncionalidade = "Validacao de transicoes de Next PROMPT e protecao contra ciclos inesperados."
+        Exit Function
+    End If
+
+    If InStr(1, p, "INPUT FOLDER", vbTextCompare) > 0 Or InStr(1, p, "INPUT_TEXT_SIZE", vbTextCompare) > 0 Then
+        Debug_DeduzirFuncionalidade = "Preparacao dos inputs do passo (pasta de entrada e volume de contexto enviado)."
         Exit Function
     End If
 

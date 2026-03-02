@@ -548,5 +548,6 @@ Se começar a ficar demasiado grande:
 - No diagnóstico de seleção de artefactos CI por listagem de container, registar sempre motivo por item (`SIM`/`NAO`) sem depender de `bytes`; metadado `bytes` pode vir `null` e não deve bloquear tentativa de download por `file_id`.
 - Em `M10_CI_DOWNLOAD_FAIL` com HTTP 400/404 no endpoint `/containers/{id}/files/{file_id}/content`, aplicar uma tentativa de remapeamento `file_id <- filename` com base na listagem corrente do container antes de concluir falha; isto reduz erros por id desfasado no fallback.
 - Em construção de URL de download de container file, codificar cada path-segment (`container_id`, `file_id`) para evitar falhas por caracteres especiais e melhorar compatibilidade entre hosts/proxies.
+- Sempre que novos códigos de `Parametro` forem adicionados ao DEBUG (especialmente prefixos técnicos como `M05_*`, `M07_*`, `M10_*`, `OUTPUT_EXECUTE_*`), atualizar no mesmo commit o mapeamento da coluna `Funcionalidade` para evitar descrições genéricas em linhas `INFO/ALERTA/ERRO`.
 
 - Em helpers utilitários reutilizados (ex.: `Nz`), manter assinatura compatível com todos os call-sites existentes (incluindo argumentos opcionais) e validar por varredura (`rg`) antes de fechar a correção para evitar `Compile error: Wrong number of arguments or invalid property assignment`.
