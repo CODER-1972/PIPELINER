@@ -8,6 +8,15 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-03-02 | Codex | Elegibilidade de TSV no fallback CI
+'   - Inclui `tsv` na whitelist de extensoes descarregaveis via listagem do container.
+'   - Evita falso `File not found` quando o artefacto final e tabular (`FILE_TSV`).
+' - 2026-03-03 | Codex | Diagnostico por item no fallback de container
+'   - Adiciona evento `M10_CI_CONTAINER_SELECT_DIAG` com motivo de selecao por ficheiro (SIM/NAO).
+'   - Inclui metadado `source` da listagem para facilitar distinguir output do assistente vs input.
+' - 2026-03-03 | Codex | Resiliencia no download por container_id/file_id
+'   - Codifica segmentos da URL de download e tenta remap de file_id por filename em respostas 400/404.
+'   - Reduz falhas intermitentes quando o id retornado no fallback nao coincide com o recurso descarregavel.
 ' - 2026-03-02 | Codex | Diagnóstico adicional no fallback CI sem citation
 '   - Regista qualidade dos marcadores textuais (validos vs malformados) via `M10_CI_TEXT_MARKER_DIAG`.
 '   - Em fallback por listagem, sinaliza quando os candidatos parecem ficheiros de input (`file-...`) para evitar falso sucesso silencioso.
@@ -608,6 +617,9 @@ Private Function Process_CodeInterpreter( _
             "container_id=" & containerFromCall & " | total=" & CStr(files.Count) & " | elegíveis=" & CStr(eligible) & _
             " | details=" & CI_ContainerListSummary(files, 8), _
             "Elegíveis = extensões típicas (docx/xlsx/pptx/pdf/imagens/txt/csv/...).")
+        Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_CONTAINER_SELECT_DIAG", _
+            "container_id=" & containerFromCall & " | selecao=" & CI_ContainerListSelectionDiagnostics(files, 8), _
+            "Diagnostico por item (selecionado/motivo), sem depender de bytes para elegibilidade.")
 
         Dim inputLikeCount As Long
         inputLikeCount = CI_CountInputLikeCandidates(ciList2)
@@ -704,7 +716,12 @@ Private Function Process_CodeInterpreter( _
         End If
         Dim dlStatus As Long, dlErr As String
         Dim ok As Boolean
-        ok = DownloadContainerFileEx(apiKey, container_id, file_id, fullPath, dlStatus, dlErr, 3)
+        Dim dlFiles As Collection, dlListStatus As Long, dlListJson As String
+        Set dlFiles = Nothing
+        If usedFallback Then
+            Set dlFiles = CI_ListContainerFiles(apiKey, container_id, dlListStatus, dlListJson)
+        End If
+        ok = DownloadContainerFileEx(apiKey, container_id, file_id, fullPath, dlStatus, dlErr, 3, dlFiles, CI_PathBaseName(CStr(it("filename"))))
         If Not ok Then
             Call Debug_Registar(passo, promptId, "ERRO", "", "M10_CI_DOWNLOAD_FAIL", _
                 "FP=" & ciFingerprintBase & " | Artefacto identificado, mas falhou transferência para disco local (HTTP " & CStr(dlStatus) & ") " & container_id & ":" & file_id & " -> " & fullPath & IIf(Trim$(dlErr) <> "", " | " & dlErr, ""), _
@@ -1702,7 +1719,7 @@ End Function
 ' ============================================================
 ' CODE_INTERPRETER download
 ' ============================================================
-Private Function DownloadContainerFileEx(ByVal apiKey As String, ByVal containerId As String, ByVal fileId As String, ByVal savePath As String, ByRef outHttpStatus As Long, ByRef outErrText As String, Optional ByVal maxAttempts As Long = 3) As Boolean
+Private Function DownloadContainerFileEx(ByVal apiKey As String, ByVal containerId As String, ByVal fileId As String, ByVal savePath As String, ByRef outHttpStatus As Long, ByRef outErrText As String, ByVal maxAttempts As Long, ByVal containerFiles As Collection, Optional ByVal expectedFileName As String = "") As Boolean
     On Error GoTo Falha
 
     Dim url As String
@@ -1715,13 +1732,14 @@ Private Function DownloadContainerFileEx(ByVal apiKey As String, ByVal container
     Dim http As Object
     Dim st As Object
     Dim tempPath As String
+    Dim remappedFileId As String
 
     outHttpStatus = 0
     outErrText = ""
 
     If maxAttempts < 1 Then maxAttempts = 1
 
-    url = "https://api.openai.com/v1/containers/" & containerId & "/files/" & fileId & "/content"
+    url = CI_BuildContainerFileContentUrl(containerId, fileId)
     tempFolder = CI_EnsureTempStagingFolder()
 
     For attempt = 1 To maxAttempts
@@ -1739,6 +1757,15 @@ Private Function DownloadContainerFileEx(ByVal apiKey As String, ByVal container
             On Error Resume Next
             lastErr = "attempt=" & CStr(attempt) & " http=" & CStr(outHttpStatus) & " body=" & Left$(Nz(http.ResponseText), 500)
             On Error GoTo 0
+            If (outHttpStatus = 404 Or outHttpStatus = 400) And Not containerFiles Is Nothing Then
+                        remappedFileId = CI_FindFileIdByFileName(containerFiles, expectedFileName)
+                If Trim$(remappedFileId) <> "" And LCase$(Trim$(remappedFileId)) <> LCase$(Trim$(fileId)) Then
+                    fileId = remappedFileId
+                    url = CI_BuildContainerFileContentUrl(containerId, fileId)
+                    lastErr = lastErr & " | remap_file_id=" & remappedFileId
+                    GoTo ProximaTentativa
+                End If
+            End If
             GoTo ProximaTentativa
         End If
 
@@ -1790,7 +1817,7 @@ End Function
 ' Wrapper (mantido por compatibilidade interna)
 Private Function DownloadContainerFile(ByVal apiKey As String, ByVal containerId As String, ByVal fileId As String, ByVal savePath As String) As Boolean
     Dim st As Long, errT As String
-    DownloadContainerFile = DownloadContainerFileEx(apiKey, containerId, fileId, savePath, st, errT, 1)
+    DownloadContainerFile = DownloadContainerFileEx(apiKey, containerId, fileId, savePath, st, errT, 1, Nothing, "")
 End Function
 
 Private Function CI_ExtractCitations(ByVal rawJson As String) As Collection
@@ -1906,6 +1933,7 @@ Private Function CI_ListContainerFiles(ByVal apiKey As String, ByVal containerId
         d("filename") = CI_PathBaseName(CStr(m.SubMatches(1)))
         d("bytes") = CI_ExtractNumericFieldNear(txt, CStr(m.SubMatches(0)), "bytes")
         d("created_at") = CI_ExtractNumericFieldNear(txt, CStr(m.SubMatches(0)), "created_at")
+        d("source") = CI_ExtractStringFieldNear(txt, CStr(m.SubMatches(0)), "source")
         CI_ListContainerFiles.Add d
     Next m
 
@@ -2150,11 +2178,87 @@ Private Function CI_ShouldDownloadPath(ByVal p As String) As Boolean
     ext = LCase$(Mid$(base, dot + 1))
 
     Select Case ext
-        Case "docx", "pptx", "xlsx", "pdf", "txt", "md", "csv", "png", "jpg", "jpeg", "webp", "gif", "zip", "json"
+        Case "docx", "pptx", "xlsx", "pdf", "txt", "md", "csv", "tsv", "png", "jpg", "jpeg", "webp", "gif", "zip", "json"
             CI_ShouldDownloadPath = True
     End Select
 End Function
 
+
+Private Function CI_DownloadEligibilityReason(ByVal p As String) As String
+    p = Trim$(CStr(p))
+    If p = "" Then CI_DownloadEligibilityReason = "path_vazio": Exit Function
+    Dim base As String
+    base = Trim$(CI_PathBaseName(p))
+    If base = "" Then CI_DownloadEligibilityReason = "basename_vazio": Exit Function
+    If Left$(base, 1) = "." Then CI_DownloadEligibilityReason = "dotfile": Exit Function
+    Dim dot As Long
+    dot = InStrRev(base, ".")
+    If dot = 0 Then CI_DownloadEligibilityReason = "sem_extensao": Exit Function
+    Dim ext As String
+    ext = LCase$(Mid$(base, dot + 1))
+    If CI_ShouldDownloadPath(p) Then
+        CI_DownloadEligibilityReason = "ext_ok:" & ext
+    Else
+        CI_DownloadEligibilityReason = "ext_nao_suportada:" & ext
+    End If
+End Function
+
+Private Function CI_ExtractStringFieldNear(ByVal textJson As String, ByVal anchorId As String, ByVal fieldName As String) As String
+    On Error GoTo Falha
+    Dim pos As Long
+    pos = InStr(1, textJson, """id"":""" & anchorId & """", vbTextCompare)
+    If pos = 0 Then Exit Function
+    Dim win As String
+    win = Mid$(textJson, pos, 700)
+    Dim re As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = False
+    re.IgnoreCase = True
+    re.Pattern = Chr$(34) & fieldName & Chr$(34) & "\s*:\s*" & Chr$(34) & "([^""]*)" & Chr$(34)
+    Dim ms As Object
+    Set ms = re.Execute(win)
+    If ms.Count > 0 Then CI_ExtractStringFieldNear = CStr(ms(0).SubMatches(0))
+    Exit Function
+Falha:
+    CI_ExtractStringFieldNear = ""
+End Function
+
+Private Function CI_UrlEncodePathSegment(ByVal s As String) As String
+    Dim i As Long, ch As String, o As String, code As Integer
+    For i = 1 To Len(s)
+        ch = Mid$(s, i, 1)
+        code = AscW(ch)
+        If (code >= 48 And code <= 57) Or (code >= 65 And code <= 90) Or (code >= 97 And code <= 122) Or ch = "-" Or ch = "_" Or ch = "." Or ch = "~" Then
+            o = o & ch
+        Else
+            o = o & "%" & Right$("0" & Hex$(code And &HFF), 2)
+        End If
+    Next i
+    CI_UrlEncodePathSegment = o
+End Function
+
+Private Function CI_BuildContainerFileContentUrl(ByVal containerId As String, ByVal fileId As String) As String
+    CI_BuildContainerFileContentUrl = "https://api.openai.com/v1/containers/" & CI_UrlEncodePathSegment(containerId) & "/files/" & CI_UrlEncodePathSegment(fileId) & "/content"
+End Function
+
+Private Function CI_FindFileIdByFileName(ByVal files As Collection, ByVal fileName As String) As String
+    On Error GoTo Falha
+    Dim target As String, i As Long
+    target = LCase$(Trim$(CI_PathBaseName(fileName)))
+    If target = "" Then Exit Function
+    For i = 1 To files.Count
+        Dim it As Object, nm As String
+        Set it = files(i)
+        nm = LCase$(Trim$(CI_PathBaseName(Nz(CStr(it("path"))))))
+        If nm = target Then
+            CI_FindFileIdByFileName = Nz(CStr(it("file_id")))
+            Exit Function
+        End If
+    Next i
+    Exit Function
+Falha:
+    CI_FindFileIdByFileName = ""
+End Function
 
 Private Function Regex_FirstGroup(ByVal re As Object, ByVal text As String, ByVal pattern As String) As String
     On Error GoTo Falha
@@ -2721,6 +2825,27 @@ Private Function CI_ContainerListSummary(ByVal files As Collection, Optional ByV
     Exit Function
 Falha:
     CI_ContainerListSummary = "summary_unavailable"
+End Function
+
+Private Function CI_ContainerListSelectionDiagnostics(ByVal files As Collection, Optional ByVal maxItems As Long = 8) As String
+    On Error GoTo Falha
+    Dim i As Long, lim As Long
+    lim = files.Count
+    If lim > maxItems Then lim = maxItems
+    For i = 1 To lim
+        Dim it As Object
+        Set it = files(i)
+        Dim p As String, piece As String
+        p = Nz(CStr(it("path")))
+        piece = "file=" & Nz(CStr(it("filename"))) & ",source=" & Nz(CStr(it("source"))) & ",bytes=" & Nz(CStr(it("bytes"))) & _
+                ",selected=" & IIf(CI_ShouldDownloadPath(p), "SIM", "NAO") & ",motivo=" & CI_DownloadEligibilityReason(p)
+        If CI_ContainerListSelectionDiagnostics <> "" Then CI_ContainerListSelectionDiagnostics = CI_ContainerListSelectionDiagnostics & " | "
+        CI_ContainerListSelectionDiagnostics = CI_ContainerListSelectionDiagnostics & piece
+    Next i
+    If files.Count > lim Then CI_ContainerListSelectionDiagnostics = CI_ContainerListSelectionDiagnostics & " | +" & CStr(files.Count - lim) & " item(ns)"
+    Exit Function
+Falha:
+    CI_ContainerListSelectionDiagnostics = "selection_diag_unavailable"
 End Function
 
 Private Function CI_GetStrongPatterns(ByVal pipelineNome As String, ByVal promptId As String) As String
