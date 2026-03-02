@@ -552,3 +552,5 @@ Se começar a ficar demasiado grande:
 - Em helpers utilitários reutilizados (ex.: `Nz`), manter assinatura compatível com todos os call-sites existentes (incluindo argumentos opcionais) e validar por varredura (`rg`) antes de fechar a correção para evitar `Compile error: Wrong number of arguments or invalid property assignment`.
 
 - Evitar `IsMissing` em parâmetros não `Optional Variant`; esse padrão gera `Compile error: Invalid use of IsMissing`. Em helpers utilitários, tratar ausência via contrato da assinatura e manter fallback explícito para `Null`/`Error`.
+
+- Em declarações de variáveis locais/globais (`Dim/Private/Public`), evitar identificadores com nomes reservados/funções intrínsecas do VBA (ex.: `Fix`, `Left`, `Date`, `Name`, `Input`, `Shell`); usar prefixos semânticos (`rcSummary`, `outFix`, `tmpDate`) para prevenir `Compile error: Syntax error` no VBE.
