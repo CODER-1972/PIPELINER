@@ -300,6 +300,9 @@ Checklist recomendado (ordem prática):
 3. Se `process_mode=code_interpreter`, confirmar se o run devolveu `rawResponseJson`; evento `M10_CI_RAW_MISSING` indica que o fluxo CI não trouxe corpo bruto para pós-processamento e deve ser tratado como pista de diagnóstico, não como causa raiz isolada.
 4. Se aparecer `M10_CI_NO_CITATION`, confirmar se o output textual trouxe nomes de ficheiro esperados; o fallback atual tenta extrair esses nomes (`M10_CI_TEXT_FILENAME_HINTS`) e, quando possível, filtra a listagem do container por correspondência de filename (`M10_CI_TEXT_FILTER_APPLIED`).
    - Dica de robustez: use marcadores explícitos no output final (`CI_OUTPUT_FILE: ...`, `FILE_TSV: ...`, `OUTPUT_FILE: ...`) ou links `sandbox:/mnt/data/...`; o M10 já usa estes padrões para reduzir falso `File not found` quando não há `container_file_citation`.
+   - Nota de elegibilidade: no fallback CI, extensões tabulares `.tsv` são tratadas como artefacto descarregável (alinhado com `FILE_TSV`).
+   - Novo diagnóstico detalhado: `M10_CI_CONTAINER_SELECT_DIAG` lista, por ficheiro, `filename/source/bytes` + decisão `selected=SIM|NAO` + `motivo` de elegibilidade/exclusão.
+   - Em `M10_CI_DOWNLOAD_FAIL` com HTTP `400/404`, o download aplica tentativa extra de remapeamento por `filename` (na listagem do container) antes de desistir.
    - Novo diagnóstico no DEBUG: `M10_CI_TEXT_MARKER_DIAG` (contagem de marcadores válidos/inválidos) e `M10_CI_CONTAINER_INPUT_LIKE` (candidatos com prefixo `file-...`, potencial falso sucesso por ficheiro de input).
 5. Medir tamanho de entrada efetiva (`REQ_INPUT_JSON len=...`): payloads muito grandes (texto + anexos + instruções extensas) aumentam risco de timeout no host VBA.
 6. Repetir teste com redução controlada de carga:
