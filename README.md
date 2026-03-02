@@ -81,7 +81,7 @@ Ponto de operação principal:
 
 Comportamentos esperados:
 
-- foco em `Seguimento!A1` no arranque;
+- foco em `DEBUG!A1` no arranque, com auto-scroll para a última linha escrita;
 - limpeza de DEBUG da execução anterior;
 - status bar com progresso de execução.
 - no formato `Step x of y`, o `y` mostra o total planeado da lista ativa no PAINEL (`Row n de z`) e não apenas o limite técnico de `Max Steps`.
@@ -102,6 +102,8 @@ Defaults e opções globais, incluindo:
 Auditoria por passo: prompt executado, configuração usada, status HTTP, output, next prompt decidido, ficheiros usados e colunas de contexto (captured/injected).
 
 ## 3.4 DEBUG
+
+Regras visuais de leitura rápida: linhas `ERRO` são mostradas em **negrito vermelho**, linhas `ALERTA` em **negrito azul**, e eventos de conclusão de passo (`STEP_STAGE` com `stage=step_completed`) em **negrito verde**.
 
 Registo curto e acionável de erros/alertas/info de parsing, validação de encadeamento, limites e troubleshooting técnico.
 
