@@ -109,6 +109,8 @@ Registo curto e acionável de erros/alertas/info de parsing, validação de enca
 
 A folha DEBUG inclui a coluna `Funcionalidade` (entre `Parâmetro` e `Problema`) para explicar em linguagem simples, para utilizadores não técnicos, que processo está a ser registado em cada linha.
 O preenchimento desta coluna cobre explicitamente eventos de `INFO/ALERTA`, catálogo/encadeamento e diagnósticos de output/Code Interpreter (`M05_CI_*`, `M07_*`, `M10_*`, `OUTPUT_EXECUTE_*`), reduzindo classificações genéricas em troubleshooting.
+Cada célula de `Funcionalidade` passa a incluir, numa segunda linha em **negrito** (`ACAO EM CURSO:`), uma lista sistemática da(s) ação(ões) operacional(is) em execução no momento, podendo combinar várias ações no mesmo registo (ex.: validação de contrato + listagem/seleção de container + download + persistência + mitigação por timeout/retry). Sempre que disponível, é anexado contexto específico por chave (ex.: `filename=...`, `resolvedPath=...`, `stage=...`, `container_id=...`, `file_id=...`, `http_status=...`, `elapsed_ms=...`, `payload_len=...`, `dlErr=...`). A priorização do mapeamento é: regra explícita por parâmetro, seguida de enriquecimento por sinais de contexto, para reduzir ambiguidades entre eventos próximos.
+Quando `OUTPUT_EXECUTE: LOAD_CSV(...)` falha por ficheiro não resolvido, o DEBUG regista antes um alerta complementar `CI_PROOF_MNT_DATA_MISSING` com contexto compacto (`exec_file`, `output_exists`, `has_no_citation`, `has_container_empty`, `has_download_fail`, `has_list_fail`, `eligible`, etc.) para correlacionar causa provável com sinais M10 (incluindo seleção `selected/eligible` no fallback por listagem), sem substituir o erro funcional final `OUTPUT_EXECUTE_FILE_NOT_FOUND`.
 Cada célula de `Funcionalidade` passa a incluir, numa segunda linha em **negrito** (`ACAO EM CURSO:`), uma lista sistemática da(s) ação(ões) operacional(is) em execução no momento, podendo combinar várias ações no mesmo registo (ex.: validação de contrato + listagem/seleção de container + download + persistência + mitigação por timeout/retry). Sempre que disponível, é anexado contexto específico por chave (ex.: `filename=...`, `resolvedPath=...`, `stage=...`, `container_id=...`, `file_id=...`, `http_status=...`, `elapsed_ms=...`, `payload_len=...`, `dlErr=...`).
 
 Também existe suporte a um botão de utilidade na própria folha `DEBUG` para gerar um pacote de diagnóstico “copiar/colar” para chat:
@@ -234,6 +236,7 @@ Nota de compatibilidade importante:
 
 - nem todos os formatos aceites no upload são aceites como `input_file` no `/v1/responses`;
 - o sistema pode aplicar `effective_mode` (ex.: converter para PDF ou text embed) conforme configuração.
+- sempre que `raw_mode` e `effective_mode` divergem, o DEBUG regista `FILES_MODE_OVERRIDE_TRACE` com `requested`, `resolved`, `raw_mode`, `effective_mode` e `reason` (considerando o modo final após fallbacks de conversão/overflow); o evento legado `DOCX_INPUTFILE_OVERRIDDEN` é mantido apenas como apontador curto para esse trace.
 
 ---
 
@@ -301,6 +304,34 @@ Para ContextKV, `CAPTURE_MISS` significa que o output não trouxe rótulos captu
 
 
 Nota: `tools` continua como chave proibida em `Config extra` (é ignorada com alerta), para preservar a coerência com as colunas/lógica dedicadas.
+
+
+### Contrato diagnóstico `ci_csv_v1` (prova mínima reforçada)
+
+Quando um passo ativa `diagnostic_contract: ci_csv_v1`, o gate valida (antes de `OUTPUT EXECUTE`) uma prova textual mínima para cenários CSV/CI:
+
+- `CSV_EXISTE_EM_MNT_DATA: SIM/NAO`;
+- `FILE_CSV: <basename.csv>`;
+- `MNT_DATA_LIST: <nome(bytes=...) ; ...>`.
+
+Se faltar algum marcador mínimo num passo com intenção CSV (`LOAD_CSV`, `EXECUTE`, `EXPORT_OK_CSV=true`), o contrato bloqueia continuidade com regra `C1B_MIN_PROOF_MARKERS_MISSING`.
+
+O parser de contrato aceita aliases controlados de configuração (ex.: `diagnostic_contract`, `contract_mode`, `diagnostic-contract`) para reduzir falso negativo por variação de escrita, e o marcador `CSV_EXISTE_EM_MNT_DATA` aceita afirmações equivalentes (`SIM|TRUE|YES|OK|1`).
+
+Além disso, no fluxo de CI (`M10`) o DEBUG passa a emitir `M10_CI_PROOF_SUMMARY` com:
+
+- `csv_exists`;
+- `word_exists`;
+- `mnt_data_list_count`;
+- `chosen_output`.
+
+Este resumo reduz falso diagnóstico entre “input anexado ao container” e “artefacto realmente produzido”.
+
+Quando o output declara sucesso CSV mas `CSV_EXISTE_EM_MNT_DATA` não confirma estado afirmativo, o contrato marca inconsistência (`C1C_CSV_STATE_INCONSISTENT`) e impede avanço silencioso.
+
+### ContextKV: CAPTURE_MISS com dica prescritiva
+
+Quando não existe nenhum rótulo capturável no output, o evento `CAPTURE_MISS` passa a incluir exemplos concretos de rótulos esperados (`RESULTS_JSON:`, `TSV_CATALOGO_FINAL_ENC:`, `NEXT_PROMPT_ID:`, `MEMORY_SHORT:`), acelerando correção do prompt.
 
 ### Diagnóstico rápido: `Erro VBA: The operation timed out`
 
@@ -490,6 +521,7 @@ Exemplo didático para erro de validação de payload:
 - **D4 — Download robusto com staging/retry**: downloads de CI usam staging em pasta temporária, promoção para destino final e até 3 tentativas curtas com erro consolidado por tentativa (sem duplicar logs por retry).
 - **D5 — Gate UTF-8 roundtrip**: antes do envio para `/v1/responses`, o payload final passa por validação de roundtrip UTF-8 (`M05_UTF8_ROUNDTRIP`), bloqueando envio quando houver corrupção detectável de codificação.
 - **D6 — Guardrail para text_embed vazio**: quando um anexo em modo `text_embed` não produzir conteúdo (ficheiro vazio, encoding incompatível ou leitura falhada), o motor deixa de o marcar como anexado com sucesso e regista `TEXT_EMBED_EMPTY`; se o ficheiro estiver como `(required)`, o passo é bloqueado antes da chamada HTTP para evitar respostas com contexto incompleto.
+- **D6.1 — Trace compacto de text_embed**: após extração com conteúdo, o motor regista `TEXT_EMBED_TRACE` no DEBUG com `name`, `len_chars` e `hash_short` (FNV-1a normalizado), facilitando comparação rápida de consistência entre runs sem expor o texto extraído.
 
 ### Diagnóstico rápido: `output_kind:file` + `process_mode:code_interpreter` com saída "desalinhada"
 
@@ -681,7 +713,7 @@ Notas operacionais:
 
 O PIPELINER suporta execução controlada de ordens pós-output, após resposta HTTP 2xx e sem erro.
 
-### 12.1 Whitelist e sintaxe suportada (v1.3)
+### 12.1 Whitelist e sintaxe suportada (v1.4)
 
 - Comando permitido: `LOAD_CSV`.
 - Formatos aceites:
@@ -696,7 +728,7 @@ O PIPELINER suporta execução controlada de ordens pós-output, após resposta 
 
 ### 12.2 Fluxo LOAD_CSV
 
-1. Parser ignora ordens dentro de blocos de código (```...```).
+1. Parser ignora ordens dentro de blocos de código (```...```), conta diretivas válidas fora de fences e deteta intenção `EXECUTE:` dentro de code block para lint (mesmo quando a linha está incompleta).
 2. Resolve CSV automaticamente a partir de `downloadedFiles` e `OUTPUT Folder` (incluindo subpastas).
 3. Faz pré-check técnico:
    - BOM UTF-8 (EF BB BF);
@@ -705,6 +737,8 @@ O PIPELINER suporta execução controlada de ordens pós-output, após resposta 
 4. Cria worksheet nova após `PAINEL` (ou no fim, se `PAINEL` não existir), com nome baseado no prefixo do ID da coluna A do CSV.
 5. Importa CSV por `QueryTables` (`;`, UTF-8), com fallback `OpenText`.
 6. Verifica importação (linhas/colunas/header) e regista diagnóstico.
+7. Regista no DEBUG um contexto mínimo do File Output (`output_kind`, `process_mode`, `auto_save`) para facilitar correlação M10↔M17 (com fallback opcional via token compacto `M10CTX:` em `downloadedFiles/files_ops_log`).
+8. Revalida existência física do CSV (`FileExistsFast`) antes da importação para evitar falso positivo quando o caminho resolvido deixa de existir.
 
 ### 12.3 Logs
 
@@ -719,6 +753,8 @@ O PIPELINER suporta execução controlada de ordens pós-output, após resposta 
   - `OUTPUT_EXECUTE_CSV_IMPORTED`
   - `OUTPUT_EXECUTE_VERIFIED`
   - `OUTPUT_EXECUTE_IMPORT_FAIL`
+  - `EXECUTE_LINT_MULTIPLE` (ALERTA quando há mais de uma diretiva válida na mesma resposta)
+  - `EXECUTE_LINT_IN_CODEBLOCK` (INFO quando há diretivas dentro de code fences, ignoradas por segurança)
 - Seguimento (`files_ops_log`): append com separador ` | ` e frase:
   - `CREATED AND LOADED Excel Sheet <sheetName> importing <nome_do_ficheiro.csv>, and verified.`
 

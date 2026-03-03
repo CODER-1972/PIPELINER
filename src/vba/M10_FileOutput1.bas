@@ -8,6 +8,10 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-03-04 | Codex | Evento canonico de prova minima CI e distincao input-vs-output
+'   - Regista M10_CI_PROOF_SUMMARY com csv_exists/word_exists/mnt_data_list_count/chosen_output.
+'   - Acrescenta marcador explicito quando a listagem do container contem apenas itens de input (file-*).
+'   - Torna fallback sem citation mais prescritivo com prova textual obrigatoria em /mnt/data.
 ' - 2026-03-02 | Codex | Remoção de uso inválido de IsMissing no helper `Nz`
 '   - Remove verificação `IsMissing(v)` em argumento não-Optional para evitar `Compile error: Invalid use of IsMissing`.
 '   - Mantém fallback para Error/Null/string vazia sem alterar contratos de chamada existentes.
@@ -577,6 +581,21 @@ Private Function Process_CodeInterpreter( _
             "Usado como filtro preferencial quando houver fallback por listagem de container.")
     End If
 
+    Dim proofCsvExists As String, proofWordExists As String, proofMntList As String
+    proofCsvExists = "": proofWordExists = "": proofMntList = ""
+    Call CI_TryReadOutputMarkerValue(Nz(resultado.outputText), "CSV_EXISTE_EM_MNT_DATA", proofCsvExists)
+    Call CI_TryReadOutputMarkerValue(Nz(resultado.outputText), "WORD_EXISTE_EM_MNT_DATA", proofWordExists)
+    Call CI_TryReadOutputMarkerValue(Nz(resultado.outputText), "MNT_DATA_LIST", proofMntList)
+
+    Dim proofListCount As Long
+    proofListCount = CI_CountMntDataItems(proofMntList)
+
+    Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_PROOF_SUMMARY", _
+        "csv_exists=" & IIf(CI_IsAffirmativeMarker(proofCsvExists), "SIM", IIf(Trim$(proofCsvExists) = "", "[n/d]", proofCsvExists)) & _
+        " | word_exists=" & IIf(CI_IsAffirmativeMarker(proofWordExists), "SIM", IIf(Trim$(proofWordExists) = "", "[n/d]", proofWordExists)) & _
+        " | mnt_data_list_count=" & CStr(proofListCount) & " | chosen_output=[pendente]", _
+        "Prova minima recomendada: CSV_EXISTE_EM_MNT_DATA, FILE_CSV e MNT_DATA_LIST no output textual final.")
+
     Dim strongPatterns As String
     strongPatterns = CI_GetStrongPatterns(pipelineNome, promptId)
     Dim strongMode As String
@@ -646,6 +665,12 @@ Private Function Process_CodeInterpreter( _
                 "Regra de seguranca exclui estes itens da selecao automatica.")
         End If
 
+        If files.Count > 0 And inputLikeCount = files.Count And eligible = 0 Then
+            Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_CONTAINER_ONLY_INPUTS", _
+                "Listagem do container contem apenas ficheiros de input (file-*), sem artefacto gerado pela tool.", _
+                "Sugestao: no passo CI, gravar explicitamente output em /mnt/data e declarar FILE_CSV + MNT_DATA_LIST no texto final.")
+        End If
+
         If Trim$(canonicalMarker) <> "" And ciList2.Count > 0 Then
             Dim markerFiltered As Collection
             Dim markerMatched As Long
@@ -704,7 +729,7 @@ Private Function Process_CodeInterpreter( _
         If ciList2.Count = 0 Then
             Call Debug_Registar(passo, promptId, "ALERTA", "", "M10_CI_CONTAINER_EMPTY", _
                 "FP=" & ciFingerprintBase & " | Container acessivel, mas sem artefactos elegiveis para download.", _
-                "Garantir que a tool grava ficheiro em /mnt/data antes da resposta final.")
+                "Garantir escrita em /mnt/data e incluir prova textual minima: CSV_EXISTE_EM_MNT_DATA: SIM; FILE_CSV: <basename.csv>; MNT_DATA_LIST: <nome(bytes=...) ; ...>.")
             Process_CodeInterpreter = "[FILE OUTPUT/CI] Sem container_file_citation; container_id=" & containerFromCall & "; 0 ficheiros elegiveis."
             Exit Function
         End If
@@ -805,6 +830,16 @@ Private Function Process_CodeInterpreter( _
         Call AppendList(outFilesOps, "DL:" & Replace(fullPath, runFolder & "\", ""))
 ProximoFicheiro:
     Next i
+
+    Dim chosenOut As String
+    chosenOut = "[n/d]"
+    If Trim$(outFilesUsed) <> "" Then chosenOut = outFilesUsed
+
+    Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_PROOF_SUMMARY", _
+        "csv_exists=" & IIf(CI_IsAffirmativeMarker(proofCsvExists), "SIM", IIf(Trim$(proofCsvExists) = "", "[n/d]", proofCsvExists)) & _
+        " | word_exists=" & IIf(CI_IsAffirmativeMarker(proofWordExists), "SIM", IIf(Trim$(proofWordExists) = "", "[n/d]", proofWordExists)) & _
+        " | mnt_data_list_count=" & CStr(proofListCount) & " | chosen_output=" & chosenOut, _
+        "Resumo canonico de prova minima para troubleshooting CI.")
 
     Call Debug_Registar(passo, promptId, "INFO", "", "M10_CI_CONTRACT_STATUS", _
         "FP=" & ciFingerprintBase & " | HTTP OK e contrato de output CI cumprido: " & CStr(savedCount) & " ficheiro(s) descarregado(s).", _
@@ -2240,6 +2275,40 @@ Private Sub CI_InspectOutputMarkers(ByVal outputText As String, ByRef outRaw As 
     Exit Sub
 Falha:
 End Sub
+
+Private Sub CI_TryReadOutputMarkerValue(ByVal outputText As String, ByVal markerName As String, ByRef outValue As String)
+    Dim re As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = False
+    re.IgnoreCase = True
+    re.Pattern = "(^|\n)\s*" & markerName & "\s*:\s*([^\n]+)"
+
+    If re.Test(outputText) Then
+        Dim m As Object
+        Set m = re.Execute(outputText)(0)
+        outValue = Trim$(CStr(m.SubMatches(1)))
+    End If
+End Sub
+
+Private Function CI_IsAffirmativeMarker(ByVal rawValue As String) As Boolean
+    Dim v As String
+    v = UCase$(Trim$(rawValue))
+    CI_IsAffirmativeMarker = (v = "SIM" Or v = "TRUE" Or v = "YES")
+End Function
+
+Private Function CI_CountMntDataItems(ByVal mntDataListText As String) As Long
+    Dim txt As String
+    txt = Trim$(mntDataListText)
+    If txt = "" Then Exit Function
+
+    Dim parts() As String
+    parts = Split(txt, ";")
+
+    Dim i As Long
+    For i = LBound(parts) To UBound(parts)
+        If Trim$(CStr(parts(i))) <> "" Then CI_CountMntDataItems = CI_CountMntDataItems + 1
+    Next i
+End Function
 
 Private Function CI_CountInputLikeCandidates(ByVal citations As Collection) As Long
     CI_CountInputLikeCandidates = 0

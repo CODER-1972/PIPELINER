@@ -8,6 +8,21 @@ Option Explicit
 ' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
 '
 ' Atualizações:
+' - 2026-03-03 | Codex | Inclui CI_PROOF_MNT_DATA_MISSING no mapeamento operacional
+'   - Classifica o novo parametro nas acoes de OUTPUT_EXECUTE/diagnostico CI na coluna Funcionalidade.
+'   - Mantem coerencia de troubleshooting para eventos de artefacto em falta no fluxo CI.
+' - 2026-03-03 | Codex | Classificacao de trace de text_embed no DEBUG
+'   - Classifica parametro TEXT_EMBED_TRACE no bloco de gestao de anexos/text_embed.
+'   - Acrescenta acao dedicada para leitura de name/len_chars/hash_short no troubleshooting.
+' - 2026-03-03 | Codex | Mapeia trace padronizado de override de modo FILES
+'   - Inclui `FILES_MODE_OVERRIDE_TRACE` nas ações deduzidas da coluna Funcionalidade.
+'   - Amplia extração de contexto operacional com requested/resolved/raw_mode/effective_mode/reason.
+' - 2026-03-03 | Codex | Mapeia eventos de lint do Output Orders
+'   - Adiciona cobertura para EXECUTE_LINT_MULTIPLE e EXECUTE_LINT_IN_CODEBLOCK na deducao de acao em curso.
+' - 2026-03-03 | Codex | Mapeia novo alerta CI_PROOF_MNT_DATA_MISSING na coluna de acao
+'   - Evita descricao generica para diagnostico de ausencia de artefacto CSV com sinais M10.
+' - 2026-03-03 | Codex | Expande contexto M10 extraido para CI_PROOF_MNT_DATA_MISSING
+'   - Adiciona chaves de falha de download/listagem para manter acao em curso especifica e auditavel.
 ' - 2026-03-03 | Codex | Cobertura ampliada de acoes especificas no DEBUG
 '   - Reforca mapeamento por sinais de parametro/contexto para suportar combinacoes de acoes no mesmo registo.
 '   - Amplia extracao de contexto com pares chave=valor e chave:valor para diagnostico mais objetivo.
@@ -158,7 +173,7 @@ Private Function Debug_DeduzirFuncionalidade(ByVal parametro As String) As Strin
         Exit Function
     End If
 
-    If Left$(p, 4) = "M07_" Or Left$(p, 15) = "OUTPUT_EXECUTE_" Then
+    If Left$(p, 4) = "M07_" Or Left$(p, 15) = "OUTPUT_EXECUTE_" Or Left$(p, 13) = "EXECUTE_LINT_" Then
         Debug_DeduzirFuncionalidade = "Aplicacao do plano de output e validacao dos artefactos guardados no OUTPUT Folder."
         Exit Function
     End If
@@ -344,6 +359,18 @@ Private Sub Debug_AplicarAcoesPorSinal(ByRef acoes As String, ByVal p As String,
             Call Debug_AcaoAdd(acoes, "Aplicacao da prioridade citation > CI_OUTPUT_FILE > fallback")
         Case "M10_CI_RAW_MISSING"
             Call Debug_AcaoAdd(acoes, "Detecao de ausencia de raw de resposta para extracao de artefacto")
+        Case "M10_CI_MARKER_NOT_FOUND"
+            Call Debug_AcaoAdd(acoes, "Detecao de marcador de ficheiro ausente no output textual")
+        Case "M10_CI_TEXT_FILENAME_HINTS"
+            Call Debug_AcaoAdd(acoes, "Inferencia de candidato por pistas textuais de filename")
+        Case "M10_CI_CONTRACT_STATUS"
+            Call Debug_AcaoAdd(acoes, "Validacao de conformidade do artefacto com contrato de output")
+        Case "M10_CI_LIST_FAIL"
+            Call Debug_AcaoAdd(acoes, "Tratamento de erro ao listar ficheiros do container")
+        Case "M10_FOLDER_CREATE_FAIL", "M10_RAW_WRITE_FAIL"
+            Call Debug_AcaoAdd(acoes, "Tratamento de erro de escrita/criacao em disco local")
+        Case "M10_RUNFOLDER", "M10_RAWFOLDER"
+            Call Debug_AcaoAdd(acoes, "Preparacao de pastas de run/raw para auditoria")
         Case "M10_SCHEMA_INVALID", "M10_SCHEMA_DIAG_FAIL"
             Call Debug_AcaoAdd(acoes, "Validacao de schema esperado e classificacao de desvio")
         Case "M05_HTTP_TIMEOUT_ERROR"
@@ -354,12 +381,32 @@ Private Sub Debug_AplicarAcoesPorSinal(ByRef acoes As String, ByVal p As String,
             Call Debug_AcaoAdd(acoes, "Checklist pre-envio do payload (tools/input/tamanho)")
         Case "M05_JSON_PREFLIGHT"
             Call Debug_AcaoAdd(acoes, "Preflight de validade JSON antes do HTTP")
+        Case "M05_PAYLOAD_DUMP", "M05_PAYLOAD_DUMP_FAIL"
+            Call Debug_AcaoAdd(acoes, "Persistencia diagnostica do payload final de request")
+        Case "M05_CI_INTENT_EVAL", "M05_CI_AUTO_SUPPRESS"
+            Call Debug_AcaoAdd(acoes, "Avaliacao de intencao explicita de Code Interpreter no passo")
+        Case "M07_FILEOUTPUT_MODE_MISMATCH", "M07_FILEOUTPUT_PARSE_GUARD"
+            Call Debug_AcaoAdd(acoes, "Validacao de coerencia entre modo efetivo e contrato de File Output")
         Case "OUTPUT_EXECUTE_CSV_PRECHECK"
             Call Debug_AcaoAdd(acoes, "Pre-validacao de encoding/BOM e estrutura CSV")
         Case "OUTPUT_EXECUTE_VERIFIED"
             Call Debug_AcaoAdd(acoes, "Confirmacao final do artefacto importado e rastreabilidade")
+        Case "OUTPUT_EXECUTE_IMPORT_FAIL"
+            Call Debug_AcaoAdd(acoes, "Tratamento de falha de importacao CSV para worksheet")
+        Case "OUTPUT_EXECUTE_INVALID_FILENAME"
+            Call Debug_AcaoAdd(acoes, "Bloqueio de filename invalido por regras de seguranca")
         Case "INPUTFILES_MISSING"
             Call Debug_AcaoAdd(acoes, "Comparacao entre FILES declarados e anexos efetivos no payload")
+        Case "NEXTDEFAULT", "NEXT ALLOWED", "NEXT PROMPT"
+            Call Debug_AcaoAdd(acoes, "Aplicacao de regras default/allowed na transicao de prompt")
+        Case "CICLOS", "MAXSTEPS", "MAXREPETITIONS", "LIMITELISTA"
+            Call Debug_AcaoAdd(acoes, "Aplicacao de guardas anti-loop e limites de execucao")
+        Case "CATALOGO", "CRIAR MAPA"
+            Call Debug_AcaoAdd(acoes, "Resolucao de bloco do prompt no catalogo de origem")
+        Case "CONTEXT_KV"
+            Call Debug_AcaoAdd(acoes, "Injecao/captura de variaveis de contexto entre passos")
+        Case "OPENAI_API_KEY"
+            Call Debug_AcaoAdd(acoes, "Validacao de disponibilidade da chave API em Config")
         Case "OUTPUT_CHAIN_NOT_FOUND", "OUTPUT_CHAIN_AMBIGUOUS"
             Call Debug_AcaoAdd(acoes, "Resolucao da cadeia de output com fallback/controlos de ambiguidade")
     End Select

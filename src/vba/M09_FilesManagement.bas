@@ -306,6 +306,11 @@ Public Function Files_PrepararContextoDaPrompt( _
     Dim textoInputs As String
     textoInputs = CStr(celInputsValor.value)
 
+    If celOps Is Nothing Then
+        Call Files_LogCatalogOpsMissing(promptId, catalogRef, opsRef, "celula de operacoes nao localizada")
+        opsMissingLogged = True
+    End If
+
     ' garantir que existe a opção de config para reutilização
     Call Files_EnsureConfig_ReutilizacaoUpload
 
@@ -452,6 +457,13 @@ Public Function Files_PrepararContextoDaPrompt( _
         Dim usoFinal As String
         usoFinal = Files_DeterminarUsageMode(ext, wantAsIs, wantAsPdf, wantText)
 
+        Dim modoPedido As String
+        Dim modoEfetivo As String
+        Dim overrideReason As String
+        modoPedido = usoFinal
+        modoEfetivo = usoFinal
+        overrideReason = ""
+
         dbgUsoFinal = usoFinal
 
         Dim overrideModo As Boolean
@@ -459,19 +471,15 @@ Public Function Files_PrepararContextoDaPrompt( _
 
         If forceAsIsToTextEmbed And wantAsIs Then
             If LCase$(ext) <> EXT_PDF And Not Files_EhImagem(ext) Then
-                usoFinal = "text_embed"
+                modoEfetivo = "text_embed"
                 overrideModo = True
+                overrideReason = "forceAsIsToTextEmbed ativo para extensao nao PDF/imagem."
             End If
         End If
 
         If overrideUsado Or overrideModo Then houveOverride = True
 
         ' ============ effective_mode ============
-        Dim modoPedido As String, modoEfetivo As String, overrideReason As String
-        modoPedido = usoFinal
-        modoEfetivo = usoFinal
-        overrideReason = ""
-
         If modoEfetivo = "as_is" Then
             Dim extLower As String
             extLower = LCase$(Trim$(ext))
@@ -489,8 +497,8 @@ Public Function Files_PrepararContextoDaPrompt( _
                     Case "ERROR"
                         status = "UNSUPPORTED_EXT_AS_INPUT_FILE"
                         Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_INPUTFILE_OVERRIDDEN", _
-                            "Pedido '" & modoPedido & "' para ." & extLower & " é incompatível (policy=ERROR).", _
-                            "Use (as pdf) ou (text) no anexo; ou configure FILES_DOCX_CONTEXT_MODE=AUTO_AS_PDF/AUTO_TEXT_EMBED.")
+                            "Override de modo aplicado para ." & extLower & "; ver FILES_MODE_OVERRIDE_TRACE.", _
+                            "Consulte o evento FILES_MODE_OVERRIDE_TRACE para requested/resolved/raw_mode/effective_mode/reason.")
                         Call Files_OperacoesAdicionarResultado(d, status, resolvedName, modoPedido, overrideReason, False, True, required)
                         If required Then
                             outFalhaCritica = True
@@ -506,8 +514,8 @@ Public Function Files_PrepararContextoDaPrompt( _
                         Else
                             status = "UNSUPPORTED_EXT_NO_FALLBACK"
                             Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_INPUTFILE_OVERRIDDEN", _
-                                "Não há alternativa para tratar ." & extLower & " (sem conversão PDF e sem extração de texto).", _
-                                "Use (text) ou forneça PDF; ou configure FILES_DOCX_CONTEXT_MODE=AUTO_AS_PDF com fallback TEXT_EMBED.")
+                                "Override de modo aplicado para ." & extLower & "; ver FILES_MODE_OVERRIDE_TRACE.", _
+                                "Consulte o evento FILES_MODE_OVERRIDE_TRACE para requested/resolved/raw_mode/effective_mode/reason.")
                             Call Files_OperacoesAdicionarResultado(d, status, resolvedName, modoPedido, overrideReason, False, True, required)
                             If required Then
                                 outFalhaCritica = True
@@ -524,8 +532,8 @@ Public Function Files_PrepararContextoDaPrompt( _
                         Else
                             status = "UNSUPPORTED_EXT_PDF_CONVERSION_NOT_AVAILABLE"
                             Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_INPUTFILE_OVERRIDDEN", _
-                                "Conversão para PDF não disponível para ." & extLower & " e fallback=ERROR.", _
-                                "Use (text) ou forneça PDF; ou configure FILES_DOCX_AS_PDF_FALLBACK=TEXT_EMBED.")
+                                "Override de modo aplicado para ." & extLower & "; ver FILES_MODE_OVERRIDE_TRACE.", _
+                                "Consulte o evento FILES_MODE_OVERRIDE_TRACE para requested/resolved/raw_mode/effective_mode/reason.")
                             Call Files_OperacoesAdicionarResultado(d, status, resolvedName, modoPedido, overrideReason, False, True, required)
                             If required Then
                                 outFalhaCritica = True
@@ -540,8 +548,8 @@ Public Function Files_PrepararContextoDaPrompt( _
                     overrideUsado = True
                     houveOverride = True
                     Call Debug_Registar(0, promptId, "ALERTA", "", "DOCX_INPUTFILE_OVERRIDDEN", _
-                        "Override automático: raw_mode=" & modoPedido & " => effective_mode=" & modoEfetivo & " (" & overrideReason & ")", _
-                        "Recomendação: para DOCX/PPTX, use (as pdf) por defeito; alternativa: (text).")
+                        "Override de modo aplicado para ." & extLower & "; ver FILES_MODE_OVERRIDE_TRACE.", _
+                        "Consulte o evento FILES_MODE_OVERRIDE_TRACE para requested/resolved/raw_mode/effective_mode/reason.")
                 End If
             End If
         End If
@@ -626,6 +634,7 @@ Public Function Files_PrepararContextoDaPrompt( _
                         GoTo ProximoItem
                     Else
                         usoFinal = "text_embed"
+                        overrideReason = "Conversao para PDF falhou; aplicado fallback para text_embed conforme FILES_DOCX_AS_PDF_FALLBACK."
                         dbgUsoFinal = usoFinal
                         convertido = False
                     End If
@@ -645,6 +654,7 @@ Public Function Files_PrepararContextoDaPrompt( _
                     GoTo ProximoItem
                 Else
                     usoFinal = "text_embed"
+                    overrideReason = "Conversao para PDF nao suportada; aplicado fallback para text_embed conforme FILES_DOCX_AS_PDF_FALLBACK."
                     dbgUsoFinal = usoFinal
                     convertido = False
                 End If
@@ -708,7 +718,16 @@ Public Function Files_PrepararContextoDaPrompt( _
             End If
 
             Dim charsExtra As Long
+            Dim textEmbedTraceHash As String
+            Dim textEmbedTraceHashShort As String
             charsExtra = Len(textoExtraDeste)
+            textEmbedTraceHash = Files_FNV32_String(textoExtraDeste)
+            textEmbedTraceHashShort = LCase$(Replace(textEmbedTraceHash, "fnv32-", ""))
+            If textEmbedTraceHashShort = "" Then textEmbedTraceHashShort = "na"
+
+            Call Debug_Registar(0, promptId, "INFO", "", "TEXT_EMBED_TRACE", _
+                "name=" & resolvedName & " | len_chars=" & charsExtra & " | hash_short=" & textEmbedTraceHashShort, _
+                "Trace tecnico de text_embed para diagnostico de consistencia de conteudo.")
 
             If textEmbedMaxChars > 0 And charsExtra > textEmbedMaxChars Then
                 Dim overflowAction As String
@@ -793,6 +812,7 @@ Public Function Files_PrepararContextoDaPrompt( _
                                     Else
                                         textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: conversão PDF falhou]"
                                         usoFinal = "text_embed"
+                                        overrideReason = "Overflow text_embed com tentativa de RETRY_AS_PDF falhada; mantido text_embed truncado."
                                         dbgUsoFinal = usoFinal
                                         convertido = False
                                     End If
@@ -800,6 +820,7 @@ Public Function Files_PrepararContextoDaPrompt( _
                             Else
                                 textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: não é possível converter para PDF]"
                                 usoFinal = "text_embed"
+                                overrideReason = "Overflow text_embed com RETRY_AS_PDF indisponivel; mantido text_embed truncado."
                                 dbgUsoFinal = usoFinal
                                 convertido = False
                             End If
@@ -892,6 +913,18 @@ FicheiroFalhou:
         End If
 
 ProximoItem:
+        If Trim$(modoPedido) <> "" And Trim$(usoFinal) <> "" Then
+            If LCase$(Trim$(modoPedido)) <> LCase$(Trim$(usoFinal)) Then
+                Dim modeReason As String
+                modeReason = Trim$(overrideReason)
+                If modeReason = "" Then modeReason = "Override aplicado por regra de compatibilidade/configuracao."
+
+                Call Debug_Registar(0, promptId, "ALERTA", "", "FILES_MODE_OVERRIDE_TRACE", _
+                    "requested=" & reqNome & "; resolved=" & resolvedName & "; raw_mode=" & modoPedido & "; effective_mode=" & usoFinal & "; reason=" & modeReason, _
+                    "Revise a declaracao FILES e a Config para alinhar o modo pedido ao modo efetivo.")
+            End If
+        End If
+
         Call Files_DebugLogItemTrace(promptId, inputFolder, d, reqNome, resolvedPath, required, candidatosLog)
     Next i
 
