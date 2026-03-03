@@ -23,7 +23,7 @@ Option Explicit
 '   - Inclui SelfTest_OutputOrders_RunAll com testes idempotentes T1..T9.
 '
 ' FunÃ§Ãµes e procedimentos:
-' - OutputOrders_TryExecute(...): executa ordens reconhecidas e devolve append para files_ops_log.
+' - OutputOrders_TryExecute(...): executa ordens reconhecidas, com contexto opcional de sinais M10 para diagnÃ³stico.
 ' - ParseExecuteDirectives(outputText): extrai diretivas EXECUTE fora de code fences.
 ' - ValidateCsvFileName(fileName): valida basename CSV contra path traversal e caracteres perigosos.
 ' - ResolveCsvSource(fileName, outputFolder, downloadedFiles): resolve origem do CSV em output/downloads.
@@ -34,6 +34,7 @@ Option Explicit
 ' - LoadCsvIntoSheet_QueryTable(...): importaÃ§Ã£o principal via QueryTable.
 ' - LoadCsvIntoSheet_OpenTextFallback(...): fallback de importaÃ§Ã£o via OpenText + cÃ³pia para destino.
 ' - VerifyImportedSheet(ws, expectedCols, ...): valida estrutura importada e recolhe evidÃªncias.
+' - BuildCiProofMissingContext(...): monta contexto compacto para alerta de ausÃªncia de artefacto CI provÃ¡vel.
 ' - SelfTest_OutputOrders_RunAll(): bateria idempotente de testes T1..T9 do executor.
 ' - EnsureFolder(folderPath): cria pasta local para fixtures temporÃ¡rias dos selftests.
 ' - WriteTextUTF8(filePath, txt): escreve ficheiros UTF-8 usados nos selftests.
@@ -99,6 +100,10 @@ Public Function OutputOrders_TryExecute( _
         Dim csvPath As String
         csvPath = ResolveCsvSource(fileName, outputFolder, downloadedFiles)
         If Trim$(csvPath) = "" Then
+            Call Debug_Registar(passo, promptId, "ALERTA", "", "CI_PROOF_MNT_DATA_MISSING", _
+                BuildCiProofMissingContext(fileName, outputFolder, downloadedFiles, m10Signals), _
+                "Correlacione com eventos M10_CI_* do mesmo passo para confirmar ausÃªncia de artefacto elegÃ­vel.")
+
             Call Debug_Registar(passo, promptId, "ERRO", "", "OUTPUT_EXECUTE_FILE_NOT_FOUND", _
                 "NÃ£o foi possÃ­vel resolver ficheiro CSV: " & fileName & " | outputFolder=" & outputFolder, _
                 "Confirme download/geraÃ§Ã£o do ficheiro e nome exato no EXECUTE.")

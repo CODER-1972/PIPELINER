@@ -978,6 +978,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         Dim fo_executeOpsLog As String
         fo_executeOpsLog = ""
+        Dim fo_executeM10Signals As String
+        fo_executeM10Signals = "filesUsed=" & fo_filesUsedOut & " | filesOps=" & fo_filesOpsOut
         tMark = Timer
         If Trim$(resultado.Erro) = "" And resultado.httpStatus >= 200 And resultado.httpStatus < 300 Then
             If ctHasContract And (UCase$(ctState) = "BLOCKED" Or UCase$(ctState) = "FAIL") Then
@@ -986,7 +988,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                     ctSuggestion)
                 resultado.Erro = "Contrato do passo bloqueou continuidade: estado=" & ctState & " regra=" & ctRule
             Else
-                fo_executeOpsLog = OutputOrders_TryExecute(passo, prompt.Id, resultado.responseId, resultado.outputText, outputFolderBase, fo_filesOpsOut)
+                fo_executeOpsLog = OutputOrders_TryExecute(passo, prompt.Id, resultado.responseId, resultado.outputText, outputFolderBase, fo_filesOpsOut, fo_executeM10Signals)
                 If Trim$(fo_executeOpsLog) <> "" Then
                     If Trim$(fo_filesOpsOut) <> "" Then
                         fo_filesOpsOut = fo_filesOpsOut & " | " & fo_executeOpsLog
