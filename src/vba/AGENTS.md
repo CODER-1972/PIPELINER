@@ -567,3 +567,7 @@ Se começar a ficar demasiado grande:
 - Em eventos de rastreio técnico no DEBUG (ex.: `TEXT_EMBED_TRACE`), padronizar chaves operacionais estáveis (`name`, `len_chars`, `hash_short`) para facilitar filtros/comparação automática entre runs e evitar deriva de nomenclatura (`len`/`hash`).
 
 - Em mapeamento de ações do DEBUG, privilegiar primeiro regras explícitas por parâmetro (ex.: `M10_*`, `M05_*`, `OUTPUT_EXECUTE_*`) e só depois regras genéricas por substring para reduzir falsos positivos de interpretação.
+
+- Em funções públicas usadas por selftests e runtime (ex.: parsers), manter parâmetros de métricas como `Optional ByRef` para compatibilidade com call-sites novos e antigos; alterações de assinatura devem ser validadas por varredura (`rg`) para evitar `Compile error: Wrong number of arguments or invalid property assignment`.
+
+- Em módulos VBA tocados no PR, executar varredura de helpers usados (`rg`) e garantir que cada helper chamado é local ao módulo ou `Public`; chamadas a helper `Private` de outro módulo devem ser tratadas como P1 por risco de compilação.

@@ -795,8 +795,9 @@ Se surgir `Compile error: Sub or Function not defined` ao abrir `SelfTest_Output
 
 - `EnsureFolder`
 - `WriteTextUTF8`
+- `Nz` (helper local de normalização para texto de diagnóstico)
 
-Regra prática: SelfTests do `M17_OutputOrdersExecutor` devem ser auto-contidos (helper local no mesmo módulo) ou chamar apenas procedimentos `Public` de outros módulos. Evitar dependência em `Private Sub/Function` externos, porque o compilador do VBA não os resolve fora do módulo de origem.
+Regra prática: SelfTests e helpers do `M17_OutputOrdersExecutor` devem ser auto-contidos (helper local no mesmo módulo) ou chamar apenas procedimentos `Public` de outros módulos. Evitar dependência em `Private Sub/Function` externos, porque o compilador do VBA não os resolve fora do módulo de origem.
 
 ## 13. DEBUG_SCHEMA_VERSION=2 (DEBUG_DIAG)
 
