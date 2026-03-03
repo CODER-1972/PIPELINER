@@ -109,6 +109,13 @@ Registo curto e acionável de erros/alertas/info de parsing, validação de enca
 
 A folha DEBUG inclui a coluna `Funcionalidade` (entre `Parâmetro` e `Problema`) para explicar em linguagem simples, para utilizadores não técnicos, que processo está a ser registado em cada linha.
 O preenchimento desta coluna cobre explicitamente eventos de `INFO/ALERTA`, catálogo/encadeamento e diagnósticos de output/Code Interpreter (`M05_CI_*`, `M07_*`, `M10_*`, `OUTPUT_EXECUTE_*`), reduzindo classificações genéricas em troubleshooting.
+Quando `OUTPUT_EXECUTE: LOAD_CSV(...)` falha por ficheiro não resolvido, o DEBUG regista antes um alerta complementar `CI_PROOF_MNT_DATA_MISSING` com contexto compacto (`exec_file`, `output_exists`, `has_no_citation`, `has_container_empty`, `has_download_fail`, `has_list_fail`, `eligible`, etc.) para correlacionar causa provável com sinais M10 (incluindo seleção `selected/eligible` no fallback por listagem), sem substituir o erro funcional final `OUTPUT_EXECUTE_FILE_NOT_FOUND`.
+Cada célula de `Funcionalidade` passa a incluir, numa segunda linha em **negrito** (`ACAO EM CURSO:`), uma lista sistemática da(s) ação(ões) operacional(is) em execução no momento, podendo combinar várias ações no mesmo registo (ex.: validação de contrato + listagem/seleção de container + download + persistência + mitigação por timeout/retry). Sempre que disponível, é anexado contexto específico por chave (ex.: `filename=...`, `resolvedPath=...`, `stage=...`, `container_id=...`, `file_id=...`, `http_status=...`, `elapsed_ms=...`, `payload_len=...`, `dlErr=...`).
+
+Também existe suporte a um botão de utilidade na própria folha `DEBUG` para gerar um pacote de diagnóstico “copiar/colar” para chat:
+- macro `DebugClipboard_InstalarBotao` cria/atualiza o botão `Copiar pacote diagnóstico` (idempotente);
+- macro `DebugClipboard_CopiarPacoteDiagnostico` compõe, em texto único, os blocos de catálogo dos `Prompt ID` encontrados no DEBUG + tabela completa de `DEBUG` + tabela completa de `Seguimento`;
+- o bloco final termina com instrução pronta para pedir diagnóstico (problemas prováveis + causa + sugestão de ação).
 
 ## 3.5 Folhas de catálogo
 
@@ -221,6 +228,7 @@ Capacidades principais:
 - suporte a wildcard em `FILES:` (ex.: `GUIA_DE_ESTILO*.pdf`), com tentativa inicial por `Dir` e fallback de correspondência flexível para nomes com `_`, `-` e espaço;
 - upload para `/v1/files` com reutilização por hash (quando configurado);
 - rastreio por ficheiro no `DEBUG` com etiqueta `FILES_ITEM_TRACE` (1 linha por item declarado, incluindo `full_path`, `status`, `mode`, `file_id` quando existir e diagnóstico pedagógico: `problema_tipo`, `explicacao`, `acao`);
+- quando o bloco/célula de `Operacoes com ficheiros` não estiver disponível no catálogo, o sistema regista `CATALOG_FILES_OPS_MISSING` (ALERTA) no DEBUG com `promptId` + referência de bloco/linha, sem bloquear a execução (compatibilidade com catálogos antigos); o alerta é emitido uma única vez por prompt para evitar ruído.
 - fallback entre engines/perfis de upload.
 
 Nota de compatibilidade importante:
@@ -702,7 +710,7 @@ Notas operacionais:
 
 O PIPELINER suporta execução controlada de ordens pós-output, após resposta HTTP 2xx e sem erro.
 
-### 12.1 Whitelist e sintaxe suportada (v1.3)
+### 12.1 Whitelist e sintaxe suportada (v1.4)
 
 - Comando permitido: `LOAD_CSV`.
 - Formatos aceites:
@@ -717,7 +725,7 @@ O PIPELINER suporta execução controlada de ordens pós-output, após resposta 
 
 ### 12.2 Fluxo LOAD_CSV
 
-1. Parser ignora ordens dentro de blocos de código (```...```).
+1. Parser ignora ordens dentro de blocos de código (```...```), conta diretivas válidas fora de fences e deteta intenção `EXECUTE:` dentro de code block para lint (mesmo quando a linha está incompleta).
 2. Resolve CSV automaticamente a partir de `downloadedFiles` e `OUTPUT Folder` (incluindo subpastas).
 3. Faz pré-check técnico:
    - BOM UTF-8 (EF BB BF);
@@ -726,6 +734,8 @@ O PIPELINER suporta execução controlada de ordens pós-output, após resposta 
 4. Cria worksheet nova após `PAINEL` (ou no fim, se `PAINEL` não existir), com nome baseado no prefixo do ID da coluna A do CSV.
 5. Importa CSV por `QueryTables` (`;`, UTF-8), com fallback `OpenText`.
 6. Verifica importação (linhas/colunas/header) e regista diagnóstico.
+7. Regista no DEBUG um contexto mínimo do File Output (`output_kind`, `process_mode`, `auto_save`) para facilitar correlação M10↔M17 (com fallback opcional via token compacto `M10CTX:` em `downloadedFiles/files_ops_log`).
+8. Revalida existência física do CSV (`FileExistsFast`) antes da importação para evitar falso positivo quando o caminho resolvido deixa de existir.
 
 ### 12.3 Logs
 
@@ -740,6 +750,8 @@ O PIPELINER suporta execução controlada de ordens pós-output, após resposta 
   - `OUTPUT_EXECUTE_CSV_IMPORTED`
   - `OUTPUT_EXECUTE_VERIFIED`
   - `OUTPUT_EXECUTE_IMPORT_FAIL`
+  - `EXECUTE_LINT_MULTIPLE` (ALERTA quando há mais de uma diretiva válida na mesma resposta)
+  - `EXECUTE_LINT_IN_CODEBLOCK` (INFO quando há diretivas dentro de code fences, ignoradas por segurança)
 - Seguimento (`files_ops_log`): append com separador ` | ` e frase:
   - `CREATED AND LOADED Excel Sheet <sheetName> importing <nome_do_ficheiro.csv>, and verified.`
 
