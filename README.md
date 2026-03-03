@@ -682,7 +682,7 @@ Notas operacionais:
 
 O PIPELINER suporta execução controlada de ordens pós-output, após resposta HTTP 2xx e sem erro.
 
-### 12.1 Whitelist e sintaxe suportada (v1.3)
+### 12.1 Whitelist e sintaxe suportada (v1.4)
 
 - Comando permitido: `LOAD_CSV`.
 - Formatos aceites:
@@ -706,6 +706,8 @@ O PIPELINER suporta execução controlada de ordens pós-output, após resposta 
 4. Cria worksheet nova após `PAINEL` (ou no fim, se `PAINEL` não existir), com nome baseado no prefixo do ID da coluna A do CSV.
 5. Importa CSV por `QueryTables` (`;`, UTF-8), com fallback `OpenText`.
 6. Verifica importação (linhas/colunas/header) e regista diagnóstico.
+7. Regista no DEBUG um contexto mínimo do File Output (`output_kind`, `process_mode`, `auto_save`) para facilitar correlação M10↔M17 (com fallback opcional via token compacto `M10CTX:` em `downloadedFiles/files_ops_log`).
+8. Revalida existência física do CSV (`FileExistsFast`) antes da importação para evitar falso positivo quando o caminho resolvido deixa de existir.
 
 ### 12.3 Logs
 
