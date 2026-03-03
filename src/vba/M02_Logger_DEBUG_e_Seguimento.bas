@@ -8,6 +8,9 @@ Option Explicit
 ' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
 '
 ' Atualizações:
+' - 2026-03-03 | Codex | Inclui CI_PROOF_MNT_DATA_MISSING no mapeamento operacional
+'   - Classifica o novo parametro nas acoes de OUTPUT_EXECUTE/diagnostico CI na coluna Funcionalidade.
+'   - Mantem coerencia de troubleshooting para eventos de artefacto em falta no fluxo CI.
 ' - 2026-03-03 | Codex | Classificacao de trace de text_embed no DEBUG
 '   - Classifica parametro TEXT_EMBED_TRACE no bloco de gestao de anexos/text_embed.
 '   - Acrescenta acao dedicada para leitura de name/len_chars/hash_short no troubleshooting.
