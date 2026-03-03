@@ -8,6 +8,9 @@ Option Explicit
 ' - Ler nÃ­veis de diagnÃ³stico (BASE/DIAG/TRACE), classificar causa provÃ¡vel e gerar bundle opcional.
 '
 ' AtualizaÃ§Ãµes:
+' - 2026-03-04 | Codex | Bundle passa a incluir evidÃªncia PROVA_CI isolada por passo
+'   - Escreve `step<passo>_PROVA_CI.txt` nos modos local/zip/local_and_zip para suporte rÃ¡pido.
+'   - Centraliza escrita de artefactos de bundle em helper Ãºnico para reduzir divergÃªncia entre modos.
 ' - 2026-03-01 | Codex | Introduz DEBUG_SCHEMA_VERSION=2 com DEBUG_LEVEL/DEBUG_BUNDLE
 '   - Cria escrita aditiva em DEBUG_DIAG com campos de fingerprint, FILES, CI/container e contrato EXECUTE.
 '   - Implementa classificador simples de causa raiz com confidence e aÃ§Ã£o sugerida.
@@ -18,10 +21,14 @@ Option Explicit
 '   - Regista uma linha em DEBUG_DIAG (apenas quando DEBUG_LEVEL>=DIAG).
 ' - DebugDiag_ClassifyForSelfTest(...)
 '   - Exponibiliza classificador para SelfTests idempotentes.
+' - DebugDiag_WriteBundleFiles(...)
+'   - Escreve artefactos de bundle (incluindo PROVA_CI isolado) para anÃ¡lise de suporte.
 ' =============================================================================
 
 Private Const CFG_DEBUG_LEVEL As String = "DEBUG_LEVEL"
 Private Const CFG_DEBUG_BUNDLE As String = "DEBUG_BUNDLE"
+Private Const CFG_DEBUG_BUNDLE_MODE As String = "DIAG_BUNDLE_MODE"
+Private Const CFG_DIAGNOSTICS_SUBFOLDER As String = "DIAGNOSTICS_SUBFOLDER"
 Private Const DEBUG_SCHEMA_VERSION As String = "2"
 Private Const DEFAULT_DEBUG_LEVEL As String = "BASE"
 Private Const DEFAULT_DEBUG_BUNDLE As String = "FALSE"
@@ -35,7 +42,8 @@ Public Sub DebugDiag_RecordStep( _
     ByVal elapsedDirectiveParseMs As Long, ByVal inputJsonFinal As String, _
     ByVal filesUsedResumo As String, ByVal filesOpsResumo As String, ByVal fileIds As String, _
     ByVal filesRequestedRaw As String, ByRef resultado As ApiResultado, _
-    ByVal promptTextFinal As String, ByVal outputFolderBase As String)
+    ByVal promptTextFinal As String, ByVal outputFolderBase As String, _
+    Optional ByVal promptConfigExtra As String = "")
 
     On Error GoTo EH
 
@@ -153,8 +161,13 @@ Public Sub DebugDiag_RecordStep( _
 
     Call DebugDiag_WriteRow(ws, headers, rowMap)
 
+    Dim bundleMode As String
+    Dim bundleSubfolder As String
+    bundleMode = ContractDiag_GetBundleMode(promptConfigExtra)
+    bundleSubfolder = ContractDiag_GetDiagnosticsSubfolder(promptConfigExtra)
+
     If DebugDiag_IsBundleEnabled() Then
-        Call DebugDiag_WriteBundle(pipelineName, passo, promptId, resultado.responseId, outputFolderBase, rowMap, resultado)
+        Call DebugDiag_WriteBundle(pipelineName, passo, promptId, resultado.responseId, outputFolderBase, rowMap, resultado, bundleMode, bundleSubfolder)
     End If
 
     Exit Sub
@@ -551,7 +564,7 @@ Private Function DebugDiag_Preview(ByVal txt As String, ByVal maxLen As Long) As
     End If
 End Function
 
-Private Sub DebugDiag_WriteBundle(ByVal pipelineName As String, ByVal passo As Long, ByVal promptId As String, ByVal responseId As String, ByVal outputFolderBase As String, ByVal rowMap As Object, ByRef resultado As ApiResultado)
+Private Sub DebugDiag_WriteBundle(ByVal pipelineName As String, ByVal passo As Long, ByVal promptId As String, ByVal responseId As String, ByVal outputFolderBase As String, ByVal rowMap As Object, ByRef resultado As ApiResultado, ByVal bundleMode As String, ByVal bundleSubfolder As String)
     On Error GoTo EH
 
     Dim baseFolder As String
@@ -560,9 +573,31 @@ Private Sub DebugDiag_WriteBundle(ByVal pipelineName As String, ByVal passo As L
     If Right$(baseFolder, 1) = "\" Then baseFolder = Left$(baseFolder, Len(baseFolder) - 1)
 
     Dim runFolder As String
-    runFolder = baseFolder & "\DEBUG_BUNDLE\" & Format$(Now, "yyyymmdd_hhnnss") & "_" & DebugDiag_SafeToken(promptId) & "_" & DebugDiag_SafeToken(Left$(responseId, 14))
-    Call DebugDiag_EnsurePath(runFolder)
+    Dim bundleRoot As String
+    bundleRoot = baseFolder & "\" & IIf(Trim$(bundleSubfolder) = "", "DEBUG_BUNDLE", bundleSubfolder)
+    runFolder = bundleRoot & "\" & Format$(Now, "yyyymmdd_hhnnss") & "_" & DebugDiag_SafeToken(promptId) & "_" & DebugDiag_SafeToken(Left$(responseId, 14))
 
+    If LCase$(bundleMode) <> "zip_only" Then
+        Call DebugDiag_EnsurePath(runFolder)
+        Call DebugDiag_WriteBundleFiles(runFolder, passo, rowMap, resultado)
+    End If
+
+    If LCase$(bundleMode) = "zip_only" Or LCase$(bundleMode) = "local_and_zip" Then
+        Dim zipPath As String
+        zipPath = bundleRoot & "\" & Format$(Now, "yyyymmdd_hhnnss") & "_" & DebugDiag_SafeToken(promptId) & "_" & DebugDiag_SafeToken(Left$(responseId, 14)) & ".zip"
+
+        If LCase$(bundleMode) = "zip_only" Then
+            Call DebugDiag_EnsurePath(runFolder)
+            Call DebugDiag_WriteBundleFiles(runFolder, passo, rowMap, resultado)
+        End If
+
+        Call DebugDiag_ZipFolder(runFolder, zipPath)
+    End If
+    Exit Sub
+EH:
+End Sub
+
+Private Sub DebugDiag_WriteBundleFiles(ByVal runFolder As String, ByVal passo As Long, ByVal rowMap As Object, ByRef resultado As ApiResultado)
     Dim payloadPath As String
     payloadPath = "C:\Temp\payload.json"
     If Dir(payloadPath) <> "" Then FileCopy payloadPath, runFolder & "\payload.json"
@@ -571,8 +606,11 @@ Private Sub DebugDiag_WriteBundle(ByVal pipelineName As String, ByVal passo As L
     Call DebugDiag_WriteText(runFolder & "\extracted_manifest.json", CStr(rowMap("manifesto_fields")))
     Call DebugDiag_WriteText(runFolder & "\extracted_execute.txt", CStr(rowMap("execute_lines")))
     Call DebugDiag_WriteText(runFolder & "\debug_diag_row.tsv", DebugDiag_MapToTsv(rowMap))
-    Exit Sub
-EH:
+
+    Dim provaCiBlock As String
+    provaCiBlock = ContractDiag_ExtractProvaCiBlock(resultado.outputText)
+    If Trim$(provaCiBlock) = "" Then provaCiBlock = "[PROVA_CI_NOT_FOUND]"
+    Call DebugDiag_WriteText(runFolder & "\step" & CStr(passo) & "_PROVA_CI.txt", provaCiBlock)
 End Sub
 
 Private Function DebugDiag_MapToTsv(ByVal rowMap As Object) As String
@@ -616,6 +654,43 @@ Private Sub DebugDiag_WriteText(ByVal filePath As String, ByVal txt As String)
     Open filePath For Output As #ff
     Print #ff, txt
     Close #ff
+End Sub
+
+
+Private Sub DebugDiag_ZipFolder(ByVal folderPath As String, ByVal zipPath As String)
+    On Error GoTo EH
+
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    Dim parentPath As String
+    parentPath = Left$(zipPath, InStrRev(zipPath, "\") - 1)
+    If parentPath <> "" Then Call DebugDiag_EnsurePath(parentPath)
+
+    If fso.FileExists(zipPath) Then fso.DeleteFile zipPath, True
+
+    Dim ff As Integer
+    ff = FreeFile
+    Open zipPath For Binary Access Write As #ff
+    Put #ff, , Chr$(80) & Chr$(75) & Chr$(5) & Chr$(6) & String$(18, Chr$(0))
+    Close #ff
+
+    Dim sh As Object, src As Object, dst As Object
+    Set sh = CreateObject("Shell.Application")
+    Set src = sh.Namespace(folderPath)
+    Set dst = sh.Namespace(zipPath)
+    If src Is Nothing Or dst Is Nothing Then Exit Sub
+
+    dst.CopyHere src.Items, 4 + 16
+
+    Dim t0 As Single
+    t0 = Timer
+    Do
+        DoEvents
+        If Timer - t0 > 10 Then Exit Do
+    Loop
+    Exit Sub
+EH:
 End Sub
 
 Private Function DebugDiag_SafeToken(ByVal s As String) As String

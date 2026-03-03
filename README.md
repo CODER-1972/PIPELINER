@@ -788,6 +788,95 @@ Com `DEBUG_BUNDLE=TRUE`, o motor cria artefactos por execução em `<OUTPUT_FOLD
 - `response.json`,
 - `extracted_manifest.json`,
 - `extracted_execute.txt`,
-- `debug_diag_row.tsv`.
+- `debug_diag_row.tsv`,
+- `step<passo>_PROVA_CI.txt` (bloco PROVA_CI isolado; se ausente grava `[PROVA_CI_NOT_FOUND]`).
 
 Os conteúdos são truncados/sanitizados para reduzir exposição e manter determinismo operacional.
+
+### 13.4 Precedência final (DEBUG_BUNDLE + diag_bundle_mode)
+
+Para evitar ambiguidade operacional, a regra final é:
+
+1. `DEBUG_BUNDLE` é o **interruptor mestre** de exportação de artefactos.
+   - `FALSE` => **não** cria pasta/zip, mesmo que `diag_bundle_mode` exista.
+   - `TRUE` => ativa exportação e aplica o modo configurado.
+2. `diag_bundle_mode` define **como** exportar quando `DEBUG_BUNDLE=TRUE`:
+   - `local_only` | `zip_only` | `local_and_zip`.
+3. `diagnostics_subfolder` define **onde** guardar localmente (quando aplicável), com precedência:
+   - `Config extra` do prompt > `Config` global > `DEBUG_BUNDLE` (default).
+
+Resumo rápido:
+- `DEBUG_BUNDLE=FALSE` => sem bundle.
+- `DEBUG_BUNDLE=TRUE` + `diag_bundle_mode` ausente => assume `local_only`.
+
+### Contrato diagnóstico tri-state (opt-in) no DEBUG
+
+Foi introduzido um contrato diagnóstico por passo (opt-in) via `Config extra`:
+
+- `diagnostic_contract: ci_csv_v1`
+
+Quando ativo, o motor avalia marcadores mínimos no output (`PROVA_CI`, `FOUND_FLOW_TEMPLATE_CSV`, `EXPORT_OK_CSV`, `container_file_citation`, `EXECUTE: LOAD_CSV`) e decide estado do passo. Regras hierárquicas evitam bloqueio indevido: por exemplo, ausência de `container_file_citation` com `PROVA_CI` inequívoca do `FLOW_TEMPLATE.csv` é tratada como `WARN` (passo segue com alerta).
+
+Recomendação de robustez para `PROVA_CI`: usar bloco delimitado `PROVA_CI_START`/`PROVA_CI_END` para reduzir ambiguidades de parsing.
+
+- `OK`
+- `FAIL`
+- `BLOCKED`
+
+O estado técnico é reportado no `DEBUG` (eventos `CONTRACT_*`) e o `Seguimento` mantém resumo funcional.
+
+#### Eventos mínimos no DEBUG (canónicos)
+
+- `CONTRACT_EVAL_START`
+- `CONTRACT_MARKERS_PARSED`
+- `CONTRACT_RULE_RESULT`
+- `CONTRACT_PROVA_DIFF` (diff deterministico `expected vs PROVA_CI files`)
+- `CONTRACT_STATE_DECISION`
+- `CONTRACT_NEXT_ACTION`
+
+Mensagens incluem metadados legíveis com o formato:
+
+- `[RunID: ...]`
+- `[Passo: ...]`
+- `[PromptID: ...]`
+- `[Contrato: ...]`
+- `[Estado: OK|FAIL|BLOCKED]`
+- `[Regra: ...]`
+
+#### Passo sem contrato
+
+Se o passo não tiver `diagnostic_contract`, o pipeline **não bloqueia por regra de contrato**, mas regista observação detalhada no DEBUG (`SEM_CONTRATO`) com decisão e próxima ação (`CONTRACT_STATE_DECISION` + `CONTRACT_NEXT_ACTION`) para auditoria/comparação entre runs.
+
+### DetailJsonCompact com orçamento configurável
+
+Para manter o DEBUG legível, o detalhe técnico compacto é truncado de forma previsível com orçamento configurável na folha `Config`:
+
+- `DEBUG_DETAIL_JSON_MAX_CHARS` (fallback interno se ausente)
+
+### Bundle de diagnóstico com 3 modos
+
+O bundle de diagnóstico suporta três modos:
+
+- `local_only`
+- `zip_only`
+- `local_and_zip`
+
+Precedência de configuração:
+
+1. `Config extra` do prompt
+2. `Config` global
+3. default interno
+
+Chaves:
+
+- `diag_bundle_mode`
+- `diagnostics_subfolder`
+
+
+### Validação integrada em Excel host real (pendente operacional)
+
+A validação final UX/tempo deve ser executada no host Excel com workbook de referência:
+- correr uma pipeline com `diagnostic_contract: ci_csv_v1` no passo crítico;
+- confirmar no `DEBUG` os eventos `CONTRACT_PROVA_DIFF` e decisão tri-state final;
+- confirmar no bundle a presença de `step<passo>_PROVA_CI.txt`;
+- validar comportamento de gate quando `expected vs PROVA_CI` diverge.
