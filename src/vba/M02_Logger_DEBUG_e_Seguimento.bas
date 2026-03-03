@@ -8,6 +8,9 @@ Option Explicit
 ' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
 '
 ' Atualizações:
+' - 2026-03-03 | Codex | Classificacao de trace de text_embed no DEBUG
+'   - Classifica parametro TEXT_EMBED_TRACE no bloco de gestao de anexos/text_embed.
+'   - Acrescenta acao dedicada para leitura de name/len_chars/hash_short no troubleshooting.
 ' - 2026-03-03 | Codex | Mapeia trace padronizado de override de modo FILES
 '   - Inclui `FILES_MODE_OVERRIDE_TRACE` nas ações deduzidas da coluna Funcionalidade.
 '   - Amplia extração de contexto operacional com requested/resolved/raw_mode/effective_mode/reason.
@@ -257,7 +260,7 @@ Private Function Debug_DeduzirAcaoEmCurso(ByVal parametro As String, ByVal probl
             Call Debug_AcaoAdd(acoes, "Resolucao de item FILES declarado no INPUTS")
             Call Debug_AcaoAdd(acoes, "Aplicacao de flags required/latest/as_pdf/as_is/text_embed")
 
-        Case "FILES", "FILES UPLOAD", "FILES REUSE", "FILES IA", "FILES_DIAG", "FILES_MODE_OVERRIDE_TRACE", "DOCX_INPUTFILE_OVERRIDDEN", "PDF_CACHE_HIT", "PDF_CACHE_MISS_CONVERTED", "TEXT_EMBED_EMPTY", "TEXT_EMBED_TOO_LARGE", "AS_PDF", "TEXT_EMBED"
+        Case "FILES", "FILES UPLOAD", "FILES REUSE", "FILES IA", "FILES_DIAG", "DOCX_INPUTFILE_OVERRIDDEN", "PDF_CACHE_HIT", "PDF_CACHE_MISS_CONVERTED", "TEXT_EMBED_EMPTY", "TEXT_EMBED_TOO_LARGE", "TEXT_EMBED_TRACE", "AS_PDF", "TEXT_EMBED"
             Call Debug_AcaoAdd(acoes, "Preparacao e transformacao de anexos")
 
         Case "M05_PAYLOAD_CHECK", "M05_JSON_PREFLIGHT", "M05_UTF8_ROUNDTRIP", "M05_PAYLOAD_DUMP", "M05_PAYLOAD_DUMP_FAIL", "M05_TIMEOUT_DECISION", "M05_HTTP_TIMEOUTS", "M05_HTTP_TIMEOUT_INVALID", "M05_HTTP_TIMEOUT_ERROR", "M05_HTTP_RESULT", "API", "API_RETRY_5XX", "API_CONTEXT_LENGTH_ACTION", "API_CONTEXT_LENGTH_EXCEEDED"
@@ -339,6 +342,8 @@ Private Sub Debug_AplicarAcoesPorSinal(ByRef acoes As String, ByVal p As String,
             Call Debug_AcaoAdd(acoes, "Detecao de extracao vazia em text_embed")
         Case "TEXT_EMBED_TOO_LARGE"
             Call Debug_AcaoAdd(acoes, "Aplicacao de politica de overflow de text_embed")
+        Case "TEXT_EMBED_TRACE"
+            Call Debug_AcaoAdd(acoes, "Rastreio de integridade de text_embed (name/len_chars/hash_short)")
         Case "M10_CI_DOWNLOAD_FAIL", "M10_CI_DOWNLOAD_NOFILE"
             Call Debug_AcaoAdd(acoes, "Tratamento de falha no download de artefacto do container")
         Case "M10_CI_AMBIGUOUS_MARKER", "M10_CI_AMBIGUOUS_FALLBACK"

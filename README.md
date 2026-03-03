@@ -520,6 +520,7 @@ Exemplo didático para erro de validação de payload:
 - **D4 — Download robusto com staging/retry**: downloads de CI usam staging em pasta temporária, promoção para destino final e até 3 tentativas curtas com erro consolidado por tentativa (sem duplicar logs por retry).
 - **D5 — Gate UTF-8 roundtrip**: antes do envio para `/v1/responses`, o payload final passa por validação de roundtrip UTF-8 (`M05_UTF8_ROUNDTRIP`), bloqueando envio quando houver corrupção detectável de codificação.
 - **D6 — Guardrail para text_embed vazio**: quando um anexo em modo `text_embed` não produzir conteúdo (ficheiro vazio, encoding incompatível ou leitura falhada), o motor deixa de o marcar como anexado com sucesso e regista `TEXT_EMBED_EMPTY`; se o ficheiro estiver como `(required)`, o passo é bloqueado antes da chamada HTTP para evitar respostas com contexto incompleto.
+- **D6.1 — Trace compacto de text_embed**: após extração com conteúdo, o motor regista `TEXT_EMBED_TRACE` no DEBUG com `name`, `len_chars` e `hash_short` (FNV-1a normalizado), facilitando comparação rápida de consistência entre runs sem expor o texto extraído.
 
 ### Diagnóstico rápido: `output_kind:file` + `process_mode:code_interpreter` com saída "desalinhada"
 
