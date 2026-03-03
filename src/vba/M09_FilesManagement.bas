@@ -291,7 +291,10 @@ Public Function Files_PrepararContextoDaPrompt( _
     Call Files_EnsureSheetExists
 
     Dim celInputsValor As Range, celOps As Range
-    Call Files_EncontrarCelulasInputs(promptId, celInputsValor, celOps)
+    Dim catalogRef As String, opsRef As String
+    Dim opsMissingLogged As Boolean
+    opsMissingLogged = False
+    Call Files_EncontrarCelulasInputs(promptId, celInputsValor, celOps, catalogRef, opsRef)
 
     If celInputsValor Is Nothing Then
         outInputJsonLiteralFinal = inputJsonLiteralBase
@@ -300,6 +303,11 @@ Public Function Files_PrepararContextoDaPrompt( _
 
     Dim textoInputs As String
     textoInputs = CStr(celInputsValor.value)
+
+    If celOps Is Nothing Then
+        Call Files_LogCatalogOpsMissing(promptId, catalogRef, opsRef, "celula de operacoes nao localizada")
+        opsMissingLogged = True
+    End If
 
     ' garantir que existe a opção de config para reutilização
     Call Files_EnsureConfig_ReutilizacaoUpload
@@ -313,11 +321,16 @@ Public Function Files_PrepararContextoDaPrompt( _
         Exit Function
     End If
 
+    If celOps Is Nothing Then
+        Call Files_LogCatalogOpsMissing(promptId, catalogRef, opsRef, "celula de operacoes nao localizada")
+        opsMissingLogged = True
+    End If
+
     Dim haRequired As Boolean
     haRequired = Files_TemRequiredDiretivas(diretivas)
 
     If inputFolder = "" Or Dir(inputFolder, vbDirectory) = "" Then
-        Call Files_EscreverOperacoes(celOps, diretivas, "ERRO: INPUT Folder nao existe ou esta vazio.", True)
+        Call Files_EscreverOperacoes(celOps, diretivas, "ERRO: INPUT Folder nao existe ou esta vazio.", True, promptId, catalogRef, opsRef, opsMissingLogged)
 
         If haRequired Then
             outFalhaCritica = True
@@ -707,7 +720,16 @@ Public Function Files_PrepararContextoDaPrompt( _
             End If
 
             Dim charsExtra As Long
+            Dim textEmbedTraceHash As String
+            Dim textEmbedTraceHashShort As String
             charsExtra = Len(textoExtraDeste)
+            textEmbedTraceHash = Files_FNV32_String(textoExtraDeste)
+            textEmbedTraceHashShort = LCase$(Replace(textEmbedTraceHash, "fnv32-", ""))
+            If textEmbedTraceHashShort = "" Then textEmbedTraceHashShort = "na"
+
+            Call Debug_Registar(0, promptId, "INFO", "", "TEXT_EMBED_TRACE", _
+                "name=" & resolvedName & " | len_chars=" & charsExtra & " | hash_short=" & textEmbedTraceHashShort, _
+                "Trace tecnico de text_embed para diagnostico de consistencia de conteudo.")
 
             If textEmbedMaxChars > 0 And charsExtra > textEmbedMaxChars Then
                 Dim overflowAction As String
@@ -912,7 +934,7 @@ ProximoItem:
     outFilesOpsResumo = Files_NormalizarQuebrasLinha(filesOpsCurto)
     outFileIdsUsed = fileIdsLista
 
-    Call Files_EscreverOperacoes(celOps, diretivas, "", False)
+    Call Files_EscreverOperacoes(celOps, diretivas, "", False, promptId, catalogRef, opsRef, opsMissingLogged)
 
     If outFalhaCritica Then
         outInputJsonLiteralFinal = inputJsonLiteralBase
@@ -3815,10 +3837,25 @@ End Function
 ' LOG VISUAL NO CATALOGO (celula "Operacoes com ficheiros:")
 ' ============================================================
 
-Private Sub Files_EscreverOperacoes(ByVal celOps As Range, ByVal diretivas As Collection, ByVal erroGeral As String, ByVal erroCritico As Boolean)
+Private Sub Files_EscreverOperacoes( _
+    ByVal celOps As Range, _
+    ByVal diretivas As Collection, _
+    ByVal erroGeral As String, _
+    ByVal erroCritico As Boolean, _
+    ByVal promptId As String, _
+    ByVal catalogRef As String, _
+    ByVal opsRef As String, _
+    ByRef ioOpsMissingLogged As Boolean _
+)
     On Error GoTo Falha
 
-    If celOps Is Nothing Then Exit Sub
+    If celOps Is Nothing Then
+        If Not ioOpsMissingLogged Then
+            Call Files_LogCatalogOpsMissing(promptId, catalogRef, opsRef, "celula de operacoes nao localizada")
+            ioOpsMissingLogged = True
+        End If
+        Exit Sub
+    End If
 
     Dim header As String
     header = "Operacoes com ficheiros:"
@@ -3890,6 +3927,7 @@ Private Sub Files_EscreverOperacoes(ByVal celOps As Range, ByVal diretivas As Co
     Exit Sub
 
 Falha:
+    Call Files_LogCatalogOpsMissing(promptId, catalogRef, opsRef, "falha ao escrever na celula de operacoes")
 End Sub
 
 Private Sub Files_AplicarCoresOperacoes(ByVal celOps As Range, ByVal linhaLista As String, ByVal diretivas As Collection)
@@ -4028,9 +4066,17 @@ End Function
 ' LOCALIZAR CELULAS INPUTS e OPERACOES (catalogo)
 ' ============================================================
 
-Private Sub Files_EncontrarCelulasInputs(ByVal promptId As String, ByRef outCelInputsValor As Range, ByRef outCelOps As Range)
+Private Sub Files_EncontrarCelulasInputs( _
+    ByVal promptId As String, _
+    ByRef outCelInputsValor As Range, _
+    ByRef outCelOps As Range, _
+    Optional ByRef outCatalogRef As String = "", _
+    Optional ByRef outOpsRef As String = "" _
+)
     Set outCelInputsValor = Nothing
     Set outCelOps = Nothing
+    outCatalogRef = ""
+    outOpsRef = ""
 
     Dim folha As String
     folha = Files_ExtrairFolhaDoID(promptId)
@@ -4046,8 +4092,39 @@ Private Sub Files_EncontrarCelulasInputs(ByVal promptId As String, ByRef outCelI
     Set celId = ws.Columns(1).Find(What:=Trim$(promptId), LookIn:=xlValues, LookAt:=xlWhole)
     If celId Is Nothing Then Exit Sub
 
+    outCatalogRef = ws.Name & "!A" & CStr(celId.row) & " (bloco de 5 linhas iniciado no ID)"
+
     Set outCelInputsValor = celId.Offset(2, 3)
+    outOpsRef = ws.Name & "!" & outCelInputsValor.Offset(0, 2).Address(False, False) & " (linha INPUTS + 2 colunas)"
+
+    On Error Resume Next
     Set outCelOps = outCelInputsValor.Offset(0, 2)
+    Dim testValue As Variant
+    testValue = outCelOps.value
+    If Err.Number <> 0 Then Set outCelOps = Nothing
+    Err.Clear
+    On Error GoTo 0
+End Sub
+
+Private Sub Files_LogCatalogOpsMissing( _
+    ByVal promptId As String, _
+    ByVal catalogRef As String, _
+    ByVal opsRef As String, _
+    ByVal reason As String _
+)
+    On Error GoTo Falha
+
+    Dim problema As String
+    problema = "CATALOG_FILES_OPS_MISSING | promptId=" & Trim$(promptId)
+    If Trim$(catalogRef) <> "" Then problema = problema & " | bloco=" & catalogRef
+    If Trim$(opsRef) <> "" Then problema = problema & " | celula_ops=" & opsRef
+    If Trim$(reason) <> "" Then problema = problema & " | motivo=" & reason
+
+    Call Debug_Registar(0, promptId, "ALERTA", "", "CATALOG_FILES_OPS_MISSING", problema, _
+        "Preencha/documente o bloco de 5 linhas no layout padrao do catalogo (INPUTS em D, Operacoes em F na linha INPUTS).")
+    Exit Sub
+
+Falha:
 End Sub
 
 Private Function Files_ExtrairFolhaDoID(ByVal promptId As String) As String
