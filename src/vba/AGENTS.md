@@ -559,4 +559,6 @@ Se começar a ficar demasiado grande:
 
 - Em extração de contexto para DEBUG, aceitar tanto `chave=valor` como `chave:valor` (normalizando para `chave=valor`) e privilegiar chaves operacionais objetivas (`file_id`, `container_id`, `http_status`, `elapsed_ms`) para facilitar troubleshooting.
 
+- Em eventos de rastreio técnico no DEBUG (ex.: `TEXT_EMBED_TRACE`), padronizar chaves operacionais estáveis (`name`, `len_chars`, `hash_short`) para facilitar filtros/comparação automática entre runs e evitar deriva de nomenclatura (`len`/`hash`).
+
 - Em mapeamento de ações do DEBUG, privilegiar primeiro regras explícitas por parâmetro (ex.: `M10_*`, `M05_*`, `OUTPUT_EXECUTE_*`) e só depois regras genéricas por substring para reduzir falsos positivos de interpretação.
