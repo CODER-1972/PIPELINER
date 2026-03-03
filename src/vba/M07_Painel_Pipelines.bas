@@ -967,16 +967,32 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         fo_logSeguimento = FileOutput_ProcessAfterResponse(apiKey, outputFolderBase, pipelineNome, pipelineIndex, passo, prompt.Id, resultado, _
             fo_outputKind, fo_processMode, fo_autoSave, fo_overwriteMode, fo_prefixTmpl, fo_subfolderTmpl, _
             fo_pptxMode, fo_xlsxMode, fo_pdfMode, fo_imageMode, fo_filesUsedOut, fo_filesOpsOut)
+
+        ' -------------------------------
+        ' CONTRATO DIAGNOSTICO (M19) - tri-state por passo
+        ' -------------------------------
+        Dim ctHasContract As Boolean, ctMode As String, ctState As String, ctRule As String
+        Dim ctProblem As String, ctSuggestion As String, ctDetail As String
+        Call ContractDiag_EvaluateStep(passo, prompt.Id, prompt.ConfigExtra, resultado.outputText, resultado.rawResponseJson, _
+            ctHasContract, ctMode, ctState, ctRule, ctProblem, ctSuggestion, ctDetail)
+
         Dim fo_executeOpsLog As String
         fo_executeOpsLog = ""
         tMark = Timer
         If Trim$(resultado.Erro) = "" And resultado.httpStatus >= 200 And resultado.httpStatus < 300 Then
-            fo_executeOpsLog = OutputOrders_TryExecute(passo, prompt.Id, resultado.responseId, resultado.outputText, outputFolderBase, fo_filesOpsOut)
-            If Trim$(fo_executeOpsLog) <> "" Then
-                If Trim$(fo_filesOpsOut) <> "" Then
-                    fo_filesOpsOut = fo_filesOpsOut & " | " & fo_executeOpsLog
-                Else
-                    fo_filesOpsOut = fo_executeOpsLog
+            If ctHasContract And (UCase$(ctState) = "BLOCKED" Or UCase$(ctState) = "FAIL") Then
+                Call Debug_Registar(passo, prompt.Id, "ERRO", "", "CONTRACT_GATE_BLOCK", _
+                    "Gate bloqueou execução de OUTPUT EXECUTE. [Estado=" & ctState & "] [Regra=" & ctRule & "]", _
+                    ctSuggestion)
+                resultado.Erro = "Contrato do passo bloqueou continuidade: estado=" & ctState & " regra=" & ctRule
+            Else
+                fo_executeOpsLog = OutputOrders_TryExecute(passo, prompt.Id, resultado.responseId, resultado.outputText, outputFolderBase, fo_filesOpsOut)
+                If Trim$(fo_executeOpsLog) <> "" Then
+                    If Trim$(fo_filesOpsOut) <> "" Then
+                        fo_filesOpsOut = fo_filesOpsOut & " | " & fo_executeOpsLog
+                    Else
+                        fo_filesOpsOut = fo_executeOpsLog
+                    End If
                 End If
             End If
         End If
@@ -1012,7 +1028,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         stepEndAt = Now
         Call DebugDiag_RecordStep(pipelineNome, pipelineIndex, passo, prompt.Id, modeloUsado, fo_outputKind, fo_processMode, _
             stepStartAt, stepEndAt, filesPrepareMs, apiCallMs, directiveParseMs, inputJsonFinal, filesUsedResumo, filesOpsResumo, fileIds, linhaFilesLista, _
-            resultado, promptTextFinal, outputFolderBase)
+            resultado, promptTextFinal, outputFolderBase, prompt.ConfigExtra)
 
         Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, resultado.httpStatus, resultado.responseId, _
             textoSeguimento, pipelineNome, "", filesUsedResumo, filesOpsResumo, fileIds)

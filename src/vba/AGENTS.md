@@ -554,3 +554,6 @@ Se começar a ficar demasiado grande:
 - Evitar `IsMissing` em parâmetros não `Optional Variant`; esse padrão gera `Compile error: Invalid use of IsMissing`. Em helpers utilitários, tratar ausência via contrato da assinatura e manter fallback explícito para `Null`/`Error`.
 
 - Em declarações de variáveis locais/globais (`Dim/Private/Public`), evitar identificadores com nomes reservados/funções intrínsecas do VBA (ex.: `Fix`, `Left`, `Date`, `Name`, `Input`, `Shell`); usar prefixos semânticos (`rcSummary`, `outFix`, `tmpDate`) para prevenir `Compile error: Syntax error` no VBE.
+
+
+- Em selftests/fixtures VBA com JSON inline em literais de string, duplicar sempre aspas (`""`) em vez de escapes C-style; literais como `"{"type":"x"}"` causam `Compile error` ou string inválida no VBE e devem ser escritos como `"{""type"":""x""}"`.
