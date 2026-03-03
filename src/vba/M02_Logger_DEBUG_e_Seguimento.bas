@@ -8,6 +8,9 @@ Option Explicit
 ' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
 '
 ' Atualizações:
+' - 2026-03-03 | Codex | Inclui CI_PROOF_MNT_DATA_MISSING no mapeamento operacional
+'   - Classifica o novo parametro nas acoes de OUTPUT_EXECUTE/diagnostico CI na coluna Funcionalidade.
+'   - Mantem coerencia de troubleshooting para eventos de artefacto em falta no fluxo CI.
 ' - 2026-03-03 | Codex | Cobertura ampliada de acoes especificas no DEBUG
 '   - Reforca mapeamento por sinais de parametro/contexto para suportar combinacoes de acoes no mesmo registo.
 '   - Amplia extracao de contexto com pares chave=valor e chave:valor para diagnostico mais objetivo.
@@ -263,7 +266,7 @@ Private Function Debug_DeduzirAcaoEmCurso(ByVal parametro As String, ByVal probl
             Call Debug_AcaoAdd(acoes, "Validacao do contrato de File Output")
             Call Debug_AcaoAdd(acoes, "Resolucao do ficheiro esperado no OUTPUT Folder")
 
-        Case "OUTPUT_EXECUTE_FOUND", "OUTPUT_EXECUTE_PARSED", "OUTPUT_EXECUTE_UNKNOWN_CMD", "OUTPUT_EXECUTE_INVALID_FILENAME", "OUTPUT_EXECUTE_FILE_NOT_FOUND", "OUTPUT_EXECUTE_CSV_PRECHECK", "OUTPUT_EXECUTE_CSV_BOM_FAIL", "OUTPUT_EXECUTE_CSV_CRLF_IN_FIELDS", "OUTPUT_EXECUTE_SHEET_CREATED", "OUTPUT_EXECUTE_IMPORT_FAIL", "OUTPUT_EXECUTE_CSV_IMPORTED", "OUTPUT_EXECUTE_VERIFIED"
+        Case "OUTPUT_EXECUTE_FOUND", "OUTPUT_EXECUTE_PARSED", "OUTPUT_EXECUTE_UNKNOWN_CMD", "OUTPUT_EXECUTE_INVALID_FILENAME", "OUTPUT_EXECUTE_FILE_NOT_FOUND", "CI_PROOF_MNT_DATA_MISSING", "OUTPUT_EXECUTE_CSV_PRECHECK", "OUTPUT_EXECUTE_CSV_BOM_FAIL", "OUTPUT_EXECUTE_CSV_CRLF_IN_FIELDS", "OUTPUT_EXECUTE_SHEET_CREATED", "OUTPUT_EXECUTE_IMPORT_FAIL", "OUTPUT_EXECUTE_CSV_IMPORTED", "OUTPUT_EXECUTE_VERIFIED"
             Call Debug_AcaoAdd(acoes, "Execucao da diretiva OUTPUT_EXECUTE")
             Call Debug_AcaoAdd(acoes, "Importacao/validacao de CSV em worksheet dedicada")
 
@@ -354,6 +357,8 @@ Private Sub Debug_AplicarAcoesPorSinal(ByRef acoes As String, ByVal p As String,
             Call Debug_AcaoAdd(acoes, "Checklist pre-envio do payload (tools/input/tamanho)")
         Case "M05_JSON_PREFLIGHT"
             Call Debug_AcaoAdd(acoes, "Preflight de validade JSON antes do HTTP")
+        Case "CI_PROOF_MNT_DATA_MISSING"
+            Call Debug_AcaoAdd(acoes, "Detecao de prova CI sem artefacto descarregado para a pasta de output")
         Case "OUTPUT_EXECUTE_CSV_PRECHECK"
             Call Debug_AcaoAdd(acoes, "Pre-validacao de encoding/BOM e estrutura CSV")
         Case "OUTPUT_EXECUTE_VERIFIED"
