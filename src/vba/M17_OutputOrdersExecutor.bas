@@ -9,12 +9,13 @@ Option Explicit
 ' - Importar CSV para nova worksheet com logging completo em DEBUG e resumo para Seguimento.
 '
 ' AtualizaÃ§Ãµes:
-' - 2026-03-03 | Codex | Integra contexto mÃ­nimo M10 no fluxo EXECUTE
-'   - Adiciona argumento opcional m10Context no entrypoint para auditoria/gates leves.
-'   - ReforÃ§a validaÃ§Ã£o de existÃªncia do CSV com ResolveCsvSource + FileExistsFast.
-'   - Regista contexto efetivo de File Output no DEBUG para troubleshooting.
-'   - Aceita fallback de contexto compacto via downloadedFiles/filesOps quando m10Context vier vazio.
-'   - Suporta extraÃ§Ã£o de token M10CTX tanto em string compacta como em coleÃ§Ãµes de downloadedFiles.
+' - 2026-03-03 | Codex | CorreÃ§Ã£o de integraÃ§Ã£o para evitar dependÃªncia Private cross-mÃ³dulo
+'   - Substitui chamadas a Nz por helper local NzLocal para prevenir erro de compilaÃ§Ã£o no VBA.
+'   - MantÃ©m semÃ¢ntica de fallback String nos novos helpers de diagnÃ³stico.
+' - 2026-03-03 | Codex | ReforÃ§o de diagnÃ³stico no FILE_NOT_FOUND
+'   - Enriquece OUTPUT_EXECUTE_FILE_NOT_FOUND com nome pedido, hints, downloadedFiles e resumo da outputFolder.
+'   - Emite CI_PROOF_MNT_DATA_MISSING quando hÃ¡ sinais explÃ­citos de CI sem artefacto local resolvido.
+'   - MantÃ©m bloqueio atual sem importaÃ§Ã£o quando o CSV nÃ£o existe.
 ' - 2026-02-26 | Codex | Corrige dependÃªncias internas do SelfTest
 '   - Adiciona helpers locais EnsureFolder e WriteTextUTF8 usados pela bateria T1..T9.
 '   - Remove acoplamento implÃ­cito a helpers Private de outros mÃ³dulos.
@@ -42,6 +43,7 @@ Option Explicit
 ' - EnsureFolder(folderPath): cria pasta local para fixtures temporÃ¡rias dos selftests.
 ' - WriteTextUTF8(filePath, txt): escreve ficheiros UTF-8 usados nos selftests.
 ' - BuildFileNotFoundContext(...): agrega contexto operacional para troubleshooting em OUTPUT_EXECUTE_FILE_NOT_FOUND.
+' - NzLocal(...): fallback local para Variant->String sem depender de helpers Private de outros mÃ³dulos.
 ' =============================================================================
 
 Private Const OUTPUT_ORDERS_MAX As Long = 3
@@ -118,20 +120,6 @@ Public Function OutputOrders_TryExecute( _
                     "Sinais de execuÃ§Ã£o CI sem artefacto local resolvido. " & notFoundCtx, _
                     "Garantir escrita/citaÃ§Ã£o do ficheiro em /mnt/data e download para OUTPUT Folder.")
             End If
-            GoTo NextDirective
-        End If
-
-        If Not FileExistsFast(csvPath) Then
-            Call Debug_Registar(passo, promptId, "ERRO", "", "OUTPUT_EXECUTE_FILE_NOT_FOUND", _
-                "CSV resolvido mas ausente no disco: " & csvPath & " | source=" & fileName, _
-                "Reveja FILE OUTPUT/download e permissÃµes da pasta OUTPUT.")
-            GoTo NextDirective
-        End If
-
-        If Not FileExistsFast(csvPath) Then
-            Call Debug_Registar(passo, promptId, "ERRO", "", "OUTPUT_EXECUTE_FILE_NOT_FOUND", _
-                "CSV resolvido mas ausente no disco: " & csvPath & " | source=" & fileName, _
-                "Reveja FILE OUTPUT/download e permissÃµes da pasta OUTPUT.")
             GoTo NextDirective
         End If
 
@@ -492,7 +480,7 @@ Private Function ExtractHintsFromOutputText(ByVal outputText As String) As Strin
     re.IgnoreCase = True
     re.Pattern = "(?:sandbox:/mnt/data/)?([A-Za-z0-9_\-\.]+\.(csv|tsv|txt|json|xlsx|pdf))"
 
-    Set matches = re.Execute(Nz(outputText))
+    Set matches = re.Execute(NzLocal(outputText))
     For Each m In matches
         Dim fn As String
         fn = Trim$(CStr(m.SubMatches(0)))
@@ -539,7 +527,7 @@ Private Function SummarizeDownloadedFiles(ByVal downloadedFiles As Variant) As S
 
     Dim token As Variant
     Dim norm As String
-    norm = Replace(Replace(Nz(CStr(downloadedFiles)), ";", "|"), vbCrLf, "|")
+    norm = Replace(Replace(NzLocal(CStr(downloadedFiles)), ";", "|"), vbCrLf, "|")
     For Each token In Split(norm, "|")
         Dim t As String
         t = Trim$(CStr(token))
@@ -594,7 +582,7 @@ End Function
 
 Private Function HasCiSignalsWithoutArtifact(ByVal outputText As String) As Boolean
     Dim t As String
-    t = LCase$(Nz(outputText))
+    t = LCase$(NzLocal(outputText))
     If t = "" Then Exit Function
 
     HasCiSignalsWithoutArtifact = _
@@ -608,6 +596,16 @@ Private Function HasCiSignalsWithoutArtifact(ByVal outputText As String) As Bool
         (InStr(1, t, "prova_ci_start", vbTextCompare) > 0)
 End Function
 
+
+Private Function NzLocal(ByVal v As Variant, Optional ByVal fallback As String = "") As String
+    If IsError(v) Then
+        NzLocal = fallback
+    ElseIf IsNull(v) Or IsEmpty(v) Then
+        NzLocal = fallback
+    Else
+        NzLocal = CStr(v)
+    End If
+End Function
 
 Public Sub PrecheckCsv_BomAndCrLf(ByVal csvPath As String, ByRef bomPass As Boolean, ByRef crlfPass As Boolean, ByRef colsHint As Long)
     bomPass = CsvHasUtf8Bom(csvPath)
