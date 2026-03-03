@@ -8,14 +8,12 @@ Option Explicit
 ' - Aplicar effective_mode, robustez multipart e utilitários de ficheiros para pipeline.
 '
 ' Atualizações:
-' - 2026-03-03 | Codex | Emite trace final apos todos os fallbacks de modo FILES
-'   - Move emissao de `FILES_MODE_OVERRIDE_TRACE` para o fecho do item, garantindo effective_mode final.
-'   - Cobre overrides tardios (ex.: pdf_upload->text_embed por fallback de conversao/overflow).
-'   - Alinha flags de override (overrideModo/houveOverride) quando fallback tardio altera o modo final.
-' - 2026-03-03 | Codex | Normaliza trace de override de modo por item FILES
-'   - Introduz evento `FILES_MODE_OVERRIDE_TRACE` com requested/resolved/raw_mode/effective_mode/reason.
-'   - Emite trace sempre que modo pedido diverge do modo aplicado, incluindo overrides nao-Office.
-'   - Mantem `DOCX_INPUTFILE_OVERRIDDEN` por retrocompatibilidade com mensagem curta para consultar o trace.
+' - 2026-03-03 | Codex | Robustez na normalizacao do hash_short de TEXT_EMBED_TRACE
+'   - Normaliza line endings antes do FNV-1a para reduzir variacao entre extratores/hosts.
+'   - Remove prefixo fnv32- apenas quando presente no inicio (sem Replace global).
+' - 2026-03-03 | Codex | Trace tecnico para anexacao text_embed
+'   - Calcula len_chars e hash_short estavel (FNV-1a normalizado) apos extracao bem-sucedida.
+'   - Regista evento `TEXT_EMBED_TRACE` no DEBUG com name/len_chars/hash_short para troubleshooting rapido.
 ' - 2026-03-01 | Codex | Diagnostico pedagogico por ficheiro na linha FILES_ITEM_TRACE
 '   - Diferencia causas provaveis (nao encontrado, ambiguidade, upload, formato, text_embed vazio, limites).
 '   - Adiciona problema_tipo, explicacao e acao recomendada em cada linha de trace por ficheiro.
@@ -722,9 +720,26 @@ Public Function Files_PrepararContextoDaPrompt( _
             Dim charsExtra As Long
             Dim textEmbedTraceHash As String
             Dim textEmbedTraceHashShort As String
+            Dim textEmbedTraceNorm As String
             charsExtra = Len(textoExtraDeste)
             textEmbedTraceHash = Files_FNV32_String(textoExtraDeste)
             textEmbedTraceHashShort = LCase$(Replace(textEmbedTraceHash, "fnv32-", ""))
+            If textEmbedTraceHashShort = "" Then textEmbedTraceHashShort = "na"
+
+            Call Debug_Registar(0, promptId, "INFO", "", "TEXT_EMBED_TRACE", _
+                "name=" & resolvedName & " | len_chars=" & charsExtra & " | hash_short=" & textEmbedTraceHashShort, _
+                "Trace tecnico de text_embed para diagnostico de consistencia de conteudo.")
+
+            textEmbedTraceNorm = Replace(textoExtraDeste, vbCrLf, vbLf)
+            textEmbedTraceNorm = Replace(textEmbedTraceNorm, vbCr, vbLf)
+            textEmbedTraceHash = Files_FNV32_String(textEmbedTraceNorm)
+
+            If LCase$(Left$(textEmbedTraceHash, 6)) = "fnv32-" Then
+                textEmbedTraceHashShort = Mid$(textEmbedTraceHash, 7)
+            Else
+                textEmbedTraceHashShort = textEmbedTraceHash
+            End If
+            textEmbedTraceHashShort = LCase$(Trim$(textEmbedTraceHashShort))
             If textEmbedTraceHashShort = "" Then textEmbedTraceHashShort = "na"
 
             Call Debug_Registar(0, promptId, "INFO", "", "TEXT_EMBED_TRACE", _
