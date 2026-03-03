@@ -235,6 +235,7 @@ Nota de compatibilidade importante:
 
 - nem todos os formatos aceites no upload são aceites como `input_file` no `/v1/responses`;
 - o sistema pode aplicar `effective_mode` (ex.: converter para PDF ou text embed) conforme configuração.
+- sempre que `raw_mode` e `effective_mode` divergem, o DEBUG regista `FILES_MODE_OVERRIDE_TRACE` com `requested`, `resolved`, `raw_mode`, `effective_mode` e `reason` (considerando o modo final após fallbacks de conversão/overflow); o evento legado `DOCX_INPUTFILE_OVERRIDDEN` é mantido apenas como apontador curto para esse trace.
 
 ---
 

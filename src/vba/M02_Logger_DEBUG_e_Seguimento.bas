@@ -11,6 +11,15 @@ Option Explicit
 ' - 2026-03-03 | Codex | Classificacao de trace de text_embed no DEBUG
 '   - Classifica parametro TEXT_EMBED_TRACE no bloco de gestao de anexos/text_embed.
 '   - Acrescenta acao dedicada para leitura de name/len_chars/hash_short no troubleshooting.
+' - 2026-03-03 | Codex | Mapeia trace padronizado de override de modo FILES
+'   - Inclui `FILES_MODE_OVERRIDE_TRACE` nas ações deduzidas da coluna Funcionalidade.
+'   - Amplia extração de contexto operacional com requested/resolved/raw_mode/effective_mode/reason.
+' - 2026-03-03 | Codex | Mapeia eventos de lint do Output Orders
+'   - Adiciona cobertura para EXECUTE_LINT_MULTIPLE e EXECUTE_LINT_IN_CODEBLOCK na deducao de acao em curso.
+' - 2026-03-03 | Codex | Mapeia novo alerta CI_PROOF_MNT_DATA_MISSING na coluna de acao
+'   - Evita descricao generica para diagnostico de ausencia de artefacto CSV com sinais M10.
+' - 2026-03-03 | Codex | Expande contexto M10 extraido para CI_PROOF_MNT_DATA_MISSING
+'   - Adiciona chaves de falha de download/listagem para manter acao em curso especifica e auditavel.
 ' - 2026-03-03 | Codex | Cobertura ampliada de acoes especificas no DEBUG
 '   - Reforca mapeamento por sinais de parametro/contexto para suportar combinacoes de acoes no mesmo registo.
 '   - Amplia extracao de contexto com pares chave=valor e chave:valor para diagnostico mais objetivo.
@@ -325,6 +334,8 @@ Private Sub Debug_AplicarAcoesPorSinal(ByRef acoes As String, ByVal p As String,
             Call Debug_AcaoAdd(acoes, "Desambiguacao assistida para escolha do ficheiro candidato")
         Case "DOCX_INPUTFILE_OVERRIDDEN"
             Call Debug_AcaoAdd(acoes, "Override de modo de anexo Office para formato suportado")
+        Case "FILES_MODE_OVERRIDE_TRACE"
+            Call Debug_AcaoAdd(acoes, "Rastreio padronizado de divergencia entre raw_mode e effective_mode")
         Case "PDF_CACHE_HIT", "PDF_CACHE_MISS_CONVERTED"
             Call Debug_AcaoAdd(acoes, "Gestao da cache de conversao PDF para anexos Office")
         Case "TEXT_EMBED_EMPTY"
@@ -438,7 +449,7 @@ Private Function Debug_ExtrairDetalheOperacional(ByVal problema As String, ByVal
     Dim i As Long
 
     fonte = Trim$(problema & " | " & sugestao)
-    keys = Array("filename", "file", "exec_file", "full_path", "resolvedPath", "resolved_path", "inputFolder", "input_folder", "outputFolder", "output_folder", "output_exists", "stage", "endpoint", "prompt", "promptId", "pipeline", "pipeline_name", "container_id", "file_id", "status", "http_status", "httpStatus", "engine", "profile", "effective_mode", "mode_effective", "mode", "bytes", "created_at", "elapsed_ms", "payload_len", "response_id", "cause_hint", "confidence", "dlErr", "retry_outcome", "has_no_citation", "has_container_empty", "has_download_nofile", "has_marker_missing", "has_download_fail", "has_list_fail", "eligible")
+    keys = Array("filename", "file", "requested", "resolved", "full_path", "resolvedPath", "resolved_path", "inputFolder", "input_folder", "outputFolder", "output_folder", "stage", "endpoint", "prompt", "promptId", "pipeline", "pipeline_name", "container_id", "file_id", "status", "http_status", "httpStatus", "engine", "profile", "raw_mode", "effective_mode", "mode_effective", "mode", "reason", "bytes", "created_at", "elapsed_ms", "payload_len", "response_id", "cause_hint", "confidence", "dlErr", "retry_outcome")
 
     For i = LBound(keys) To UBound(keys)
         detalhe = Debug_ExtrairDetalhePorChave(fonte, CStr(keys(i)))
