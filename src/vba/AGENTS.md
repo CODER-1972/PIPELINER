@@ -560,3 +560,5 @@ Se começar a ficar demasiado grande:
 - Em extração de contexto para DEBUG, aceitar tanto `chave=valor` como `chave:valor` (normalizando para `chave=valor`) e privilegiar chaves operacionais objetivas (`file_id`, `container_id`, `http_status`, `elapsed_ms`) para facilitar troubleshooting.
 
 - Em mapeamento de ações do DEBUG, privilegiar primeiro regras explícitas por parâmetro (ex.: `M10_*`, `M05_*`, `OUTPUT_EXECUTE_*`) e só depois regras genéricas por substring para reduzir falsos positivos de interpretação.
+
+- Em rastreio de overrides de modo em FILES (`raw_mode` vs `effective_mode`), emitir o evento canónico (`FILES_MODE_OVERRIDE_TRACE`) apenas após o modo final do item estar estabilizado (incluindo fallbacks tardios como `pdf_upload -> text_embed`), para evitar diagnósticos incompletos ou duplicados.
