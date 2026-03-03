@@ -728,7 +728,7 @@ O PIPELINER suporta execução controlada de ordens pós-output, após resposta 
 
 ### 12.2 Fluxo LOAD_CSV
 
-1. Parser ignora ordens dentro de blocos de código (```...```), conta diretivas válidas fora de fences e deteta intenção `EXECUTE:` dentro de code block para lint (mesmo quando a linha está incompleta).
+1. Parser ignora ordens dentro de blocos de código (```...```), conta diretivas válidas fora de fences e deteta ocorrência/intenção `EXECUTE:` dentro de code block para lint (incluindo casos incompletos ou no meio da linha).
 2. Resolve CSV automaticamente a partir de `downloadedFiles` e `OUTPUT Folder` (incluindo subpastas).
 3. Faz pré-check técnico:
    - BOM UTF-8 (EF BB BF);

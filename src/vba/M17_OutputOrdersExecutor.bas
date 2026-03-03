@@ -9,19 +9,10 @@ Option Explicit
 ' - Importar CSV para nova worksheet com logging completo em DEBUG e resumo para Seguimento.
 '
 ' AtualizaÃ§Ãµes:
-' - 2026-03-03 | Codex | ReforÃ§o de diagnÃ³stico no FILE_NOT_FOUND
-'   - Enriquece OUTPUT_EXECUTE_FILE_NOT_FOUND com nome pedido, hints, downloadedFiles e resumo da outputFolder.
-'   - Emite CI_PROOF_MNT_DATA_MISSING quando hÃ¡ sinais explÃ­citos de CI sem artefacto local resolvido.
-'   - MantÃ©m bloqueio atual sem importaÃ§Ã£o quando o CSV nÃ£o existe.
 ' - 2026-03-03 | Codex | Lint de diretivas EXECUTE durante parsing
 '   - Conta diretivas vÃ¡lidas fora de code blocks e ocorrÃªncias dentro de code fences.
 '   - Emite eventos EXECUTE_LINT_MULTIPLE e EXECUTE_LINT_IN_CODEBLOCK sem quebrar compatibilidade.
-' - 2026-03-03 | Codex | ReforÃ§a correlaÃ§Ã£o M10 no diagnÃ³stico de CSV em falta
-'   - Melhora heurÃ­sticas de elegibilidade (selected/eligible/motivo) e cobertura de sinais de falha M10.
-'   - MantÃ©m alerta complementar antes do erro final sem alterar comportamento funcional bloqueante.
-' - 2026-03-03 | Codex | DiagnÃ³stico de causa provÃ¡vel antes de file-not-found no OUTPUT_EXECUTE
-'   - Adiciona alerta CI_PROOF_MNT_DATA_MISSING com correlaÃ§Ã£o compacta a sinais M10 e estado local.
-'   - Introduz parÃ¢metro opcional m10Signals no executor para contexto explÃ­cito vindo do orquestrador.
+'   - Lint em codeblock deteta token EXECUTE: mesmo em linha parcial ou com texto antes do token.
 ' - 2026-02-26 | Codex | Corrige dependÃªncias internas do SelfTest
 '   - Adiciona helpers locais EnsureFolder e WriteTextUTF8 usados pela bateria T1..T9.
 '   - Remove acoplamento implÃ­cito a helpers Private de outros mÃ³dulos.
@@ -34,8 +25,6 @@ Option Explicit
 ' - OutputOrders_TryExecute(...): executa ordens reconhecidas e devolve append para files_ops_log.
 ' - ParseExecuteDirectives(outputText, ...): extrai diretivas EXECUTE e devolve mÃ©tricas de lint opcional.
 ' - LineHasExecuteToken(rawLine): deteta intenÃ§Ã£o EXECUTE em linha (inclui variantes incompletas para lint).
-' - OutputOrders_TryExecute(...): executa ordens reconhecidas, com contexto opcional de sinais M10 para diagnÃ³stico.
-' - ParseExecuteDirectives(outputText): extrai diretivas EXECUTE fora de code fences.
 ' - ValidateCsvFileName(fileName): valida basename CSV contra path traversal e caracteres perigosos.
 ' - ResolveCsvSource(fileName, outputFolder, downloadedFiles): resolve origem do CSV em output/downloads.
 ' - OutputOrders_ResolveM10Context(m10Context, downloadedFiles): prioriza argumento opcional e fallback compacto em filesOps/downloadedFiles.
@@ -73,9 +62,6 @@ Public Function OutputOrders_TryExecute( _
     Dim validDirectiveCount As Long
     Dim codeBlockDirectiveCount As Long
     Set directives = ParseExecuteDirectives(outputText, validDirectiveCount, codeBlockDirectiveCount)
-
-    Dim normalizedM10Context As String
-    normalizedM10Context = OutputOrders_ResolveM10Context(m10Context, downloadedFiles)
 
     Call Debug_Registar(passo, promptId, "INFO", "", "OUTPUT_EXECUTE_FOUND", _
         "response_id=" & Trim$(responseId) & " | directives=" & CStr(directives.Count) & _
@@ -206,63 +192,11 @@ EH:
         "Err " & CStr(Err.Number) & ": " & Err.Description, "Reveja parser/importaÃ§Ã£o de Output Orders.")
 End Function
 
-
-
-Private Function OutputOrders_ResolveM10Context(ByVal m10Context As String, ByVal downloadedFiles As Variant) As String
-    Dim directCtx As String
-    directCtx = OutputOrders_NormalizeM10Context(m10Context)
-    If directCtx <> "none" Then
-        OutputOrders_ResolveM10Context = directCtx
-        Exit Function
-    End If
-
-    Dim fallbackCtx As String
-    fallbackCtx = OutputOrders_ExtractM10ContextFromDownloaded(downloadedFiles)
-    OutputOrders_ResolveM10Context = OutputOrders_NormalizeM10Context(fallbackCtx)
-End Function
-
-Private Function OutputOrders_ExtractM10ContextFromDownloaded(ByVal downloadedFiles As Variant) As String
-    On Error GoTo EH
-
-    If IsObject(downloadedFiles) Then Exit Function
-
-    Dim raw As String
-    raw = Trim$(CStr(downloadedFiles))
-    If raw = "" Then Exit Function
-
-    Dim token As Variant
-    Dim norm As String
-    norm = Replace(Replace(raw, vbCrLf, "|"), ";", "|")
-
-    For Each token In Split(norm, "|")
-        Dim t As String
-        t = Trim$(CStr(token))
-        If LCase$(Left$(t, 7)) = "m10ctx:" Then
-            OutputOrders_ExtractM10ContextFromDownloaded = Trim$(Mid$(t, 8))
-            Exit Function
-        End If
-    Next token
-
-    Exit Function
-EH:
-    OutputOrders_ExtractM10ContextFromDownloaded = ""
-End Function
-
-Private Function OutputOrders_NormalizeM10Context(ByVal m10Context As String) As String
-    Dim t As String
-    t = Trim$(m10Context)
-    If t = "" Then
-        OutputOrders_NormalizeM10Context = "none"
-        Exit Function
-    End If
-
-    t = Replace(t, vbCrLf, " | ")
-    t = Replace(t, vbCr, " | ")
-    t = Replace(t, vbLf, " | ")
-    OutputOrders_NormalizeM10Context = t
-End Function
-
-Public Function ParseExecuteDirectives(ByVal outputText As String) As Collection
+Public Function ParseExecuteDirectives( _
+    ByVal outputText As String, _
+    Optional ByRef validDirectiveCount As Long = 0, _
+    Optional ByRef codeBlockDirectiveCount As Long = 0 _
+) As Collection
     Dim out As New Collection
     Dim lines() As String
     lines = Split(Replace(outputText, vbCrLf, vbLf), vbLf)
@@ -309,7 +243,7 @@ Private Function LineHasExecuteToken(ByVal rawLine As String) As Boolean
     Set re = CreateObject("VBScript.RegExp")
     re.Global = False
     re.IgnoreCase = True
-    re.Pattern = "^<?\s*EXECUTE\s*:"
+    re.Pattern = "\bEXECUTE\s*:"
 
     LineHasExecuteToken = re.Test(t)
 End Function
@@ -871,6 +805,10 @@ Public Sub SelfTest_OutputOrders_RunAll()
     parserValid = 0: parserInCode = 0
     Call ParseExecuteDirectives("```" & vbLf & "EXECUTE: LOAD_CSV inside" & vbLf & "```", parserValid, parserInCode)
     SelfTest_Assert "T2c Lint detecta token EXECUTE incompleto em codeblock", parserValid = 0 And parserInCode = 1, tPass, tFail
+
+    parserValid = 0: parserInCode = 0
+    Call ParseExecuteDirectives("```" & vbLf & "x = ""EXECUTE: LOAD_CSV([inline.csv])""" & vbLf & "```", parserValid, parserInCode)
+    SelfTest_Assert "T2d Lint detecta token EXECUTE no meio da linha em codeblock", parserValid = 0 And parserInCode = 1, tPass, tFail
 
     Dim r3 As String
     r3 = OutputOrders_TryExecute(1, "SELFTEST/T3", "resp", "EXECUTE: DELETE_FILE([x.csv])", base, "")
