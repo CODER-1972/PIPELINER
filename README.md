@@ -712,7 +712,8 @@ O PIPELINER suporta execução controlada de ordens pós-output, após resposta 
   - `OUTPUT_EXECUTE_PARSED`
   - `OUTPUT_EXECUTE_UNKNOWN_CMD`
   - `OUTPUT_EXECUTE_INVALID_FILENAME`
-  - `OUTPUT_EXECUTE_FILE_NOT_FOUND`
+  - `OUTPUT_EXECUTE_FILE_NOT_FOUND` (inclui contexto: `requested_name`, hints estilo `M10_CI_TEXT_FILENAME_HINTS`, resumo de `downloadedFiles` e `outputFolder_items`)
+  - `CI_PROOF_MNT_DATA_MISSING` (sinal explícito de evidência CI sem artefacto local resolvido)
   - `OUTPUT_EXECUTE_CSV_PRECHECK`
   - `OUTPUT_EXECUTE_SHEET_CREATED`
   - `OUTPUT_EXECUTE_CSV_IMPORTED`

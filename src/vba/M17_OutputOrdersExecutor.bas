@@ -9,6 +9,13 @@ Option Explicit
 ' - Importar CSV para nova worksheet com logging completo em DEBUG e resumo para Seguimento.
 '
 ' AtualizaÃ§Ãµes:
+' - 2026-03-03 | Codex | CorreÃ§Ã£o de integraÃ§Ã£o para evitar dependÃªncia Private cross-mÃ³dulo
+'   - Substitui chamadas a Nz por helper local NzLocal para prevenir erro de compilaÃ§Ã£o no VBA.
+'   - MantÃ©m semÃ¢ntica de fallback String nos novos helpers de diagnÃ³stico.
+' - 2026-03-03 | Codex | ReforÃ§o de diagnÃ³stico no FILE_NOT_FOUND
+'   - Enriquece OUTPUT_EXECUTE_FILE_NOT_FOUND com nome pedido, hints, downloadedFiles e resumo da outputFolder.
+'   - Emite CI_PROOF_MNT_DATA_MISSING quando hÃ¡ sinais explÃ­citos de CI sem artefacto local resolvido.
+'   - MantÃ©m bloqueio atual sem importaÃ§Ã£o quando o CSV nÃ£o existe.
 ' - 2026-02-26 | Codex | Corrige dependÃªncias internas do SelfTest
 '   - Adiciona helpers locais EnsureFolder e WriteTextUTF8 usados pela bateria T1..T9.
 '   - Remove acoplamento implÃ­cito a helpers Private de outros mÃ³dulos.
@@ -31,6 +38,8 @@ Option Explicit
 ' - SelfTest_OutputOrders_RunAll(): bateria idempotente de testes T1..T9 do executor.
 ' - EnsureFolder(folderPath): cria pasta local para fixtures temporÃ¡rias dos selftests.
 ' - WriteTextUTF8(filePath, txt): escreve ficheiros UTF-8 usados nos selftests.
+' - BuildFileNotFoundContext(...): agrega contexto operacional para troubleshooting em OUTPUT_EXECUTE_FILE_NOT_FOUND.
+' - NzLocal(...): fallback local para Variant->String sem depender de helpers Private de outros mÃ³dulos.
 ' =============================================================================
 
 Private Const OUTPUT_ORDERS_MAX As Long = 3
@@ -88,9 +97,18 @@ Public Function OutputOrders_TryExecute( _
         Dim csvPath As String
         csvPath = ResolveCsvSource(fileName, outputFolder, downloadedFiles)
         If Trim$(csvPath) = "" Then
+            Dim notFoundCtx As String
+            notFoundCtx = BuildFileNotFoundContext(fileName, outputText, downloadedFiles, outputFolder)
+
             Call Debug_Registar(passo, promptId, "ERRO", "", "OUTPUT_EXECUTE_FILE_NOT_FOUND", _
-                "NÃ£o foi possÃ­vel resolver ficheiro CSV: " & fileName & " | outputFolder=" & outputFolder, _
+                "NÃ£o foi possÃ­vel resolver ficheiro CSV. " & notFoundCtx, _
                 "Confirme download/geraÃ§Ã£o do ficheiro e nome exato no EXECUTE.")
+
+            If HasCiSignalsWithoutArtifact(outputText) Then
+                Call Debug_Registar(passo, promptId, "ALERTA", "", "CI_PROOF_MNT_DATA_MISSING", _
+                    "Sinais de execuÃ§Ã£o CI sem artefacto local resolvido. " & notFoundCtx, _
+                    "Garantir escrita/citaÃ§Ã£o do ficheiro em /mnt/data e download para OUTPUT Folder.")
+            End If
             GoTo NextDirective
         End If
 
@@ -319,6 +337,163 @@ Private Function ResolveCsvFromDownloaded(ByVal fileName As String, ByVal output
     Exit Function
 EH:
     ResolveCsvFromDownloaded = ""
+End Function
+
+Private Function BuildFileNotFoundContext( _
+    ByVal requestedName As String, _
+    ByVal outputText As String, _
+    ByVal downloadedFiles As Variant, _
+    ByVal outputFolder As String _
+) As String
+    Dim hints As String
+    hints = ExtractHintsFromOutputText(outputText)
+    If Trim$(hints) = "" Then hints = "(n/d)"
+
+    BuildFileNotFoundContext = _
+        "requested_name=" & requestedName & _
+        " | M10_CI_TEXT_FILENAME_HINTS=" & hints & _
+        " | downloadedFiles=" & SummarizeDownloadedFiles(downloadedFiles) & _
+        " | outputFolder=" & outputFolder & _
+        " | outputFolder_items=" & SummarizeOutputFolder(outputFolder, 6)
+End Function
+
+Private Function ExtractHintsFromOutputText(ByVal outputText As String) As String
+    On Error GoTo EH
+
+    Dim dict As Object
+    Set dict = CreateObject("Scripting.Dictionary")
+
+    Dim re As Object, matches As Object, m As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = True
+    re.IgnoreCase = True
+    re.Pattern = "(?:sandbox:/mnt/data/)?([A-Za-z0-9_\-\.]+\.(csv|tsv|txt|json|xlsx|pdf))"
+
+    Set matches = re.Execute(NzLocal(outputText))
+    For Each m In matches
+        Dim fn As String
+        fn = Trim$(CStr(m.SubMatches(0)))
+        If fn <> "" Then
+            If Not dict.Exists(LCase$(fn)) Then dict.Add LCase$(fn), fn
+        End If
+    Next m
+
+    If dict.Count = 0 Then Exit Function
+
+    Dim outTxt As String
+    Dim k As Variant
+    For Each k In dict.Keys
+        outTxt = outTxt & IIf(outTxt = "", "", " | ") & CStr(dict(k))
+        If Len(outTxt) > 320 Then Exit For
+    Next k
+
+    ExtractHintsFromOutputText = outTxt
+    Exit Function
+EH:
+    ExtractHintsFromOutputText = ""
+End Function
+
+Private Function SummarizeDownloadedFiles(ByVal downloadedFiles As Variant) As String
+    On Error GoTo EH
+
+    Dim outTxt As String
+    Dim n As Long
+
+    If IsObject(downloadedFiles) Then
+        Dim it As Variant
+        For Each it In downloadedFiles
+            Dim itemText As String
+            itemText = Trim$(GetBaseName(CStr(it)))
+            If itemText <> "" Then
+                n = n + 1
+                outTxt = outTxt & IIf(outTxt = "", "", " | ") & itemText
+                If n >= 8 Then Exit For
+            End If
+        Next it
+        SummarizeDownloadedFiles = IIf(outTxt = "", "(vazio)", outTxt)
+        Exit Function
+    End If
+
+    Dim token As Variant
+    Dim norm As String
+    norm = Replace(Replace(NzLocal(CStr(downloadedFiles)), ";", "|"), vbCrLf, "|")
+    For Each token In Split(norm, "|")
+        Dim t As String
+        t = Trim$(CStr(token))
+        If t <> "" Then
+            If LCase$(Left$(t, 3)) = "dl:" Or LCase$(Left$(t, 4)) = "out:" Or LCase$(Left$(t, 3)) = "sv:" Then
+                t = Trim$(Mid$(t, InStr(1, t, ":", vbBinaryCompare) + 1))
+            End If
+            t = GetBaseName(t)
+            If t <> "" Then
+                n = n + 1
+                outTxt = outTxt & IIf(outTxt = "", "", " | ") & t
+                If n >= 8 Then Exit For
+            End If
+        End If
+    Next token
+
+    SummarizeDownloadedFiles = IIf(outTxt = "", "(vazio)", outTxt)
+    Exit Function
+EH:
+    SummarizeDownloadedFiles = "(n/d)"
+End Function
+
+Private Function SummarizeOutputFolder(ByVal outputFolder As String, Optional ByVal maxItems As Long = 6) As String
+    On Error GoTo EH
+
+    If Trim$(outputFolder) = "" Then
+        SummarizeOutputFolder = "(sem pasta)"
+        Exit Function
+    End If
+
+    If Dir$(outputFolder, vbDirectory) = "" Then
+        SummarizeOutputFolder = "(inexistente)"
+        Exit Function
+    End If
+
+    Dim outTxt As String
+    Dim n As Long
+    Dim fileName As String
+    fileName = Dir$(BuildPath(outputFolder, "*"), vbNormal)
+    Do While fileName <> ""
+        n = n + 1
+        outTxt = outTxt & IIf(outTxt = "", "", " | ") & fileName
+        If n >= maxItems Then Exit Do
+        fileName = Dir$()
+    Loop
+
+    SummarizeOutputFolder = IIf(outTxt = "", "(sem ficheiros)", outTxt)
+    Exit Function
+EH:
+    SummarizeOutputFolder = "(erro ao listar)"
+End Function
+
+Private Function HasCiSignalsWithoutArtifact(ByVal outputText As String) As Boolean
+    Dim t As String
+    t = LCase$(NzLocal(outputText))
+    If t = "" Then Exit Function
+
+    HasCiSignalsWithoutArtifact = _
+        (InStr(1, t, "sandbox:/mnt/data", vbTextCompare) > 0) Or _
+        (InStr(1, t, "/mnt/data/", vbTextCompare) > 0) Or _
+        (InStr(1, t, "container_file_citation", vbTextCompare) > 0) Or _
+        (InStr(1, t, "code_interpreter", vbTextCompare) > 0) Or _
+        (InStr(1, t, "ci_output_file", vbTextCompare) > 0) Or _
+        (InStr(1, t, "file_tsv:", vbTextCompare) > 0) Or _
+        (InStr(1, t, "output_file:", vbTextCompare) > 0) Or _
+        (InStr(1, t, "prova_ci_start", vbTextCompare) > 0)
+End Function
+
+
+Private Function NzLocal(ByVal v As Variant, Optional ByVal fallback As String = "") As String
+    If IsError(v) Then
+        NzLocal = fallback
+    ElseIf IsNull(v) Or IsEmpty(v) Then
+        NzLocal = fallback
+    Else
+        NzLocal = CStr(v)
+    End If
 End Function
 
 Public Sub PrecheckCsv_BomAndCrLf(ByVal csvPath As String, ByRef bomPass As Boolean, ByRef crlfPass As Boolean, ByRef colsHint As Long)
