@@ -555,5 +555,8 @@ Se começar a ficar demasiado grande:
 
 - Em declarações de variáveis locais/globais (`Dim/Private/Public`), evitar identificadores com nomes reservados/funções intrínsecas do VBA (ex.: `Fix`, `Left`, `Date`, `Name`, `Input`, `Shell`); usar prefixos semânticos (`rcSummary`, `outFix`, `tmpDate`) para prevenir `Compile error: Syntax error` no VBE.
 
+- Em mapeamentos de funcionalidade no DEBUG, modelar `ACAO EM CURSO` como lista de ações acumuláveis (não exclusivas) e anexar contexto em formato `chave=valor`; evitar lógica de primeiro-match que esconda etapas simultâneas do mesmo evento.
 
-- Em selftests/fixtures VBA com JSON inline em literais de string, duplicar sempre aspas (`""`) em vez de escapes C-style; literais como `"{"type":"x"}"` causam `Compile error` ou string inválida no VBE e devem ser escritos como `"{""type"":""x""}"`.
+- Em extração de contexto para DEBUG, aceitar tanto `chave=valor` como `chave:valor` (normalizando para `chave=valor`) e privilegiar chaves operacionais objetivas (`file_id`, `container_id`, `http_status`, `elapsed_ms`) para facilitar troubleshooting.
+
+- Em mapeamento de ações do DEBUG, privilegiar primeiro regras explícitas por parâmetro (ex.: `M10_*`, `M05_*`, `OUTPUT_EXECUTE_*`) e só depois regras genéricas por substring para reduzir falsos positivos de interpretação.
