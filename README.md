@@ -229,7 +229,7 @@ Capacidades principais:
 - suporte a wildcard em `FILES:` (ex.: `GUIA_DE_ESTILO*.pdf`), com tentativa inicial por `Dir` e fallback de correspondência flexível para nomes com `_`, `-` e espaço;
 - upload para `/v1/files` com reutilização por hash (quando configurado);
 - rastreio por ficheiro no `DEBUG` com etiqueta `FILES_ITEM_TRACE` (1 linha por item declarado, incluindo `full_path`, `status`, `mode`, `file_id` quando existir e diagnóstico pedagógico: `problema_tipo`, `explicacao`, `acao`);
-- quando o bloco/célula de `Operacoes com ficheiros` não estiver disponível no catálogo, o sistema regista `CATALOG_FILES_OPS_MISSING` (ALERTA) no DEBUG com `promptId` + referência de bloco/linha, sem bloquear a execução (compatibilidade com catálogos antigos); o alerta é emitido uma única vez por prompt para evitar ruído.
+- quando o bloco/célula de `Operacoes com ficheiros` não estiver disponível no catálogo **e o prompt declarar `FILES:`**, o sistema regista `CATALOG_FILES_OPS_MISSING` (ALERTA) no DEBUG com `promptId` + referência de bloco/linha, sem bloquear a execução (compatibilidade com catálogos antigos); o alerta é emitido uma única vez por prompt para evitar ruído.
 - fallback entre engines/perfis de upload.
 
 Nota de compatibilidade importante:

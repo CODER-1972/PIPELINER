@@ -8,16 +8,16 @@ Option Explicit
 ' - Aplicar effective_mode, robustez multipart e utilitários de ficheiros para pipeline.
 '
 ' Atualizações:
-' - 2026-03-03 | Codex | Trace tecnico para anexacao text_embed
-'   - Calcula len_chars e hash_short estavel (FNV-1a normalizado) apos extracao bem-sucedida.
-'   - Regista evento `TEXT_EMBED_TRACE` no DEBUG com name/len_chars/hash_short para troubleshooting rapido.
-' - 2026-03-03 | Codex | Emite trace final apos todos os fallbacks de modo FILES
-'   - Move emissao de `FILES_MODE_OVERRIDE_TRACE` para o fecho do item, garantindo effective_mode final.
-'   - Cobre overrides tardios (ex.: pdf_upload->text_embed por fallback de conversao/overflow).
-' - 2026-03-03 | Codex | Normaliza trace de override de modo por item FILES
-'   - Introduz evento `FILES_MODE_OVERRIDE_TRACE` com requested/resolved/raw_mode/effective_mode/reason.
-'   - Emite trace sempre que modo pedido diverge do modo aplicado, incluindo overrides nao-Office.
-'   - Mantem `DOCX_INPUTFILE_OVERRIDDEN` por retrocompatibilidade com mensagem curta para consultar o trace.
+' - 2026-03-03 | Codex | Diagnostico para ausencia da celula de operacoes FILES no catalogo
+'   - Regista `CATALOG_FILES_OPS_MISSING` (ALERTA) quando nao localiza/escreve a celula de operacoes esperada.
+'   - Inclui promptId e referencia de bloco/linha no catalogo para triagem rapida.
+'   - Mantem execucao nao-bloqueante para compatibilidade com catalogos legados.
+' - 2026-03-03 | Codex | Evita alerta CATALOG_FILES_OPS_MISSING quando nao ha diretivas FILES
+'   - Move validacao/log da celula de operacoes para depois do parse de diretivas.
+'   - Mantem diagnostico apenas quando prompt realmente declara FILES:, reduzindo ruido no DEBUG.
+' - 2026-03-03 | Codex | Evita duplicacao de ALERTA CATALOG_FILES_OPS_MISSING por prompt
+'   - Garante emissao unica do alerta quando celula de operacoes nao e localizada.
+'   - Mantem alerta especifico quando a escrita falha, sem bloquear execucao.
 ' - 2026-03-01 | Codex | Diagnostico pedagogico por ficheiro na linha FILES_ITEM_TRACE
 '   - Diferencia causas provaveis (nao encontrado, ambiguidade, upload, formato, text_embed vazio, limites).
 '   - Adiciona problema_tipo, explicacao e acao recomendada em cada linha de trace por ficheiro.
@@ -321,6 +321,11 @@ Public Function Files_PrepararContextoDaPrompt( _
         If Not celOps Is Nothing Then celOps.value = ""
         outInputJsonLiteralFinal = inputJsonLiteralBase
         Exit Function
+    End If
+
+    If celOps Is Nothing Then
+        Call Files_LogCatalogOpsMissing(promptId, catalogRef, opsRef, "celula de operacoes nao localizada")
+        opsMissingLogged = True
     End If
 
     Dim haRequired As Boolean

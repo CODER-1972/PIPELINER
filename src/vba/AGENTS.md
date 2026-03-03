@@ -560,10 +560,6 @@ Se começar a ficar demasiado grande:
 - Em extração de contexto para DEBUG, aceitar tanto `chave=valor` como `chave:valor` (normalizando para `chave=valor`) e privilegiar chaves operacionais objetivas (`file_id`, `container_id`, `http_status`, `elapsed_ms`) para facilitar troubleshooting.
 
 - Em mapeamento de ações do DEBUG, privilegiar primeiro regras explícitas por parâmetro (ex.: `M10_*`, `M05_*`, `OUTPUT_EXECUTE_*`) e só depois regras genéricas por substring para reduzir falsos positivos de interpretação.
-
-- Em revisões de logging DEBUG, validar cobertura dos parâmetros reais emitidos por `Debug_Registar` (varredura automática) para garantir `UNMAPPED=0` antes de fechar PR.
-- Em selftests/fixtures VBA com JSON inline em literais de string, duplicar sempre aspas (`""`) em vez de escapes C-style; literais como `"{"type":"x"}"` causam `Compile error` ou string inválida no VBE e devem ser escritos como `"{""type"":""x""}"`.
-
-- Em eventos de rastreio técnico no DEBUG (ex.: `TEXT_EMBED_TRACE`), padronizar chaves operacionais estáveis (`name`, `len_chars`, `hash_short`) para facilitar filtros/comparação automática entre runs e evitar deriva de nomenclatura (`len`/`hash`).
-
-- Em mapeamento de ações do DEBUG, privilegiar primeiro regras explícitas por parâmetro (ex.: `M10_*`, `M05_*`, `OUTPUT_EXECUTE_*`) e só depois regras genéricas por substring para reduzir falsos positivos de interpretação.
+- No fluxo de FILES do catálogo, quando a célula esperada de `Operacoes com ficheiros` não puder ser localizada/escrita, registar `CATALOG_FILES_OPS_MISSING` como `ALERTA` no DEBUG com `promptId` e referência de bloco/linha; manter execução não bloqueante para compatibilidade com catálogos legados e incluir sugestão curta para preencher o bloco padrão de 5 linhas.
+- Em alertas de troubleshooting de catálogo (ex.: `CATALOG_FILES_OPS_MISSING`), deduplicar emissão por prompt/execução para evitar ruído no DEBUG; manter novo alerta apenas quando o motivo operacional muda (ex.: não localizado vs falha de escrita).
+- No diagnóstico `CATALOG_FILES_OPS_MISSING`, só emitir ALERTA quando a prompt efetivamente declara `FILES:`; evitar alertas em prompts sem diretivas de ficheiro para não gerar falso ruído operacional.
