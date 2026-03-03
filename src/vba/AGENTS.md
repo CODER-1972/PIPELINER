@@ -561,3 +561,7 @@ Se começar a ficar demasiado grande:
 
 - Em mapeamento de ações do DEBUG, privilegiar primeiro regras explícitas por parâmetro (ex.: `M10_*`, `M05_*`, `OUTPUT_EXECUTE_*`) e só depois regras genéricas por substring para reduzir falsos positivos de interpretação.
 - Em lint de `EXECUTE` no parser de Output Orders, distinguir **parsing executável** de **intenção em codeblock**: fora de fences contar apenas diretivas válidas; dentro de fences detetar token `EXECUTE:` mesmo em formato incompleto para diagnóstico, sem promover execução.
+
+- Em diagnósticos compactos de correlação M10 (ex.: `CI_PROOF_MNT_DATA_MISSING`), derivar `eligible` por sinais operacionais robustos (`selected=SIM/NAO`, `eligible=SIM/NAO`) e não por campos semânticos genéricos como `motivo`, para evitar falsos positivos/negativos em troubleshooting.
+- No fluxo de FILES do catálogo, quando a célula esperada de `Operacoes com ficheiros` não puder ser localizada/escrita, registar `CATALOG_FILES_OPS_MISSING` como `ALERTA` no DEBUG com `promptId` e referência de bloco/linha; manter execução não bloqueante para compatibilidade com catálogos legados e incluir sugestão curta para preencher o bloco padrão de 5 linhas.
+- Em alertas de troubleshooting de catálogo (ex.: `CATALOG_FILES_OPS_MISSING`), deduplicar emissão por prompt/execução para evitar ruído no DEBUG; manter novo alerta apenas quando o motivo operacional muda (ex.: não localizado vs falha de escrita).

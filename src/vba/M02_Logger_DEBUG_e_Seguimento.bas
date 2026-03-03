@@ -10,6 +10,10 @@ Option Explicit
 ' Atualizações:
 ' - 2026-03-03 | Codex | Mapeia eventos de lint do Output Orders
 '   - Adiciona cobertura para EXECUTE_LINT_MULTIPLE e EXECUTE_LINT_IN_CODEBLOCK na deducao de acao em curso.
+' - 2026-03-03 | Codex | Mapeia novo alerta CI_PROOF_MNT_DATA_MISSING na coluna de acao
+'   - Evita descricao generica para diagnostico de ausencia de artefacto CSV com sinais M10.
+' - 2026-03-03 | Codex | Expande contexto M10 extraido para CI_PROOF_MNT_DATA_MISSING
+'   - Adiciona chaves de falha de download/listagem para manter acao em curso especifica e auditavel.
 ' - 2026-03-03 | Codex | Cobertura ampliada de acoes especificas no DEBUG
 '   - Reforca mapeamento por sinais de parametro/contexto para suportar combinacoes de acoes no mesmo registo.
 '   - Amplia extracao de contexto com pares chave=valor e chave:valor para diagnostico mais objetivo.
@@ -265,7 +269,7 @@ Private Function Debug_DeduzirAcaoEmCurso(ByVal parametro As String, ByVal probl
             Call Debug_AcaoAdd(acoes, "Validacao do contrato de File Output")
             Call Debug_AcaoAdd(acoes, "Resolucao do ficheiro esperado no OUTPUT Folder")
 
-        Case "OUTPUT_EXECUTE_FOUND", "OUTPUT_EXECUTE_PARSED", "OUTPUT_EXECUTE_UNKNOWN_CMD", "OUTPUT_EXECUTE_INVALID_FILENAME", "OUTPUT_EXECUTE_FILE_NOT_FOUND", "OUTPUT_EXECUTE_CSV_PRECHECK", "OUTPUT_EXECUTE_CSV_BOM_FAIL", "OUTPUT_EXECUTE_CSV_CRLF_IN_FIELDS", "OUTPUT_EXECUTE_SHEET_CREATED", "OUTPUT_EXECUTE_IMPORT_FAIL", "OUTPUT_EXECUTE_CSV_IMPORTED", "OUTPUT_EXECUTE_VERIFIED"
+        Case "OUTPUT_EXECUTE_FOUND", "OUTPUT_EXECUTE_PARSED", "OUTPUT_EXECUTE_UNKNOWN_CMD", "OUTPUT_EXECUTE_INVALID_FILENAME", "OUTPUT_EXECUTE_FILE_NOT_FOUND", "OUTPUT_EXECUTE_CSV_PRECHECK", "OUTPUT_EXECUTE_CSV_BOM_FAIL", "OUTPUT_EXECUTE_CSV_CRLF_IN_FIELDS", "OUTPUT_EXECUTE_SHEET_CREATED", "OUTPUT_EXECUTE_IMPORT_FAIL", "OUTPUT_EXECUTE_CSV_IMPORTED", "OUTPUT_EXECUTE_VERIFIED", "CI_PROOF_MNT_DATA_MISSING"
             Call Debug_AcaoAdd(acoes, "Execucao da diretiva OUTPUT_EXECUTE")
             Call Debug_AcaoAdd(acoes, "Importacao/validacao de CSV em worksheet dedicada")
 
@@ -360,6 +364,10 @@ Private Sub Debug_AplicarAcoesPorSinal(ByRef acoes As String, ByVal p As String,
             Call Debug_AcaoAdd(acoes, "Checklist pre-envio do payload (tools/input/tamanho)")
         Case "M05_JSON_PREFLIGHT"
             Call Debug_AcaoAdd(acoes, "Preflight de validade JSON antes do HTTP")
+        Case "CI_PROOF_MNT_DATA_MISSING"
+            Call Debug_AcaoAdd(acoes, "Correlacao de sinais M10 com ausencia de CSV para OUTPUT_EXECUTE")
+            Call Debug_AcaoAdd(acoes, "Estimativa de causa provavel (/mnt/data sem artefacto elegivel)")
+
         Case "OUTPUT_EXECUTE_CSV_PRECHECK"
             Call Debug_AcaoAdd(acoes, "Pre-validacao de encoding/BOM e estrutura CSV")
         Case "OUTPUT_EXECUTE_VERIFIED"
@@ -431,7 +439,7 @@ Private Function Debug_ExtrairDetalheOperacional(ByVal problema As String, ByVal
     Dim i As Long
 
     fonte = Trim$(problema & " | " & sugestao)
-    keys = Array("filename", "file", "full_path", "resolvedPath", "resolved_path", "inputFolder", "input_folder", "outputFolder", "output_folder", "stage", "endpoint", "prompt", "promptId", "pipeline", "pipeline_name", "container_id", "file_id", "status", "http_status", "httpStatus", "engine", "profile", "effective_mode", "mode_effective", "mode", "bytes", "created_at", "elapsed_ms", "payload_len", "response_id", "cause_hint", "confidence", "dlErr", "retry_outcome")
+    keys = Array("filename", "file", "exec_file", "full_path", "resolvedPath", "resolved_path", "inputFolder", "input_folder", "outputFolder", "output_folder", "output_exists", "stage", "endpoint", "prompt", "promptId", "pipeline", "pipeline_name", "container_id", "file_id", "status", "http_status", "httpStatus", "engine", "profile", "effective_mode", "mode_effective", "mode", "bytes", "created_at", "elapsed_ms", "payload_len", "response_id", "cause_hint", "confidence", "dlErr", "retry_outcome", "has_no_citation", "has_container_empty", "has_download_nofile", "has_marker_missing", "has_download_fail", "has_list_fail", "eligible")
 
     For i = LBound(keys) To UBound(keys)
         detalhe = Debug_ExtrairDetalhePorChave(fonte, CStr(keys(i)))
