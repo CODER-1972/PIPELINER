@@ -9,6 +9,11 @@ Option Explicit
 ' - Fornecer payload compacto (DetailJsonCompact) com orÃ§amento configurÃ¡vel na folha Config.
 '
 ' AtualizaÃ§Ãµes:
+' - 2026-03-04 | Codex | Hardening de contrato com prova minima textual obrigatoria
+'   - Torna parsing de diagnostic_contract resiliente a aliases comuns (underscore/hifen/espaco).
+'   - Exige marcadores minimos de prova (CSV_EXISTE_EM_MNT_DATA, FILE_CSV, MNT_DATA_LIST) quando ha intencao CSV/EXECUTE.
+'   - Reforca CONTRACT_SUGGEST_ENABLE com contexto (modo/processo) e sugestao prescritiva.
+'   - Valida consistencia de estado (CSV_EXISTE_EM_MNT_DATA afirmativo quando EXPORT_OK_CSV/LOAD_CSV indicam sucesso).
 ' - 2026-03-04 | Codex | Diff determinÃ­stico PROVA_CI e extraÃ§Ã£o pÃºblica do bloco
 '   - Adiciona diff formal expected-vs-prova no contrato (R5_PROVA_EXPECTED_DIFF).
 '   - ExpÃµe ContractDiag_ExtractProvaCiBlock para reutilizaÃ§Ã£o no bundle de diagnÃ³sticos.
@@ -70,10 +75,7 @@ Public Sub ContractDiag_EvaluateStep( _
     outDetailJsonCompact = "{}"
 
     Dim contractMode As String
-    contractMode = LCase$(Trim$(ContractDiag_ConfigExtraGet(configExtraText, "diagnostic_contract")))
-    If contractMode = "" Then
-        contractMode = LCase$(Trim$(ContractDiag_ConfigExtraGet(configExtraText, "contract_mode")))
-    End If
+    contractMode = LCase$(Trim$(ContractDiag_GetRequestedContractMode(configExtraText)))
 
     If contractMode <> "ci_csv_v1" Then
         Call ContractDiag_LogEvent(passo, promptId, "INFO", "CONTRACT_EVAL_START", runId, "SEM_CONTRATO", "OK", "C0_NO_CONTRACT", _
@@ -82,11 +84,20 @@ Public Sub ContractDiag_EvaluateStep( _
             "{""contract"":""SEM_CONTRATO""}")
 
         If InStr(1, outputText, EXPECTED_FLOW_CSV, vbTextCompare) > 0 Or _
-           InStr(1, outputText, "LOAD_CSV", vbTextCompare) > 0 Then
+           InStr(1, outputText, "LOAD_CSV", vbTextCompare) > 0 Or _
+           InStr(1, outputText, "EXECUTE:", vbTextCompare) > 0 Then
+            Dim lintContext As String
+            lintContext = "{" & _
+                """hint"":""csv_or_execute_without_contract""," & _
+                """hasFlowTemplateCsvMention"":" & LCase$(CStr(InStr(1, outputText, EXPECTED_FLOW_CSV, vbTextCompare) > 0)) & "," & _
+                """hasExecute"":" & LCase$(CStr(InStr(1, outputText, "EXECUTE:", vbTextCompare) > 0)) & "," & _
+                """hasLoadCsv"":" & LCase$(CStr(InStr(1, outputText, "LOAD_CSV", vbTextCompare) > 0)) & "," & _
+                """processModeHint"":""" & ContractDiag_JsonEscape(ContractDiag_ConfigExtraGet(configExtraText, "process_mode")) & """" & _
+                "}"
             Call ContractDiag_LogEvent(passo, promptId, "ALERTA", "CONTRACT_SUGGEST_ENABLE", runId, "SEM_CONTRATO", "OK", "C0_SUGGEST", _
                 "Este passo menciona CSV/LOAD_CSV sem contrato ativo.", _
-                "SugestÃ£o: ativar diagnostic_contract: ci_csv_v1 para reduzir risco de falso sucesso.", _
-                "{""hint"":""csv_or_execute_without_contract""}")
+                "SugestÃ£o: ativar diagnostic_contract: ci_csv_v1 e exigir prova textual mÃ­nima (CSV_EXISTE_EM_MNT_DATA, FILE_CSV, MNT_DATA_LIST).", _
+                lintContext)
         End If
 
         Call ContractDiag_LogEvent(passo, promptId, "INFO", "CONTRACT_STATE_DECISION", runId, "SEM_CONTRATO", "OK", "C0_NO_CONTRACT", _
@@ -103,6 +114,10 @@ Public Sub ContractDiag_EvaluateStep( _
     Dim hasProva As Boolean, hasFound As Boolean, hasExport As Boolean
     Dim foundCsv As String, exportOk As String
     Dim hasCitation As Boolean, hasExecuteLoadCsv As Boolean, provaHasCsv As Boolean
+    Dim hasCsvInMntData As Boolean, csvInMntData As String
+    Dim hasFileCsv As Boolean, fileCsvName As String
+    Dim hasMntDataList As Boolean, mntDataListText As String
+    Dim hasCsvIntent As Boolean
 
     hasProva = ContractDiag_HasValidProva(outputText)
     hasFound = ContractDiag_TryReadBoolMarker(outputText, "FOUND_FLOW_TEMPLATE_CSV", foundCsv)
@@ -111,6 +126,14 @@ Public Sub ContractDiag_EvaluateStep( _
                   (InStr(1, rawResponseJson, """type"":""container_file_citation""", vbTextCompare) > 0)
     hasExecuteLoadCsv = (InStr(1, outputText, "EXECUTE:", vbTextCompare) > 0 And InStr(1, outputText, "LOAD_CSV", vbTextCompare) > 0)
     provaHasCsv = ContractDiag_ProvaHasFlowTemplateCsv(outputText)
+    hasCsvInMntData = ContractDiag_TryReadMarkerText(outputText, "CSV_EXISTE_EM_MNT_DATA", csvInMntData)
+    hasFileCsv = ContractDiag_TryReadMarkerText(outputText, "FILE_CSV", fileCsvName)
+    hasMntDataList = ContractDiag_TryReadMarkerText(outputText, "MNT_DATA_LIST", mntDataListText)
+    hasCsvIntent = hasExecuteLoadCsv Or (LCase$(foundCsv) = "true") Or (LCase$(exportOk) = "true") Or _
+        (InStr(1, outputText, "FILE_CSV:", vbTextCompare) > 0) Or (InStr(1, outputText, "CSV_EXISTE_EM_MNT_DATA", vbTextCompare) > 0)
+
+    Dim csvExistsAffirmative As Boolean
+    csvExistsAffirmative = ContractDiag_IsAffirmativeMarker(csvInMntData)
 
     outDetailJsonCompact = "{" & _
         """hasProvaCi"":" & LCase$(CStr(hasProva)) & "," & _
@@ -118,7 +141,15 @@ Public Sub ContractDiag_EvaluateStep( _
         """exportOkCsv"":" & JsonBool(exportOk) & "," & _
         """hasCitation"":" & LCase$(CStr(hasCitation)) & "," & _
         """hasExecuteLoadCsv"":" & LCase$(CStr(hasExecuteLoadCsv)) & "," & _
-        """provaHasCsv"":" & LCase$(CStr(provaHasCsv)) & "}"
+        """provaHasCsv"":" & LCase$(CStr(provaHasCsv)) & "," & _
+        """hasCsvInMntData"":" & LCase$(CStr(hasCsvInMntData)) & "," & _
+        """csvExistsAffirmative"":" & LCase$(CStr(csvExistsAffirmative)) & "," & _
+        """csvInMntData"":""" & ContractDiag_JsonEscape(csvInMntData) & """," & _
+        """hasFileCsv"":" & LCase$(CStr(hasFileCsv)) & "," & _
+        """fileCsv"":""" & ContractDiag_JsonEscape(fileCsvName) & """," & _
+        """hasMntDataList"":" & LCase$(CStr(hasMntDataList)) & "," & _
+        """mntDataListLen"":" & CStr(Len(mntDataListText)) & "," & _
+        """hasCsvIntent"":" & LCase$(CStr(hasCsvIntent)) & "}"
     outDetailJsonCompact = ContractDiag_ApplyDetailBudget(outDetailJsonCompact)
 
     Call ContractDiag_LogEvent(passo, promptId, "INFO", "CONTRACT_MARKERS_PARSED", runId, outContractMode, "EM_ANALISE", "C1_PARSE", _
@@ -129,6 +160,32 @@ Public Sub ContractDiag_EvaluateStep( _
         outRuleCode = "C1_MISSING_MARKER"
         outProblem = "Faltam marcadores obrigatÃ³rios do contrato (PROVA_CI/FOUND/EXPORT)."
         outSuggestion = "Pedir resposta com todos os marcadores obrigatÃ³rios e repetir o passo."
+        GoTo Finalize
+    End If
+
+    Call ContractDiag_LogRuleResult(passo, promptId, runId, outContractMode, "R1B_MIN_PROOF_MARKERS", _
+        IIf((Not hasCsvIntent) Or (hasCsvInMntData And hasFileCsv And hasMntDataList), "PASS", "FAIL"), _
+        "Valida prova textual mÃ­nima (CSV_EXISTE_EM_MNT_DATA, FILE_CSV, MNT_DATA_LIST) quando hÃ¡ intenÃ§Ã£o CSV.", outDetailJsonCompact)
+
+    If hasCsvIntent Then
+        If (Not hasCsvInMntData) Or (Not hasFileCsv) Or (Not hasMntDataList) Then
+            outStepState = "BLOCKED"
+            outRuleCode = "C1B_MIN_PROOF_MARKERS_MISSING"
+            outProblem = "Faltam marcadores mÃ­nimos de prova textual para output CSV em CI."
+            outSuggestion = "Incluir no output final: CSV_EXISTE_EM_MNT_DATA: SIM/NAO; FILE_CSV: <basename.csv>; MNT_DATA_LIST: <nome(bytes=...) ; ...>."
+            GoTo Finalize
+        End If
+    End If
+
+    Call ContractDiag_LogRuleResult(passo, promptId, runId, outContractMode, "R1C_STATE_CONSISTENCY", _
+        IIf(((LCase$(exportOk) = "true") Or hasExecuteLoadCsv) And (Not csvExistsAffirmative), "FAIL", "PASS"), _
+        "Valida consistÃªncia entre sucesso CSV e marcador CSV_EXISTE_EM_MNT_DATA.", outDetailJsonCompact)
+
+    If ((LCase$(exportOk) = "true") Or hasExecuteLoadCsv) And (Not csvExistsAffirmative) Then
+        outStepState = "FAIL"
+        outRuleCode = "C1C_CSV_STATE_INCONSISTENT"
+        outProblem = "Output reporta sucesso CSV/EXECUTE, mas CSV_EXISTE_EM_MNT_DATA nÃ£o confirma estado afirmativo."
+        outSuggestion = "Confirmar existÃªncia real do CSV em /mnt/data e corrigir marcador para SIM antes de emitir EXECUTE/LOAD_CSV."
         GoTo Finalize
     End If
 
@@ -353,6 +410,42 @@ Private Function ContractDiag_ConfigExtraGet(ByVal configExtraText As String, By
             End If
         End If
     Next i
+End Function
+
+Private Function ContractDiag_GetRequestedContractMode(ByVal configExtraText As String) As String
+    Dim candidates As Variant
+    candidates = Array("diagnostic_contract", "contract_mode", "diagnostic-contract", "diagnostic contract", "diagnostic_contract_mode")
+
+    Dim i As Long
+    For i = LBound(candidates) To UBound(candidates)
+        Dim v As String
+        v = Trim$(ContractDiag_ConfigExtraGet(configExtraText, CStr(candidates(i))))
+        If v <> "" Then
+            ContractDiag_GetRequestedContractMode = v
+            Exit Function
+        End If
+    Next i
+End Function
+
+Private Function ContractDiag_IsAffirmativeMarker(ByVal rawValue As String) As Boolean
+    Dim v As String
+    v = UCase$(Trim$(rawValue))
+    ContractDiag_IsAffirmativeMarker = (v = "SIM" Or v = "TRUE" Or v = "YES" Or v = "1" Or v = "OK" Or v = "Y" Or v = "S")
+End Function
+
+Private Function ContractDiag_TryReadMarkerText(ByVal outputText As String, ByVal marker As String, ByRef outVal As String) As Boolean
+    Dim re As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = False
+    re.IgnoreCase = True
+    re.Pattern = "(^|\\n)\\s*" & marker & "\\s*:\\s*([^\\n]+)"
+
+    If re.Test(outputText) Then
+        Dim m As Object
+        Set m = re.Execute(outputText)(0)
+        outVal = Trim$(CStr(m.SubMatches(1)))
+        ContractDiag_TryReadMarkerText = True
+    End If
 End Function
 
 Private Function ContractDiag_RunId() As String
@@ -590,25 +683,33 @@ Public Sub SelfTest_ContractDiagnostics_RunAll()
     Call ContractDiag_EvaluateStep(2, "SELFTEST/B", "diagnostic_contract: ci_csv_v1", "FOUND_FLOW_TEMPLATE_CSV: true" & vbLf & "EXPORT_OK_CSV: true", "", hasContract, cMode, st, rule, pr, sg, dj)
     If UCase$(st) <> "BLOCKED" Then Err.Raise 5, , "T2 fail: faltando PROVA_CI deveria BLOCKED"
 
-    Call ContractDiag_EvaluateStep(3, "SELFTEST/C", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/FLOW_TEMPLATE.csv" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: false" & vbLf & "EXPORT_OK_CSV: true" & vbLf & "EXECUTE: LOAD_CSV(FLOW_TEMPLATE.csv)", "", hasContract, cMode, st, rule, pr, sg, dj)
+    Call ContractDiag_EvaluateStep(3, "SELFTEST/C", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/FLOW_TEMPLATE.csv" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: false" & vbLf & "EXPORT_OK_CSV: true" & vbLf & "CSV_EXISTE_EM_MNT_DATA: SIM" & vbLf & "FILE_CSV: FLOW_TEMPLATE.csv" & vbLf & "MNT_DATA_LIST: FLOW_TEMPLATE.csv(bytes=10)" & vbLf & "EXECUTE: LOAD_CSV(FLOW_TEMPLATE.csv)", "", hasContract, cMode, st, rule, pr, sg, dj)
     If UCase$(st) <> "FAIL" Then Err.Raise 5, , "T3 fail: execute com FOUND=false deveria FAIL"
 
-    Call ContractDiag_EvaluateStep(4, "SELFTEST/D", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/FLOW_TEMPLATE.csv" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: true" & vbLf & "EXPORT_OK_CSV: true" & vbLf & "container_file_citation: sandbox:/mnt/data/FLOW_TEMPLATE.csv", "{""type"":""container_file_citation""}", hasContract, cMode, st, rule, pr, sg, dj)
+    Call ContractDiag_EvaluateStep(4, "SELFTEST/D", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/FLOW_TEMPLATE.csv" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: true" & vbLf & "EXPORT_OK_CSV: true" & vbLf & "CSV_EXISTE_EM_MNT_DATA: SIM" & vbLf & "FILE_CSV: FLOW_TEMPLATE.csv" & vbLf & "MNT_DATA_LIST: FLOW_TEMPLATE.csv(bytes=10)" & vbLf & "container_file_citation: sandbox:/mnt/data/FLOW_TEMPLATE.csv", "{""type"":""container_file_citation""}", hasContract, cMode, st, rule, pr, sg, dj)
     If UCase$(st) <> "OK" Then Err.Raise 5, , "T4 fail: cenÃ¡rio consistente deveria OK"
 
-    Call ContractDiag_EvaluateStep(5, "SELFTEST/E", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/FLOW_TEMPLATE.csv" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: true" & vbLf & "EXPORT_OK_CSV: true", "", hasContract, cMode, st, rule, pr, sg, dj)
+    Call ContractDiag_EvaluateStep(5, "SELFTEST/E", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/FLOW_TEMPLATE.csv" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: true" & vbLf & "EXPORT_OK_CSV: true" & vbLf & "CSV_EXISTE_EM_MNT_DATA: SIM" & vbLf & "FILE_CSV: FLOW_TEMPLATE.csv" & vbLf & "MNT_DATA_LIST: FLOW_TEMPLATE.csv(bytes=10)", "", hasContract, cMode, st, rule, pr, sg, dj)
     If UCase$(st) <> "OK" Then Err.Raise 5, , "T5 fail: sem citation mas com prova vÃ¡lida deveria OK (warn)"
     If UCase$(rule) <> "C3_FOUND_WITHOUT_CITATION_WARN" Then Err.Raise 5, , "T5 fail: regra esperada C3_FOUND_WITHOUT_CITATION_WARN"
 
-    Call ContractDiag_EvaluateStep(6, "SELFTEST/F", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/out.pdf" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: true" & vbLf & "EXPORT_OK_CSV: true", "", hasContract, cMode, st, rule, pr, sg, dj)
+    Call ContractDiag_EvaluateStep(6, "SELFTEST/F", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/out.pdf" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: true" & vbLf & "EXPORT_OK_CSV: true" & vbLf & "CSV_EXISTE_EM_MNT_DATA: SIM" & vbLf & "FILE_CSV: FLOW_TEMPLATE.csv" & vbLf & "MNT_DATA_LIST: out.pdf(bytes=10)", "", hasContract, cMode, st, rule, pr, sg, dj)
     If UCase$(st) <> "BLOCKED" Then Err.Raise 5, , "T6 fail: found=true sem citation e sem prova csv deveria BLOCKED"
 
-    Call ContractDiag_EvaluateStep(7, "SELFTEST/G", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/out.pdf" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: false" & vbLf & "EXPORT_OK_CSV: false", "", hasContract, cMode, st, rule, pr, sg, dj)
+    Call ContractDiag_EvaluateStep(7, "SELFTEST/G", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/out.pdf" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: false" & vbLf & "EXPORT_OK_CSV: false" & vbLf & "CSV_EXISTE_EM_MNT_DATA: NAO" & vbLf & "FILE_CSV: [n/a]" & vbLf & "MNT_DATA_LIST: out.pdf(bytes=10)", "", hasContract, cMode, st, rule, pr, sg, dj)
     If UCase$(st) <> "OK" Then Err.Raise 5, , "T7 fail: sem expected files no contrato deveria manter OK"
 
-    Call ContractDiag_EvaluateStep(8, "SELFTEST/H", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/out.pdf" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: true" & vbLf & "EXPORT_OK_CSV: false", "", hasContract, cMode, st, rule, pr, sg, dj)
+    Call ContractDiag_EvaluateStep(8, "SELFTEST/H", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/out.pdf" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: true" & vbLf & "EXPORT_OK_CSV: false" & vbLf & "CSV_EXISTE_EM_MNT_DATA: SIM" & vbLf & "FILE_CSV: FLOW_TEMPLATE.csv" & vbLf & "MNT_DATA_LIST: out.pdf(bytes=10)", "", hasContract, cMode, st, rule, pr, sg, dj)
     If UCase$(st) <> "FAIL" Then Err.Raise 5, , "T8 fail: diff expected-vs-prova deveria FAIL"
     If UCase$(rule) <> "C5_PROVA_EXPECTED_MISSING" Then Err.Raise 5, , "T8 fail: regra esperada C5_PROVA_EXPECTED_MISSING"
+
+    Call ContractDiag_EvaluateStep(9, "SELFTEST/I", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/FLOW_TEMPLATE.csv" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: true" & vbLf & "EXPORT_OK_CSV: true" & vbLf & "CSV_EXISTE_EM_MNT_DATA: NAO" & vbLf & "FILE_CSV: FLOW_TEMPLATE.csv" & vbLf & "MNT_DATA_LIST: FLOW_TEMPLATE.csv(bytes=10)" & vbLf & "EXECUTE: LOAD_CSV(FLOW_TEMPLATE.csv)", "{""type"":""container_file_citation""}", hasContract, cMode, st, rule, pr, sg, dj)
+    If UCase$(st) <> "FAIL" Then Err.Raise 5, , "T9 fail: estado inconsistente CSV_EXISTE_EM_MNT_DATA deveria FAIL"
+    If UCase$(rule) <> "C1C_CSV_STATE_INCONSISTENT" Then Err.Raise 5, , "T9 fail: regra esperada C1C_CSV_STATE_INCONSISTENT"
+
+    Call ContractDiag_EvaluateStep(10, "SELFTEST/J", "contract_mode: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/FLOW_TEMPLATE.csv" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: true" & vbLf & "EXPORT_OK_CSV: true" & vbLf & "CSV_EXISTE_EM_MNT_DATA: OK" & vbLf & "FILE_CSV: FLOW_TEMPLATE.csv" & vbLf & "MNT_DATA_LIST: FLOW_TEMPLATE.csv(bytes=10)", "", hasContract, cMode, st, rule, pr, sg, dj)
+    If (Not hasContract) Then Err.Raise 5, , "T10 fail: alias contract_mode deveria ativar contrato"
+    If UCase$(st) <> "OK" Then Err.Raise 5, , "T10 fail: CSV_EXISTE_EM_MNT_DATA=OK com prova valida deveria OK"
 
     Call Debug_Registar(0, "SELFTEST_CONTRACT", "INFO", "", "SELFTEST_CONTRACT", "PASS", "SelfTest_ContractDiagnostics_RunAll concluÃ­do com sucesso.")
     MsgBox "SelfTest_ContractDiagnostics_RunAll PASS", vbInformation
