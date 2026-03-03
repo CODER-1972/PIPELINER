@@ -554,3 +554,9 @@ Se começar a ficar demasiado grande:
 - Evitar `IsMissing` em parâmetros não `Optional Variant`; esse padrão gera `Compile error: Invalid use of IsMissing`. Em helpers utilitários, tratar ausência via contrato da assinatura e manter fallback explícito para `Null`/`Error`.
 
 - Em declarações de variáveis locais/globais (`Dim/Private/Public`), evitar identificadores com nomes reservados/funções intrínsecas do VBA (ex.: `Fix`, `Left`, `Date`, `Name`, `Input`, `Shell`); usar prefixos semânticos (`rcSummary`, `outFix`, `tmpDate`) para prevenir `Compile error: Syntax error` no VBE.
+
+- Em mapeamentos de funcionalidade no DEBUG, modelar `ACAO EM CURSO` como lista de ações acumuláveis (não exclusivas) e anexar contexto em formato `chave=valor`; evitar lógica de primeiro-match que esconda etapas simultâneas do mesmo evento.
+
+- Em extração de contexto para DEBUG, aceitar tanto `chave=valor` como `chave:valor` (normalizando para `chave=valor`) e privilegiar chaves operacionais objetivas (`file_id`, `container_id`, `http_status`, `elapsed_ms`) para facilitar troubleshooting.
+
+- Em mapeamento de ações do DEBUG, privilegiar primeiro regras explícitas por parâmetro (ex.: `M10_*`, `M05_*`, `OUTPUT_EXECUTE_*`) e só depois regras genéricas por substring para reduzir falsos positivos de interpretação.
