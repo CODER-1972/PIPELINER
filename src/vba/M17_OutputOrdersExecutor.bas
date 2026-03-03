@@ -9,6 +9,9 @@ Option Explicit
 ' - Importar CSV para nova worksheet com logging completo em DEBUG e resumo para Seguimento.
 '
 ' AtualizaÃ§Ãµes:
+' - 2026-03-03 | Codex | Lint de diretivas EXECUTE durante parsing
+'   - Conta diretivas vÃ¡lidas fora de code blocks e ocorrÃªncias dentro de code fences.
+'   - Emite eventos EXECUTE_LINT_MULTIPLE e EXECUTE_LINT_IN_CODEBLOCK sem quebrar compatibilidade.
 ' - 2026-02-26 | Codex | Corrige dependÃªncias internas do SelfTest
 '   - Adiciona helpers locais EnsureFolder e WriteTextUTF8 usados pela bateria T1..T9.
 '   - Remove acoplamento implÃ­cito a helpers Private de outros mÃ³dulos.
@@ -19,7 +22,8 @@ Option Explicit
 '
 ' FunÃ§Ãµes e procedimentos:
 ' - OutputOrders_TryExecute(...): executa ordens reconhecidas e devolve append para files_ops_log.
-' - ParseExecuteDirectives(outputText): extrai diretivas EXECUTE fora de code fences.
+' - ParseExecuteDirectives(outputText, ...): extrai diretivas EXECUTE e devolve mÃ©tricas de lint opcional.
+' - LineHasExecuteToken(rawLine): deteta intenÃ§Ã£o EXECUTE em linha (inclui variantes incompletas para lint).
 ' - ValidateCsvFileName(fileName): valida basename CSV contra path traversal e caracteres perigosos.
 ' - ResolveCsvSource(fileName, outputFolder, downloadedFiles): resolve origem do CSV em output/downloads.
 ' - PrecheckCsv_BomAndCrLf(csvPath, ...): avalia BOM UTF-8, CR/LF quoted e sugestÃ£o de colunas.
@@ -50,10 +54,26 @@ Public Function OutputOrders_TryExecute( _
     If Trim$(outputText) = "" Then Exit Function
 
     Dim directives As Collection
-    Set directives = ParseExecuteDirectives(outputText)
+    Dim validDirectiveCount As Long
+    Dim codeBlockDirectiveCount As Long
+    Set directives = ParseExecuteDirectives(outputText, validDirectiveCount, codeBlockDirectiveCount)
 
     Call Debug_Registar(passo, promptId, "INFO", "", "OUTPUT_EXECUTE_FOUND", _
-        "response_id=" & Trim$(responseId) & " | directives=" & CStr(directives.Count), "")
+        "response_id=" & Trim$(responseId) & " | directives=" & CStr(directives.Count) & _
+        " | valid_directives=" & CStr(validDirectiveCount) & _
+        " | codeblock_directives=" & CStr(codeBlockDirectiveCount), "")
+
+    If validDirectiveCount > 1 Then
+        Call Debug_Registar(passo, promptId, "ALERTA", "", "EXECUTE_LINT_MULTIPLE", _
+            "Foram detetadas mÃºltiplas diretivas EXECUTE vÃ¡lidas: " & CStr(validDirectiveCount), _
+            "O executor processa no mÃ¡ximo " & CStr(OUTPUT_ORDERS_MAX) & " diretivas por resposta.")
+    End If
+
+    If codeBlockDirectiveCount > 0 Then
+        Call Debug_Registar(passo, promptId, "INFO", "", "EXECUTE_LINT_IN_CODEBLOCK", _
+            "Foram ignoradas diretivas EXECUTE dentro de blocos de cÃ³digo: " & CStr(codeBlockDirectiveCount), _
+            "Mantenha EXECUTE fora de ```code fences``` para execuÃ§Ã£o automÃ¡tica.")
+    End If
 
     If directives.Count = 0 Then Exit Function
 
@@ -151,13 +171,20 @@ EH:
         "Err " & CStr(Err.Number) & ": " & Err.Description, "Reveja parser/importaÃ§Ã£o de Output Orders.")
 End Function
 
-Public Function ParseExecuteDirectives(ByVal outputText As String) As Collection
+Public Function ParseExecuteDirectives( _
+    ByVal outputText As String, _
+    Optional ByRef validDirectiveCount As Long = 0, _
+    Optional ByRef codeBlockDirectiveCount As Long = 0 _
+) As Collection
     Dim out As New Collection
     Dim lines() As String
     lines = Split(Replace(outputText, vbCrLf, vbLf), vbLf)
 
     Dim inCode As Boolean
     inCode = False
+
+    validDirectiveCount = 0
+    codeBlockDirectiveCount = 0
 
     Dim i As Long
     For i = LBound(lines) To UBound(lines)
@@ -168,16 +195,36 @@ Public Function ParseExecuteDirectives(ByVal outputText As String) As Collection
             inCode = Not inCode
             GoTo NextLine
         End If
-        If inCode Then GoTo NextLine
+        If inCode Then
+            If LineHasExecuteToken(raw) Then codeBlockDirectiveCount = codeBlockDirectiveCount + 1
+            GoTo NextLine
+        End If
 
         Dim parsed As Object
         Set parsed = ParseExecuteLine(raw)
-        If Not parsed Is Nothing Then out.Add parsed
+        If Not parsed Is Nothing Then
+            out.Add parsed
+            validDirectiveCount = validDirectiveCount + 1
+        End If
 
 NextLine:
     Next i
 
     Set ParseExecuteDirectives = out
+End Function
+
+Private Function LineHasExecuteToken(ByVal rawLine As String) As Boolean
+    Dim t As String
+    t = Trim$(rawLine)
+    If t = "" Then Exit Function
+
+    Dim re As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = False
+    re.IgnoreCase = True
+    re.Pattern = "^<?\s*EXECUTE\s*:"
+
+    LineHasExecuteToken = re.Test(t)
 End Function
 
 Private Function ParseExecuteLine(ByVal rawLine As String) As Object
@@ -579,7 +626,17 @@ Public Sub SelfTest_OutputOrders_RunAll()
     tPass = 0: tFail = 0
 
     SelfTest_Assert "T1 Parser sem EXECUTE", ParseExecuteDirectives("texto normal").Count = 0, tPass, tFail
-    SelfTest_Assert "T2 Parser com EXECUTE", ParseExecuteDirectives("<EXECUTE: LOAD_CSV([file.csv])>").Count = 1, tPass, tFail
+
+    Dim parserValid As Long, parserInCode As Long
+    SelfTest_Assert "T2 Parser com EXECUTE", ParseExecuteDirectives("<EXECUTE: LOAD_CSV([file.csv])>", parserValid, parserInCode).Count = 1 And parserValid = 1 And parserInCode = 0, tPass, tFail
+
+    parserValid = 0: parserInCode = 0
+    Call ParseExecuteDirectives("```" & vbLf & "EXECUTE: LOAD_CSV([inside.csv])" & vbLf & "```", parserValid, parserInCode)
+    SelfTest_Assert "T2b Parser ignora EXECUTE em codeblock", parserValid = 0 And parserInCode = 1, tPass, tFail
+
+    parserValid = 0: parserInCode = 0
+    Call ParseExecuteDirectives("```" & vbLf & "EXECUTE: LOAD_CSV inside" & vbLf & "```", parserValid, parserInCode)
+    SelfTest_Assert "T2c Lint detecta token EXECUTE incompleto em codeblock", parserValid = 0 And parserInCode = 1, tPass, tFail
 
     Dim r3 As String
     r3 = OutputOrders_TryExecute(1, "SELFTEST/T3", "resp", "EXECUTE: DELETE_FILE([x.csv])", base, "")
