@@ -8,6 +8,18 @@ Option Explicit
 ' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
 '
 ' Atualizações:
+' - 2026-03-03 | Codex | Classificacao de trace de text_embed no DEBUG
+'   - Classifica parametro TEXT_EMBED_TRACE no bloco de gestao de anexos/text_embed.
+'   - Acrescenta acao dedicada para leitura de name/len_chars/hash_short no troubleshooting.
+' - 2026-03-03 | Codex | Mapeia trace padronizado de override de modo FILES
+'   - Inclui `FILES_MODE_OVERRIDE_TRACE` nas ações deduzidas da coluna Funcionalidade.
+'   - Amplia extração de contexto operacional com requested/resolved/raw_mode/effective_mode/reason.
+' - 2026-03-03 | Codex | Mapeia eventos de lint do Output Orders
+'   - Adiciona cobertura para EXECUTE_LINT_MULTIPLE e EXECUTE_LINT_IN_CODEBLOCK na deducao de acao em curso.
+' - 2026-03-03 | Codex | Mapeia novo alerta CI_PROOF_MNT_DATA_MISSING na coluna de acao
+'   - Evita descricao generica para diagnostico de ausencia de artefacto CSV com sinais M10.
+' - 2026-03-03 | Codex | Expande contexto M10 extraido para CI_PROOF_MNT_DATA_MISSING
+'   - Adiciona chaves de falha de download/listagem para manter acao em curso especifica e auditavel.
 ' - 2026-03-03 | Codex | Cobertura ampliada de acoes especificas no DEBUG
 '   - Reforca mapeamento por sinais de parametro/contexto para suportar combinacoes de acoes no mesmo registo.
 '   - Amplia extracao de contexto com pares chave=valor e chave:valor para diagnostico mais objetivo.
@@ -158,7 +170,7 @@ Private Function Debug_DeduzirFuncionalidade(ByVal parametro As String) As Strin
         Exit Function
     End If
 
-    If Left$(p, 4) = "M07_" Or Left$(p, 15) = "OUTPUT_EXECUTE_" Then
+    If Left$(p, 4) = "M07_" Or Left$(p, 15) = "OUTPUT_EXECUTE_" Or Left$(p, 13) = "EXECUTE_LINT_" Then
         Debug_DeduzirFuncionalidade = "Aplicacao do plano de output e validacao dos artefactos guardados no OUTPUT Folder."
         Exit Function
     End If
