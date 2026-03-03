@@ -9,6 +9,12 @@ Option Explicit
 ' - Importar CSV para nova worksheet com logging completo em DEBUG e resumo para Seguimento.
 '
 ' AtualizaÃ§Ãµes:
+' - 2026-03-03 | Codex | Integra contexto mÃ­nimo M10 no fluxo EXECUTE
+'   - Adiciona argumento opcional m10Context no entrypoint para auditoria/gates leves.
+'   - ReforÃ§a validaÃ§Ã£o de existÃªncia do CSV com ResolveCsvSource + FileExistsFast.
+'   - Regista contexto efetivo de File Output no DEBUG para troubleshooting.
+'   - Aceita fallback de contexto compacto via downloadedFiles/filesOps quando m10Context vier vazio.
+'   - Suporta extraÃ§Ã£o de token M10CTX tanto em string compacta como em coleÃ§Ãµes de downloadedFiles.
 ' - 2026-02-26 | Codex | Corrige dependÃªncias internas do SelfTest
 '   - Adiciona helpers locais EnsureFolder e WriteTextUTF8 usados pela bateria T1..T9.
 '   - Remove acoplamento implÃ­cito a helpers Private de outros mÃ³dulos.
@@ -22,6 +28,8 @@ Option Explicit
 ' - ParseExecuteDirectives(outputText): extrai diretivas EXECUTE fora de code fences.
 ' - ValidateCsvFileName(fileName): valida basename CSV contra path traversal e caracteres perigosos.
 ' - ResolveCsvSource(fileName, outputFolder, downloadedFiles): resolve origem do CSV em output/downloads.
+' - OutputOrders_ResolveM10Context(m10Context, downloadedFiles): prioriza argumento opcional e fallback compacto em filesOps/downloadedFiles.
+' - OutputOrders_ExtractM10ContextFromDownloaded(downloadedFiles): extrai token M10CTX em payload textual ou coleÃ§Ã£o.
 ' - PrecheckCsv_BomAndCrLf(csvPath, ...): avalia BOM UTF-8, CR/LF quoted e sugestÃ£o de colunas.
 ' - DeriveSheetNameFromCsv(csvPath): deriva nome base da worksheet a partir do ficheiro.
 ' - CreateUniqueWorksheetName(baseName): gera nome de worksheet Ãºnico e compatÃ­vel com limite Excel.
@@ -42,7 +50,8 @@ Public Function OutputOrders_TryExecute( _
     ByVal responseId As String, _
     ByVal outputText As String, _
     ByVal outputFolder As String, _
-    ByVal downloadedFiles As Variant _
+    ByVal downloadedFiles As Variant, _
+    Optional ByVal m10Context As String = "" _
 ) As String
     On Error GoTo EH
 
@@ -52,8 +61,12 @@ Public Function OutputOrders_TryExecute( _
     Dim directives As Collection
     Set directives = ParseExecuteDirectives(outputText)
 
+    Dim normalizedM10Context As String
+    normalizedM10Context = OutputOrders_ResolveM10Context(m10Context, downloadedFiles)
+
     Call Debug_Registar(passo, promptId, "INFO", "", "OUTPUT_EXECUTE_FOUND", _
-        "response_id=" & Trim$(responseId) & " | directives=" & CStr(directives.Count), "")
+        "response_id=" & Trim$(responseId) & " | directives=" & CStr(directives.Count) & _
+        " | m10_ctx=" & normalizedM10Context, "")
 
     If directives.Count = 0 Then Exit Function
 
@@ -91,6 +104,13 @@ Public Function OutputOrders_TryExecute( _
             Call Debug_Registar(passo, promptId, "ERRO", "", "OUTPUT_EXECUTE_FILE_NOT_FOUND", _
                 "NÃ£o foi possÃ­vel resolver ficheiro CSV: " & fileName & " | outputFolder=" & outputFolder, _
                 "Confirme download/geraÃ§Ã£o do ficheiro e nome exato no EXECUTE.")
+            GoTo NextDirective
+        End If
+
+        If Not FileExistsFast(csvPath) Then
+            Call Debug_Registar(passo, promptId, "ERRO", "", "OUTPUT_EXECUTE_FILE_NOT_FOUND", _
+                "CSV resolvido mas ausente no disco: " & csvPath & " | source=" & fileName, _
+                "Reveja FILE OUTPUT/download e permissÃµes da pasta OUTPUT.")
             GoTo NextDirective
         End If
 
@@ -149,6 +169,83 @@ NextDirective:
 EH:
     Call Debug_Registar(passo, promptId, "ERRO", "", OUTPUT_EXECUTE_TRACKER & "_UNHANDLED", _
         "Err " & CStr(Err.Number) & ": " & Err.Description, "Reveja parser/importaÃ§Ã£o de Output Orders.")
+End Function
+
+
+
+Private Function OutputOrders_ResolveM10Context(ByVal m10Context As String, ByVal downloadedFiles As Variant) As String
+    Dim directCtx As String
+    directCtx = OutputOrders_NormalizeM10Context(m10Context)
+    If directCtx <> "none" Then
+        OutputOrders_ResolveM10Context = directCtx
+        Exit Function
+    End If
+
+    Dim fallbackCtx As String
+    fallbackCtx = OutputOrders_ExtractM10ContextFromDownloaded(downloadedFiles)
+    OutputOrders_ResolveM10Context = OutputOrders_NormalizeM10Context(fallbackCtx)
+End Function
+
+Private Function OutputOrders_ExtractM10ContextFromDownloaded(ByVal downloadedFiles As Variant) As String
+    On Error GoTo EH
+
+    If IsObject(downloadedFiles) Then
+        Dim it As Variant
+        For Each it In downloadedFiles
+            Dim itemCtx As String
+            itemCtx = OutputOrders_ExtractM10ContextFromToken(CStr(it))
+            If itemCtx <> "" Then
+                OutputOrders_ExtractM10ContextFromDownloaded = itemCtx
+                Exit Function
+            End If
+        Next it
+        Exit Function
+    End If
+
+    Dim raw As String
+    raw = Trim$(CStr(downloadedFiles))
+    If raw = "" Then Exit Function
+
+    Dim token As Variant
+    Dim norm As String
+    norm = Replace(Replace(raw, vbCrLf, "|"), ";", "|")
+
+    For Each token In Split(norm, "|")
+        Dim parsedCtx As String
+        parsedCtx = OutputOrders_ExtractM10ContextFromToken(CStr(token))
+        If parsedCtx <> "" Then
+            OutputOrders_ExtractM10ContextFromDownloaded = parsedCtx
+            Exit Function
+        End If
+    Next token
+
+    Exit Function
+EH:
+    OutputOrders_ExtractM10ContextFromDownloaded = ""
+End Function
+
+Private Function OutputOrders_ExtractM10ContextFromToken(ByVal rawToken As String) As String
+    Dim t As String
+    t = Trim$(rawToken)
+    If t = "" Then Exit Function
+
+    If LCase$(Left$(t, 7)) = "m10ctx:" Then
+        OutputOrders_ExtractM10ContextFromToken = Trim$(Mid$(t, 8))
+    End If
+End Function
+
+Private Function OutputOrders_NormalizeM10Context(ByVal m10Context As String) As String
+    Dim t As String
+    t = Trim$(m10Context)
+    If t = "" Then
+        OutputOrders_NormalizeM10Context = "none"
+        Exit Function
+    End If
+
+    t = Replace(t, vbCrLf, " | ")
+    t = Replace(t, vbCr, " | ")
+    t = Replace(t, vbLf, " | ")
+    OutputOrders_NormalizeM10Context = t
 End Function
 
 Public Function ParseExecuteDirectives(ByVal outputText As String) As Collection
@@ -615,6 +712,22 @@ Public Sub SelfTest_OutputOrders_RunAll()
     SelfTest_Assert "T8 IdempotÃªncia cria sufixo", InStr(1, r8, "_01", vbTextCompare) > 0 Or InStr(1, r8, "_02", vbTextCompare) > 0, tPass, tFail
 
     SelfTest_Assert "T9 Frase Seguimento exacta", InStr(1, r7, "CREATED AND LOADED Excel Sheet ", vbBinaryCompare) = 1 And Right$(r7, Len(", and verified.")) = ", and verified.", tPass, tFail
+
+    Dim ctx10 As String
+    ctx10 = OutputOrders_ResolveM10Context("", "DL:catalogo_ok.csv|M10CTX:output_kind=file | process_mode=code_interpreter")
+    SelfTest_Assert "T10 Fallback m10Context via downloadedFiles", InStr(1, ctx10, "output_kind=file", vbTextCompare) > 0, tPass, tFail
+
+    Dim ctx11 As String
+    ctx11 = OutputOrders_ResolveM10Context("output_kind=file", "M10CTX:output_kind=none")
+    SelfTest_Assert "T11 Prioriza argumento opcional", (LCase$(Trim$(ctx11)) = "output_kind=file"), tPass, tFail
+
+    Dim ctxItems As Collection
+    Set ctxItems = New Collection
+    ctxItems.Add "DL:catalogo_ok.csv"
+    ctxItems.Add "M10CTX:output_kind=file | process_mode=metadata"
+    Dim ctx12 As String
+    ctx12 = OutputOrders_ResolveM10Context("", ctxItems)
+    SelfTest_Assert "T12 Fallback m10Context via coleÃ§Ã£o", InStr(1, ctx12, "process_mode=metadata", vbTextCompare) > 0, tPass, tFail
 
     Call Debug_Registar(0, "SELFTEST_OUTPUT_ORDERS", "INFO", "", "SELFTEST_SUMMARY", _
         "PASS=" & CStr(tPass) & " | FAIL=" & CStr(tFail), "")

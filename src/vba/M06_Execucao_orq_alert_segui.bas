@@ -142,7 +142,12 @@ Public Sub ExecutarPrompt_PorID()
     Dim fo_executeOpsLog As String
     fo_executeOpsLog = ""
     If Trim$(resultado.Erro) = "" And resultado.httpStatus >= 200 And resultado.httpStatus < 300 Then
-        fo_executeOpsLog = OutputOrders_TryExecute(passo, prompt.Id, resultado.responseId, resultado.outputText, outputFolderBase, fo_filesOpsOut)
+        Dim fo_m10Context As String
+        fo_m10Context = "output_kind=" & Trim$(fo_outputKind) & _
+            " | process_mode=" & Trim$(fo_processMode) & _
+            " | auto_save=" & Trim$(fo_autoSave)
+
+        fo_executeOpsLog = OutputOrders_TryExecute(passo, prompt.Id, resultado.responseId, resultado.outputText, outputFolderBase, fo_filesOpsOut, fo_m10Context)
         If Trim$(fo_executeOpsLog) <> "" Then
             If Trim$(fo_filesOpsOut) <> "" Then
                 fo_filesOpsOut = fo_filesOpsOut & " | " & fo_executeOpsLog
