@@ -8,6 +8,9 @@ Option Explicit
 ' - Registar resultados PASS/FAIL/ALERTA no DEBUG para diagnóstico rápido.
 '
 ' Atualizações:
+' - 2026-03-04 | Codex | Selftests para gate de contrato minimo e handoff TSV ContextKV
+'   - Adiciona cenario de contrato ci_csv_v1 sem prova minima (espera BLOCKED deterministico).
+'   - Executa selftest dedicado de parse TSV_CATALOGO_FINAL_ENC no modulo ContextKV.
 ' - 2026-03-02 | Codex | Correção de compile error no selftest DEBUG_DIAG
 '   - Renomeia variáveis locais `sum`/`fix` para `rcSummary`/`rcFixSuggestion` para evitar colisão com nomes reservados.
 '   - Mantém assinatura e cobertura dos cenários de classificação sem alteração funcional.
@@ -40,6 +43,7 @@ Option Explicit
 ' - SELFTEST_FILES_WILDCARD_RESOLUTION (Sub): valida resolução automática de wildcard FILES em pasta temporária.
 ' - SELFTEST_DEBUG_DIAG_CLASSIFIER (Sub): valida regras mínimas de root cause do DEBUG_DIAG.
 ' - SELFTEST_CI_OUTPUT_RESOLVER (Sub): valida resolução determinística do ficheiro de output em CI.
+' - SELFTEST_CONTRACT_MIN_PROOF_GATE (Sub): valida bloqueio quando faltam marcadores minimos no contrato ci_csv_v1.
 ' =============================================================================
 
 ' =============================================================================
@@ -104,6 +108,8 @@ Public Sub SelfTest_RunAll()
 
     ' 10) Resolvedor determinístico de output CI
     SELFTEST_CI_OUTPUT_RESOLVER
+
+    SELFTEST_CONTRACT_MIN_PROOF_GATE
 
     SelfTest_Log SEV_INFO, "SELFTEST_RUN", "Fim dos testes internos.", "OK"
     Exit Sub
@@ -1058,3 +1064,40 @@ EH:
 End Function
 
 
+
+
+Public Sub SELFTEST_CONTRACT_MIN_PROOF_GATE()
+    On Error GoTo EH
+
+    Dim hasContract As Boolean, modeName As String, stepState As String, ruleCode As String
+    Dim problemTxt As String, suggestionTxt As String, detailJson As String
+
+    Dim cfg As String
+    cfg = "diagnostic_contract: ci_csv_v1" & vbLf & "process_mode: code_interpreter"
+
+    Dim outTxt As String
+    outTxt = "EXPORT_OK_CSV: true" & vbLf & _
+             "FOUND_FLOW_TEMPLATE_CSV: true" & vbLf & _
+             "PROVA_CI_START" & vbLf & _
+             "FLOW_TEMPLATE.csv" & vbLf & _
+             "PROVA_CI_END"
+
+    Call ContractDiag_EvaluateStep(1, "SELFTEST/CONTRACT", cfg, outTxt, "", _
+        hasContract, modeName, stepState, ruleCode, problemTxt, suggestionTxt, detailJson)
+
+    If hasContract And UCase$(stepState) = "BLOCKED" And UCase$(ruleCode) = "C1B_MIN_PROOF_MARKERS_MISSING" Then
+        SelfTest_Log SEV_INFO, "SELFTEST_CONTRACT_MIN_PROOF", "CONTRACT_MIN_PROOF PASS (BLOCKED esperado).", "OK"
+    Else
+        SelfTest_Log SEV_ERRO, "SELFTEST_CONTRACT_MIN_PROOF", _
+            "CONTRACT_MIN_PROOF FAIL | hasContract=" & CStr(hasContract) & " | state=" & stepState & " | rule=" & ruleCode, _
+            "Esperado BLOCKED/C1B_MIN_PROOF_MARKERS_MISSING quando faltam CSV_EXISTE_EM_MNT_DATA, FILE_CSV e MNT_DATA_LIST."
+    End If
+
+    On Error Resume Next
+    Call SelfTest_ContextKV_Parse_TSVCatalogoFinal
+    On Error GoTo EH
+
+    Exit Sub
+EH:
+    SelfTest_Log SEV_ERRO, "SELFTEST_CONTRACT_MIN_PROOF", "Excecao: " & Err.Number & " - " & Err.Description, "Rever M19/M13 e assinatura do contrato."
+End Sub

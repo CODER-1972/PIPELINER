@@ -25,7 +25,8 @@ Option Explicit
 '
 ' FunÃ§Ãµes e procedimentos:
 ' - OutputOrders_TryExecute(...): executa ordens reconhecidas e devolve append para files_ops_log.
-' - ParseExecuteDirectives(outputText): extrai diretivas EXECUTE fora de code fences.
+' - ParseExecuteDirectives(outputText, ...): extrai diretivas EXECUTE e devolve mÃ©tricas de lint opcional.
+' - LineHasExecuteToken(rawLine): deteta intenÃ§Ã£o EXECUTE em linha (inclui variantes incompletas para lint).
 ' - ValidateCsvFileName(fileName): valida basename CSV contra path traversal e caracteres perigosos.
 ' - ResolveCsvSource(fileName, outputFolder, downloadedFiles): resolve origem do CSV em output/downloads.
 ' - OutputOrders_ResolveM10Context(m10Context, downloadedFiles): prioriza argumento opcional e fallback compacto em filesOps/downloadedFiles.
@@ -36,9 +37,11 @@ Option Explicit
 ' - LoadCsvIntoSheet_QueryTable(...): importaÃ§Ã£o principal via QueryTable.
 ' - LoadCsvIntoSheet_OpenTextFallback(...): fallback de importaÃ§Ã£o via OpenText + cÃ³pia para destino.
 ' - VerifyImportedSheet(ws, expectedCols, ...): valida estrutura importada e recolhe evidÃªncias.
+' - BuildCiProofMissingContext(...): monta contexto compacto para alerta de ausÃªncia de artefacto CI provÃ¡vel.
 ' - SelfTest_OutputOrders_RunAll(): bateria idempotente de testes T1..T9 do executor.
 ' - EnsureFolder(folderPath): cria pasta local para fixtures temporÃ¡rias dos selftests.
 ' - WriteTextUTF8(filePath, txt): escreve ficheiros UTF-8 usados nos selftests.
+' - BuildFileNotFoundContext(...): agrega contexto operacional para troubleshooting em OUTPUT_EXECUTE_FILE_NOT_FOUND.
 ' =============================================================================
 
 Private Const OUTPUT_ORDERS_MAX As Long = 3
@@ -59,7 +62,9 @@ Public Function OutputOrders_TryExecute( _
     If Trim$(outputText) = "" Then Exit Function
 
     Dim directives As Collection
-    Set directives = ParseExecuteDirectives(outputText)
+    Dim validDirectiveCount As Long
+    Dim codeBlockDirectiveCount As Long
+    Set directives = ParseExecuteDirectives(outputText, validDirectiveCount, codeBlockDirectiveCount)
 
     Dim normalizedM10Context As String
     normalizedM10Context = OutputOrders_ResolveM10Context(m10Context, downloadedFiles)
@@ -101,9 +106,25 @@ Public Function OutputOrders_TryExecute( _
         Dim csvPath As String
         csvPath = ResolveCsvSource(fileName, outputFolder, downloadedFiles)
         If Trim$(csvPath) = "" Then
+            Dim notFoundCtx As String
+            notFoundCtx = BuildFileNotFoundContext(fileName, outputText, downloadedFiles, outputFolder)
+
             Call Debug_Registar(passo, promptId, "ERRO", "", "OUTPUT_EXECUTE_FILE_NOT_FOUND", _
-                "NÃ£o foi possÃ­vel resolver ficheiro CSV: " & fileName & " | outputFolder=" & outputFolder, _
+                "NÃ£o foi possÃ­vel resolver ficheiro CSV. " & notFoundCtx, _
                 "Confirme download/geraÃ§Ã£o do ficheiro e nome exato no EXECUTE.")
+
+            If HasCiSignalsWithoutArtifact(outputText) Then
+                Call Debug_Registar(passo, promptId, "ALERTA", "", "CI_PROOF_MNT_DATA_MISSING", _
+                    "Sinais de execuÃ§Ã£o CI sem artefacto local resolvido. " & notFoundCtx, _
+                    "Garantir escrita/citaÃ§Ã£o do ficheiro em /mnt/data e download para OUTPUT Folder.")
+            End If
+            GoTo NextDirective
+        End If
+
+        If Not FileExistsFast(csvPath) Then
+            Call Debug_Registar(passo, promptId, "ERRO", "", "OUTPUT_EXECUTE_FILE_NOT_FOUND", _
+                "CSV resolvido mas ausente no disco: " & csvPath & " | source=" & fileName, _
+                "Reveja FILE OUTPUT/download e permissÃµes da pasta OUTPUT.")
             GoTo NextDirective
         End If
 
@@ -256,6 +277,9 @@ Public Function ParseExecuteDirectives(ByVal outputText As String) As Collection
     Dim inCode As Boolean
     inCode = False
 
+    validDirectiveCount = 0
+    codeBlockDirectiveCount = 0
+
     Dim i As Long
     For i = LBound(lines) To UBound(lines)
         Dim raw As String
@@ -265,16 +289,36 @@ Public Function ParseExecuteDirectives(ByVal outputText As String) As Collection
             inCode = Not inCode
             GoTo NextLine
         End If
-        If inCode Then GoTo NextLine
+        If inCode Then
+            If LineHasExecuteToken(raw) Then codeBlockDirectiveCount = codeBlockDirectiveCount + 1
+            GoTo NextLine
+        End If
 
         Dim parsed As Object
         Set parsed = ParseExecuteLine(raw)
-        If Not parsed Is Nothing Then out.Add parsed
+        If Not parsed Is Nothing Then
+            out.Add parsed
+            validDirectiveCount = validDirectiveCount + 1
+        End If
 
 NextLine:
     Next i
 
     Set ParseExecuteDirectives = out
+End Function
+
+Private Function LineHasExecuteToken(ByVal rawLine As String) As Boolean
+    Dim t As String
+    t = Trim$(rawLine)
+    If t = "" Then Exit Function
+
+    Dim re As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = False
+    re.IgnoreCase = True
+    re.Pattern = "\bEXECUTE\s*:"
+
+    LineHasExecuteToken = re.Test(t)
 End Function
 
 Private Function ParseExecuteLine(ByVal rawLine As String) As Object
@@ -417,6 +461,153 @@ Private Function ResolveCsvFromDownloaded(ByVal fileName As String, ByVal output
 EH:
     ResolveCsvFromDownloaded = ""
 End Function
+
+Private Function BuildFileNotFoundContext( _
+    ByVal requestedName As String, _
+    ByVal outputText As String, _
+    ByVal downloadedFiles As Variant, _
+    ByVal outputFolder As String _
+) As String
+    Dim hints As String
+    hints = ExtractHintsFromOutputText(outputText)
+    If Trim$(hints) = "" Then hints = "(n/d)"
+
+    BuildFileNotFoundContext = _
+        "requested_name=" & requestedName & _
+        " | M10_CI_TEXT_FILENAME_HINTS=" & hints & _
+        " | downloadedFiles=" & SummarizeDownloadedFiles(downloadedFiles) & _
+        " | outputFolder=" & outputFolder & _
+        " | outputFolder_items=" & SummarizeOutputFolder(outputFolder, 6)
+End Function
+
+Private Function ExtractHintsFromOutputText(ByVal outputText As String) As String
+    On Error GoTo EH
+
+    Dim dict As Object
+    Set dict = CreateObject("Scripting.Dictionary")
+
+    Dim re As Object, matches As Object, m As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = True
+    re.IgnoreCase = True
+    re.Pattern = "(?:sandbox:/mnt/data/)?([A-Za-z0-9_\-\.]+\.(csv|tsv|txt|json|xlsx|pdf))"
+
+    Set matches = re.Execute(Nz(outputText))
+    For Each m In matches
+        Dim fn As String
+        fn = Trim$(CStr(m.SubMatches(0)))
+        If fn <> "" Then
+            If Not dict.Exists(LCase$(fn)) Then dict.Add LCase$(fn), fn
+        End If
+    Next m
+
+    If dict.Count = 0 Then Exit Function
+
+    Dim outTxt As String
+    Dim k As Variant
+    For Each k In dict.Keys
+        outTxt = outTxt & IIf(outTxt = "", "", " | ") & CStr(dict(k))
+        If Len(outTxt) > 320 Then Exit For
+    Next k
+
+    ExtractHintsFromOutputText = outTxt
+    Exit Function
+EH:
+    ExtractHintsFromOutputText = ""
+End Function
+
+Private Function SummarizeDownloadedFiles(ByVal downloadedFiles As Variant) As String
+    On Error GoTo EH
+
+    Dim outTxt As String
+    Dim n As Long
+
+    If IsObject(downloadedFiles) Then
+        Dim it As Variant
+        For Each it In downloadedFiles
+            Dim itemText As String
+            itemText = Trim$(GetBaseName(CStr(it)))
+            If itemText <> "" Then
+                n = n + 1
+                outTxt = outTxt & IIf(outTxt = "", "", " | ") & itemText
+                If n >= 8 Then Exit For
+            End If
+        Next it
+        SummarizeDownloadedFiles = IIf(outTxt = "", "(vazio)", outTxt)
+        Exit Function
+    End If
+
+    Dim token As Variant
+    Dim norm As String
+    norm = Replace(Replace(Nz(CStr(downloadedFiles)), ";", "|"), vbCrLf, "|")
+    For Each token In Split(norm, "|")
+        Dim t As String
+        t = Trim$(CStr(token))
+        If t <> "" Then
+            If LCase$(Left$(t, 3)) = "dl:" Or LCase$(Left$(t, 4)) = "out:" Or LCase$(Left$(t, 3)) = "sv:" Then
+                t = Trim$(Mid$(t, InStr(1, t, ":", vbBinaryCompare) + 1))
+            End If
+            t = GetBaseName(t)
+            If t <> "" Then
+                n = n + 1
+                outTxt = outTxt & IIf(outTxt = "", "", " | ") & t
+                If n >= 8 Then Exit For
+            End If
+        End If
+    Next token
+
+    SummarizeDownloadedFiles = IIf(outTxt = "", "(vazio)", outTxt)
+    Exit Function
+EH:
+    SummarizeDownloadedFiles = "(n/d)"
+End Function
+
+Private Function SummarizeOutputFolder(ByVal outputFolder As String, Optional ByVal maxItems As Long = 6) As String
+    On Error GoTo EH
+
+    If Trim$(outputFolder) = "" Then
+        SummarizeOutputFolder = "(sem pasta)"
+        Exit Function
+    End If
+
+    If Dir$(outputFolder, vbDirectory) = "" Then
+        SummarizeOutputFolder = "(inexistente)"
+        Exit Function
+    End If
+
+    Dim outTxt As String
+    Dim n As Long
+    Dim fileName As String
+    fileName = Dir$(BuildPath(outputFolder, "*"), vbNormal)
+    Do While fileName <> ""
+        n = n + 1
+        outTxt = outTxt & IIf(outTxt = "", "", " | ") & fileName
+        If n >= maxItems Then Exit Do
+        fileName = Dir$()
+    Loop
+
+    SummarizeOutputFolder = IIf(outTxt = "", "(sem ficheiros)", outTxt)
+    Exit Function
+EH:
+    SummarizeOutputFolder = "(erro ao listar)"
+End Function
+
+Private Function HasCiSignalsWithoutArtifact(ByVal outputText As String) As Boolean
+    Dim t As String
+    t = LCase$(Nz(outputText))
+    If t = "" Then Exit Function
+
+    HasCiSignalsWithoutArtifact = _
+        (InStr(1, t, "sandbox:/mnt/data", vbTextCompare) > 0) Or _
+        (InStr(1, t, "/mnt/data/", vbTextCompare) > 0) Or _
+        (InStr(1, t, "container_file_citation", vbTextCompare) > 0) Or _
+        (InStr(1, t, "code_interpreter", vbTextCompare) > 0) Or _
+        (InStr(1, t, "ci_output_file", vbTextCompare) > 0) Or _
+        (InStr(1, t, "file_tsv:", vbTextCompare) > 0) Or _
+        (InStr(1, t, "output_file:", vbTextCompare) > 0) Or _
+        (InStr(1, t, "prova_ci_start", vbTextCompare) > 0)
+End Function
+
 
 Public Sub PrecheckCsv_BomAndCrLf(ByVal csvPath As String, ByRef bomPass As Boolean, ByRef crlfPass As Boolean, ByRef colsHint As Long)
     bomPass = CsvHasUtf8Bom(csvPath)
@@ -676,7 +867,21 @@ Public Sub SelfTest_OutputOrders_RunAll()
     tPass = 0: tFail = 0
 
     SelfTest_Assert "T1 Parser sem EXECUTE", ParseExecuteDirectives("texto normal").Count = 0, tPass, tFail
-    SelfTest_Assert "T2 Parser com EXECUTE", ParseExecuteDirectives("<EXECUTE: LOAD_CSV([file.csv])>").Count = 1, tPass, tFail
+
+    Dim parserValid As Long, parserInCode As Long
+    SelfTest_Assert "T2 Parser com EXECUTE", ParseExecuteDirectives("<EXECUTE: LOAD_CSV([file.csv])>", parserValid, parserInCode).Count = 1 And parserValid = 1 And parserInCode = 0, tPass, tFail
+
+    parserValid = 0: parserInCode = 0
+    Call ParseExecuteDirectives("```" & vbLf & "EXECUTE: LOAD_CSV([inside.csv])" & vbLf & "```", parserValid, parserInCode)
+    SelfTest_Assert "T2b Parser ignora EXECUTE em codeblock", parserValid = 0 And parserInCode = 1, tPass, tFail
+
+    parserValid = 0: parserInCode = 0
+    Call ParseExecuteDirectives("```" & vbLf & "EXECUTE: LOAD_CSV inside" & vbLf & "```", parserValid, parserInCode)
+    SelfTest_Assert "T2c Lint detecta token EXECUTE incompleto em codeblock", parserValid = 0 And parserInCode = 1, tPass, tFail
+
+    parserValid = 0: parserInCode = 0
+    Call ParseExecuteDirectives("```" & vbLf & "x = ""EXECUTE: LOAD_CSV([inline.csv])""" & vbLf & "```", parserValid, parserInCode)
+    SelfTest_Assert "T2d Lint detecta token EXECUTE no meio da linha em codeblock", parserValid = 0 And parserInCode = 1, tPass, tFail
 
     Dim r3 As String
     r3 = OutputOrders_TryExecute(1, "SELFTEST/T3", "resp", "EXECUTE: DELETE_FILE([x.csv])", base, "")

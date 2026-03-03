@@ -141,6 +141,8 @@ Public Sub ExecutarPrompt_PorID()
         fo_pptxMode, fo_xlsxMode, fo_pdfMode, fo_imageMode, fo_filesUsedOut, fo_filesOpsOut)
     Dim fo_executeOpsLog As String
     fo_executeOpsLog = ""
+    Dim fo_executeM10Signals As String
+    fo_executeM10Signals = "filesUsed=" & fo_filesUsedOut & " | filesOps=" & fo_filesOpsOut
     If Trim$(resultado.Erro) = "" And resultado.httpStatus >= 200 And resultado.httpStatus < 300 Then
         Dim fo_m10Context As String
         fo_m10Context = "output_kind=" & Trim$(fo_outputKind) & _

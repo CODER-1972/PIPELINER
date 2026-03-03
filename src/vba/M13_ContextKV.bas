@@ -8,6 +8,9 @@ Option Explicit
 ' - Resolver placeholders/directivas de contexto com observabilidade e fallback seguro.
 '
 ' Atualizações:
+' - 2026-03-04 | Codex | Diagnostico prescritivo para CAPTURE_MISS + cobertura TSV ContextKV
+'   - Expande chaves reservadas para handoff TSV (DRAFT/FINAL/CHANGELOG/VALIDACOES).
+'   - Em CAPTURE_MISS, informa rotulos esperados para reduzir troubleshooting ambiguo.
 ' - 2026-02-17 | Codex | Correcao de escape/unescape JSON no ContextKV
 '   - Corrige Replace com padroes invertidos que removiam barras e neutralizavam aspas no modulo.
 '   - Alinha ContextKV_JsonEscape/ContextKV_JsonUnescape com convencao usada em outros modulos.
@@ -22,6 +25,7 @@ Option Explicit
 ' - ContextKV_CaptureRow (Sub): rotina pública do módulo.
 ' - SelfTest_ContextKV_Parse_RESULTS_JSON (Sub): rotina pública do módulo.
 ' - SelfTest_ContextKV_Placeholder_Replace (Sub): rotina pública do módulo.
+' - SelfTest_ContextKV_Parse_TSVCatalogoFinal (Sub): valida captura de TSV_CATALOGO_FINAL_ENC por rotulo.
 ' - SelfTest_ContextKV_FileFallback (Sub): rotina pública do módulo.
 ' - SelfTest_ContextKV_OutputRef (Sub): rotina pública do módulo.
 ' - SelfTest_RunAll_ContextKV (Sub): rotina pública do módulo.
@@ -393,7 +397,7 @@ For Each key In reserved
 Next key
 
 If dictCap.Count = 0 And dictMeta.Count = 0 Then
-    ContextKV_LogEvent pipelineName, stepN, promptId, "CAPTURE_MISS", "", "INFO", "Sem variáveis capturadas (nenhum rótulo encontrado)."
+    ContextKV_LogEvent pipelineName, stepN, promptId, "CAPTURE_MISS", "", "INFO", "Sem variaveis capturadas (nenhum rotulo encontrado). Esperados rotulos tipo KEY: valor (ex.: RESULTS_JSON:, TSV_CATALOGO_FINAL_ENC:, NEXT_PROMPT_ID:, MEMORY_SHORT:)."
     Exit Sub
 End If
 
@@ -495,6 +499,27 @@ Exit Sub
 EH:
 ContextKV_LogEvent "SELFTEST", 0, "SELFTEST", "SELFTEST_FAIL", "Placeholder_Replace", "ERRO", "Erro: " & Err.Description
 End Sub
+Public Sub SelfTest_ContextKV_Parse_TSVCatalogoFinal()
+On Error GoTo EH
+Dim sample As String
+sample = "TSV_CATALOGO_FINAL_ENC: ID\tNome curto\nA/01/X/A\tTeste" & vbCrLf & _
+         "MEMORY_SHORT: ok"
+
+Dim v As String, method As String, fmt As String, errMsg As String, labelFound As Boolean
+v = "": method = "": fmt = "": errMsg = "": labelFound = False
+
+Dim ok As Boolean
+ok = ContextKV_ParseOutputForKey(sample, "TSV_CATALOGO_FINAL_ENC", v, method, fmt, errMsg, labelFound)
+
+If ok And InStr(1, v, "ID\tNome curto", vbTextCompare) > 0 Then
+    ContextKV_LogEvent "SELFTEST", 0, "SELFTEST", "SELFTEST_PASS", "Parse_TSV_CATALOGO_FINAL_ENC", "INFO", "PASS | method=" & method & " | fmt=" & fmt
+Else
+    ContextKV_LogEvent "SELFTEST", 0, "SELFTEST", "SELFTEST_FAIL", "Parse_TSV_CATALOGO_FINAL_ENC", "ERRO", "FAIL | ok=" & CStr(ok) & " | err=" & errMsg
+End If
+Exit Sub
+EH:
+ContextKV_LogEvent "SELFTEST", 0, "SELFTEST", "SELFTEST_FAIL", "Parse_TSV_CATALOGO_FINAL_ENC", "ERRO", "Erro: " & Err.Description
+End Sub
 Public Sub SelfTest_ContextKV_FileFallback()
 On Error GoTo EH
 Dim big As String
@@ -533,6 +558,7 @@ Public Sub SelfTest_RunAll_ContextKV()
 ContextKV_LogEvent "SELFTEST", 0, "SELFTEST", "SELFTEST_START", "", "INFO", "Início SelfTest_RunAll_ContextKV"
 SelfTest_ContextKV_Parse_RESULTS_JSON
 SelfTest_ContextKV_Placeholder_Replace
+SelfTest_ContextKV_Parse_TSVCatalogoFinal
 SelfTest_ContextKV_FileFallback
 SelfTest_ContextKV_OutputRef
 ContextKV_LogEvent "SELFTEST", 0, "SELFTEST", "SELFTEST_END", "", "INFO", "Fim SelfTest_RunAll_ContextKV"
@@ -551,7 +577,11 @@ ContextKV_ReservedKeys = Array( _
 "LESSONS", _
 "VARIABLES", _
 "CRITERIA", _
-"RATIONALE" _
+"RATIONALE", _
+"TSV_CATALOGO_DRAFT_ENC", _
+"TSV_CATALOGO_FINAL_ENC", _
+"TSV_CHANGELOG_ENC", _
+"TSV_VALIDACOES_ENC" _
 )
 End Function
 Private Sub ContextKV_EnsureSeguimentoColumns()
