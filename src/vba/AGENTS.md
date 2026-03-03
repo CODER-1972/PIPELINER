@@ -557,11 +557,11 @@ Se começar a ficar demasiado grande:
 
 - Em mapeamentos de funcionalidade no DEBUG, modelar `ACAO EM CURSO` como lista de ações acumuláveis (não exclusivas) e anexar contexto em formato `chave=valor`; evitar lógica de primeiro-match que esconda etapas simultâneas do mesmo evento.
 
-- Em extração de contexto para DEBUG, aceitar tanto `chave=valor` como `chave:valor` (normalizando para `chave=valor`) e privilegiar chaves operacionais objetivas (`file_id`, `container_id`, `http_status`, `elapsed_ms`) para facilitar troubleshooting.
+- Em selftests/fixtures VBA com JSON inline em literais de string, duplicar sempre aspas (`""`) em vez de escapes C-style; literais como `"{"type":"x"}"` causam `Compile error` ou string inválida no VBE e devem ser escritos como `"{""type"":""x""}"`.
 
-- Em mapeamento de ações do DEBUG, privilegiar primeiro regras explícitas por parâmetro (ex.: `M10_*`, `M05_*`, `OUTPUT_EXECUTE_*`) e só depois regras genéricas por substring para reduzir falsos positivos de interpretação.
-- Em lint de `EXECUTE` no parser de Output Orders, distinguir **parsing executável** de **intenção em codeblock**: fora de fences contar apenas diretivas válidas; dentro de fences detetar token `EXECUTE:` mesmo em formato incompleto para diagnóstico, sem promover execução.
 
-- Em diagnósticos compactos de correlação M10 (ex.: `CI_PROOF_MNT_DATA_MISSING`), derivar `eligible` por sinais operacionais robustos (`selected=SIM/NAO`, `eligible=SIM/NAO`) e não por campos semânticos genéricos como `motivo`, para evitar falsos positivos/negativos em troubleshooting.
-- No fluxo de FILES do catálogo, quando a célula esperada de `Operacoes com ficheiros` não puder ser localizada/escrita, registar `CATALOG_FILES_OPS_MISSING` como `ALERTA` no DEBUG com `promptId` e referência de bloco/linha; manter execução não bloqueante para compatibilidade com catálogos legados e incluir sugestão curta para preencher o bloco padrão de 5 linhas.
-- Em alertas de troubleshooting de catálogo (ex.: `CATALOG_FILES_OPS_MISSING`), deduplicar emissão por prompt/execução para evitar ruído no DEBUG; manter novo alerta apenas quando o motivo operacional muda (ex.: não localizado vs falha de escrita).
+## Regra adicional de revisão VBA (agnóstica)
+- Em módulos com `Option Explicit`, não usar helpers implícitos (`Nz`, `IsMissing` fora de `Optional Variant`, etc.) sem garantir existência/assinatura no próprio módulo ou num contrato público estável.
+- Quando houver helper local (`Painel_Nz`, por exemplo), usar sempre a versão local para evitar regressão de compilação por dependência cruzada a procedimentos `Private`.
+
+- Em lints de inteno operacional (ex.: CSV/EXECUTE), evitar gatilhos por token genrico isolado (como "CSV"); preferir marcadores explcitos (`LOAD_CSV`, `EXECUTE:`, `EXPORT_OK_CSV`, `CSV_EXISTE_EM_MNT_DATA`, `FILE_CSV`) para reduzir falso-positivo em prompts descritivos.
