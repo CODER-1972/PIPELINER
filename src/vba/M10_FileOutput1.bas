@@ -8,6 +8,9 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-03-04 | Codex | Consistencia de marcadores afirmativos CI
+'   - Alinha CI_IsAffirmativeMarker com o contrato ci_csv_v1 (aceita SIM/TRUE/YES/OK/1/Y/S).
+'   - Evita divergencia entre M10_CI_PROOF_SUMMARY e validacao de contrato no M19.
 ' - 2026-03-04 | Codex | Evento canonico de prova minima CI e distincao input-vs-output
 '   - Regista M10_CI_PROOF_SUMMARY com csv_exists/word_exists/mnt_data_list_count/chosen_output.
 '   - Acrescenta marcador explicito quando a listagem do container contem apenas itens de input (file-*).
@@ -2293,7 +2296,7 @@ End Sub
 Private Function CI_IsAffirmativeMarker(ByVal rawValue As String) As Boolean
     Dim v As String
     v = UCase$(Trim$(rawValue))
-    CI_IsAffirmativeMarker = (v = "SIM" Or v = "TRUE" Or v = "YES")
+    CI_IsAffirmativeMarker = (v = "SIM" Or v = "TRUE" Or v = "YES" Or v = "OK" Or v = "1" Or v = "Y" Or v = "S")
 End Function
 
 Private Function CI_CountMntDataItems(ByVal mntDataListText As String) As Long

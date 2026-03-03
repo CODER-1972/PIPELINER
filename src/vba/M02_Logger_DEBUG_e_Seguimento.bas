@@ -11,18 +11,6 @@ Option Explicit
 ' - 2026-03-03 | Codex | Inclui CI_PROOF_MNT_DATA_MISSING no mapeamento operacional
 '   - Classifica o novo parametro nas acoes de OUTPUT_EXECUTE/diagnostico CI na coluna Funcionalidade.
 '   - Mantem coerencia de troubleshooting para eventos de artefacto em falta no fluxo CI.
-' - 2026-03-03 | Codex | Classificacao de trace de text_embed no DEBUG
-'   - Classifica parametro TEXT_EMBED_TRACE no bloco de gestao de anexos/text_embed.
-'   - Acrescenta acao dedicada para leitura de name/len_chars/hash_short no troubleshooting.
-' - 2026-03-03 | Codex | Mapeia trace padronizado de override de modo FILES
-'   - Inclui `FILES_MODE_OVERRIDE_TRACE` nas ações deduzidas da coluna Funcionalidade.
-'   - Amplia extração de contexto operacional com requested/resolved/raw_mode/effective_mode/reason.
-' - 2026-03-03 | Codex | Mapeia eventos de lint do Output Orders
-'   - Adiciona cobertura para EXECUTE_LINT_MULTIPLE e EXECUTE_LINT_IN_CODEBLOCK na deducao de acao em curso.
-' - 2026-03-03 | Codex | Mapeia novo alerta CI_PROOF_MNT_DATA_MISSING na coluna de acao
-'   - Evita descricao generica para diagnostico de ausencia de artefacto CSV com sinais M10.
-' - 2026-03-03 | Codex | Expande contexto M10 extraido para CI_PROOF_MNT_DATA_MISSING
-'   - Adiciona chaves de falha de download/listagem para manter acao em curso especifica e auditavel.
 ' - 2026-03-03 | Codex | Cobertura ampliada de acoes especificas no DEBUG
 '   - Reforca mapeamento por sinais de parametro/contexto para suportar combinacoes de acoes no mesmo registo.
 '   - Amplia extracao de contexto com pares chave=valor e chave:valor para diagnostico mais objetivo.
@@ -263,7 +251,7 @@ Private Function Debug_DeduzirAcaoEmCurso(ByVal parametro As String, ByVal probl
             Call Debug_AcaoAdd(acoes, "Resolucao de item FILES declarado no INPUTS")
             Call Debug_AcaoAdd(acoes, "Aplicacao de flags required/latest/as_pdf/as_is/text_embed")
 
-        Case "FILES", "FILES UPLOAD", "FILES REUSE", "FILES IA", "FILES_DIAG", "DOCX_INPUTFILE_OVERRIDDEN", "PDF_CACHE_HIT", "PDF_CACHE_MISS_CONVERTED", "TEXT_EMBED_EMPTY", "TEXT_EMBED_TOO_LARGE", "AS_PDF", "TEXT_EMBED"
+        Case "FILES", "FILES UPLOAD", "FILES REUSE", "FILES IA", "FILES_DIAG", "DOCX_INPUTFILE_OVERRIDDEN", "PDF_CACHE_HIT", "PDF_CACHE_MISS_CONVERTED", "TEXT_EMBED_EMPTY", "TEXT_EMBED_TOO_LARGE", "TEXT_EMBED_TRACE", "AS_PDF", "TEXT_EMBED"
             Call Debug_AcaoAdd(acoes, "Preparacao e transformacao de anexos")
 
         Case "M05_PAYLOAD_CHECK", "M05_JSON_PREFLIGHT", "M05_UTF8_ROUNDTRIP", "M05_PAYLOAD_DUMP", "M05_PAYLOAD_DUMP_FAIL", "M05_TIMEOUT_DECISION", "M05_HTTP_TIMEOUTS", "M05_HTTP_TIMEOUT_INVALID", "M05_HTTP_TIMEOUT_ERROR", "M05_HTTP_RESULT", "API", "API_RETRY_5XX", "API_CONTEXT_LENGTH_ACTION", "API_CONTEXT_LENGTH_EXCEEDED"
@@ -278,9 +266,13 @@ Private Function Debug_DeduzirAcaoEmCurso(ByVal parametro As String, ByVal probl
             Call Debug_AcaoAdd(acoes, "Validacao do contrato de File Output")
             Call Debug_AcaoAdd(acoes, "Resolucao do ficheiro esperado no OUTPUT Folder")
 
-        Case "OUTPUT_EXECUTE_FOUND", "OUTPUT_EXECUTE_PARSED", "OUTPUT_EXECUTE_UNKNOWN_CMD", "OUTPUT_EXECUTE_INVALID_FILENAME", "OUTPUT_EXECUTE_FILE_NOT_FOUND", "OUTPUT_EXECUTE_CSV_PRECHECK", "OUTPUT_EXECUTE_CSV_BOM_FAIL", "OUTPUT_EXECUTE_CSV_CRLF_IN_FIELDS", "OUTPUT_EXECUTE_SHEET_CREATED", "OUTPUT_EXECUTE_IMPORT_FAIL", "OUTPUT_EXECUTE_CSV_IMPORTED", "OUTPUT_EXECUTE_VERIFIED"
+        Case "OUTPUT_EXECUTE_FOUND", "OUTPUT_EXECUTE_PARSED", "OUTPUT_EXECUTE_UNKNOWN_CMD", "OUTPUT_EXECUTE_INVALID_FILENAME", "OUTPUT_EXECUTE_FILE_NOT_FOUND", "CI_PROOF_MNT_DATA_MISSING", "OUTPUT_EXECUTE_CSV_PRECHECK", "OUTPUT_EXECUTE_CSV_BOM_FAIL", "OUTPUT_EXECUTE_CSV_CRLF_IN_FIELDS", "OUTPUT_EXECUTE_SHEET_CREATED", "OUTPUT_EXECUTE_IMPORT_FAIL", "OUTPUT_EXECUTE_CSV_IMPORTED", "OUTPUT_EXECUTE_VERIFIED"
             Call Debug_AcaoAdd(acoes, "Execucao da diretiva OUTPUT_EXECUTE")
             Call Debug_AcaoAdd(acoes, "Importacao/validacao de CSV em worksheet dedicada")
+
+        Case "EXECUTE_LINT_MULTIPLE", "EXECUTE_LINT_IN_CODEBLOCK"
+            Call Debug_AcaoAdd(acoes, "Lint de diretivas EXECUTE no output do modelo")
+            Call Debug_AcaoAdd(acoes, "Aplicacao da politica de seguranca para diretivas executaveis")
 
         Case "M10_CI_NO_CITATION", "M10_CI_NO_CONTAINER_ID", "M10_CI_CONTAINER_EMPTY", "M10_CI_CONTAINER_LIST", "M10_CI_CONTAINER_SELECT_DIAG", "M10_CI_CONTAINER_INPUT_LIKE", "M10_CI_TEXT_FILENAME_HINTS", "M10_CI_MARKER_NOT_FOUND", "M10_CI_AMBIGUOUS_MARKER", "M10_CI_AMBIGUOUS_FALLBACK", "M10_CI_RESOLVE_RULE", "M10_CI_CONTRACT_STATUS", "M10_CI_DOWNLOAD_NOFILE", "M10_CI_DOWNLOAD_FAIL", "M10_CI_LIST_FAIL", "M10_CI_RAW_MISSING", "M10_CI_ZERO_BYTES", "M10_RAWFOLDER", "M10_RUNFOLDER", "M10_RAW_WRITE_FAIL", "M10_SCHEMA_SUMMARY", "M10_SCHEMA_INVALID", "M10_SCHEMA_DIAG_FAIL", "M10_META_PATH_TOO_LONG", "M10_PATH_TOO_LONG", "M10_FOLDER_CREATE_FAIL"
             Call Debug_AcaoAdd(acoes, "Inspecao de artefactos de output no container do Code Interpreter")
@@ -333,12 +325,16 @@ Private Sub Debug_AplicarAcoesPorSinal(ByRef acoes As String, ByVal p As String,
             Call Debug_AcaoAdd(acoes, "Desambiguacao assistida para escolha do ficheiro candidato")
         Case "DOCX_INPUTFILE_OVERRIDDEN"
             Call Debug_AcaoAdd(acoes, "Override de modo de anexo Office para formato suportado")
+        Case "FILES_MODE_OVERRIDE_TRACE"
+            Call Debug_AcaoAdd(acoes, "Rastreio padronizado de divergencia entre raw_mode e effective_mode")
         Case "PDF_CACHE_HIT", "PDF_CACHE_MISS_CONVERTED"
             Call Debug_AcaoAdd(acoes, "Gestao da cache de conversao PDF para anexos Office")
         Case "TEXT_EMBED_EMPTY"
             Call Debug_AcaoAdd(acoes, "Detecao de extracao vazia em text_embed")
         Case "TEXT_EMBED_TOO_LARGE"
             Call Debug_AcaoAdd(acoes, "Aplicacao de politica de overflow de text_embed")
+        Case "TEXT_EMBED_TRACE"
+            Call Debug_AcaoAdd(acoes, "Rastreio de integridade de text_embed (name/len_chars/hash_short)")
         Case "M10_CI_DOWNLOAD_FAIL", "M10_CI_DOWNLOAD_NOFILE"
             Call Debug_AcaoAdd(acoes, "Tratamento de falha no download de artefacto do container")
         Case "M10_CI_AMBIGUOUS_MARKER", "M10_CI_AMBIGUOUS_FALLBACK"
@@ -381,12 +377,8 @@ Private Sub Debug_AplicarAcoesPorSinal(ByRef acoes As String, ByVal p As String,
             Call Debug_AcaoAdd(acoes, "Checklist pre-envio do payload (tools/input/tamanho)")
         Case "M05_JSON_PREFLIGHT"
             Call Debug_AcaoAdd(acoes, "Preflight de validade JSON antes do HTTP")
-        Case "M05_PAYLOAD_DUMP", "M05_PAYLOAD_DUMP_FAIL"
-            Call Debug_AcaoAdd(acoes, "Persistencia diagnostica do payload final de request")
-        Case "M05_CI_INTENT_EVAL", "M05_CI_AUTO_SUPPRESS"
-            Call Debug_AcaoAdd(acoes, "Avaliacao de intencao explicita de Code Interpreter no passo")
-        Case "M07_FILEOUTPUT_MODE_MISMATCH", "M07_FILEOUTPUT_PARSE_GUARD"
-            Call Debug_AcaoAdd(acoes, "Validacao de coerencia entre modo efetivo e contrato de File Output")
+        Case "CI_PROOF_MNT_DATA_MISSING"
+            Call Debug_AcaoAdd(acoes, "Detecao de prova CI sem artefacto descarregado para a pasta de output")
         Case "OUTPUT_EXECUTE_CSV_PRECHECK"
             Call Debug_AcaoAdd(acoes, "Pre-validacao de encoding/BOM e estrutura CSV")
         Case "OUTPUT_EXECUTE_VERIFIED"
@@ -472,7 +464,7 @@ Private Function Debug_ExtrairDetalheOperacional(ByVal problema As String, ByVal
     Dim i As Long
 
     fonte = Trim$(problema & " | " & sugestao)
-    keys = Array("filename", "file", "full_path", "resolvedPath", "resolved_path", "inputFolder", "input_folder", "outputFolder", "output_folder", "stage", "endpoint", "prompt", "promptId", "pipeline", "pipeline_name", "container_id", "file_id", "status", "http_status", "httpStatus", "engine", "profile", "effective_mode", "mode_effective", "mode", "bytes", "created_at", "elapsed_ms", "payload_len", "response_id", "cause_hint", "confidence", "dlErr", "retry_outcome")
+    keys = Array("filename", "file", "requested", "resolved", "full_path", "resolvedPath", "resolved_path", "inputFolder", "input_folder", "outputFolder", "output_folder", "stage", "endpoint", "prompt", "promptId", "pipeline", "pipeline_name", "container_id", "file_id", "status", "http_status", "httpStatus", "engine", "profile", "raw_mode", "effective_mode", "mode_effective", "mode", "reason", "bytes", "created_at", "elapsed_ms", "payload_len", "response_id", "cause_hint", "confidence", "dlErr", "retry_outcome")
 
     For i = LBound(keys) To UBound(keys)
         detalhe = Debug_ExtrairDetalhePorChave(fonte, CStr(keys(i)))

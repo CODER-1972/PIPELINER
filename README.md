@@ -229,7 +229,7 @@ Capacidades principais:
 - suporte a wildcard em `FILES:` (ex.: `GUIA_DE_ESTILO*.pdf`), com tentativa inicial por `Dir` e fallback de correspondência flexível para nomes com `_`, `-` e espaço;
 - upload para `/v1/files` com reutilização por hash (quando configurado);
 - rastreio por ficheiro no `DEBUG` com etiqueta `FILES_ITEM_TRACE` (1 linha por item declarado, incluindo `full_path`, `status`, `mode`, `file_id` quando existir e diagnóstico pedagógico: `problema_tipo`, `explicacao`, `acao`);
-- quando o bloco/célula de `Operacoes com ficheiros` não estiver disponível no catálogo, o sistema regista `CATALOG_FILES_OPS_MISSING` (ALERTA) no DEBUG com `promptId` + referência de bloco/linha, sem bloquear a execução (compatibilidade com catálogos antigos); o alerta é emitido uma única vez por prompt para evitar ruído.
+- quando o bloco/célula de `Operacoes com ficheiros` não estiver disponível no catálogo **e o prompt declarar `FILES:`**, o sistema regista `CATALOG_FILES_OPS_MISSING` (ALERTA) no DEBUG com `promptId` + referência de bloco/linha, sem bloquear a execução (compatibilidade com catálogos antigos); o alerta é emitido uma única vez por prompt para evitar ruído.
 - fallback entre engines/perfis de upload.
 
 Nota de compatibilidade importante:
@@ -728,7 +728,7 @@ O PIPELINER suporta execução controlada de ordens pós-output, após resposta 
 
 ### 12.2 Fluxo LOAD_CSV
 
-1. Parser ignora ordens dentro de blocos de código (```...```), conta diretivas válidas fora de fences e deteta intenção `EXECUTE:` dentro de code block para lint (mesmo quando a linha está incompleta).
+1. Parser ignora ordens dentro de blocos de código (```...```), conta diretivas válidas fora de fences e deteta ocorrência/intenção `EXECUTE:` dentro de code block para lint (incluindo casos incompletos ou no meio da linha).
 2. Resolve CSV automaticamente a partir de `downloadedFiles` e `OUTPUT Folder` (incluindo subpastas).
 3. Faz pré-check técnico:
    - BOM UTF-8 (EF BB BF);
@@ -737,7 +737,7 @@ O PIPELINER suporta execução controlada de ordens pós-output, após resposta 
 4. Cria worksheet nova após `PAINEL` (ou no fim, se `PAINEL` não existir), com nome baseado no prefixo do ID da coluna A do CSV.
 5. Importa CSV por `QueryTables` (`;`, UTF-8), com fallback `OpenText`.
 6. Verifica importação (linhas/colunas/header) e regista diagnóstico.
-7. Regista no DEBUG um contexto mínimo do File Output (`output_kind`, `process_mode`, `auto_save`) para facilitar correlação M10↔M17 (com fallback opcional via token compacto `M10CTX:` em `downloadedFiles/files_ops_log`).
+7. Regista no DEBUG um contexto mínimo do File Output (`output_kind`, `process_mode`, `auto_save`) para facilitar correlação M10↔M17 (com fallback opcional via token compacto `M10CTX:` em `downloadedFiles/files_ops_log`, incluindo payload em coleção).
 8. Revalida existência física do CSV (`FileExistsFast`) antes da importação para evitar falso positivo quando o caminho resolvido deixa de existir.
 
 ### 12.3 Logs
@@ -747,7 +747,8 @@ O PIPELINER suporta execução controlada de ordens pós-output, após resposta 
   - `OUTPUT_EXECUTE_PARSED`
   - `OUTPUT_EXECUTE_UNKNOWN_CMD`
   - `OUTPUT_EXECUTE_INVALID_FILENAME`
-  - `OUTPUT_EXECUTE_FILE_NOT_FOUND`
+  - `OUTPUT_EXECUTE_FILE_NOT_FOUND` (inclui contexto: `requested_name`, hints estilo `M10_CI_TEXT_FILENAME_HINTS`, resumo de `downloadedFiles` e `outputFolder_items`)
+  - `CI_PROOF_MNT_DATA_MISSING` (sinal explícito de evidência CI sem artefacto local resolvido)
   - `OUTPUT_EXECUTE_CSV_PRECHECK`
   - `OUTPUT_EXECUTE_SHEET_CREATED`
   - `OUTPUT_EXECUTE_CSV_IMPORTED`
