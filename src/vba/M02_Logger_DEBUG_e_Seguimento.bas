@@ -8,6 +8,8 @@ Option Explicit
 ' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
 '
 ' Atualizações:
+' - 2026-03-03 | Codex | Mapeia eventos de lint do Output Orders
+'   - Adiciona cobertura para EXECUTE_LINT_MULTIPLE e EXECUTE_LINT_IN_CODEBLOCK na deducao de acao em curso.
 ' - 2026-03-03 | Codex | Mapeia novo alerta CI_PROOF_MNT_DATA_MISSING na coluna de acao
 '   - Evita descricao generica para diagnostico de ausencia de artefacto CSV com sinais M10.
 ' - 2026-03-03 | Codex | Expande contexto M10 extraido para CI_PROOF_MNT_DATA_MISSING
@@ -162,7 +164,7 @@ Private Function Debug_DeduzirFuncionalidade(ByVal parametro As String) As Strin
         Exit Function
     End If
 
-    If Left$(p, 4) = "M07_" Or Left$(p, 15) = "OUTPUT_EXECUTE_" Then
+    If Left$(p, 4) = "M07_" Or Left$(p, 15) = "OUTPUT_EXECUTE_" Or Left$(p, 13) = "EXECUTE_LINT_" Then
         Debug_DeduzirFuncionalidade = "Aplicacao do plano de output e validacao dos artefactos guardados no OUTPUT Folder."
         Exit Function
     End If
@@ -270,6 +272,10 @@ Private Function Debug_DeduzirAcaoEmCurso(ByVal parametro As String, ByVal probl
         Case "OUTPUT_EXECUTE_FOUND", "OUTPUT_EXECUTE_PARSED", "OUTPUT_EXECUTE_UNKNOWN_CMD", "OUTPUT_EXECUTE_INVALID_FILENAME", "OUTPUT_EXECUTE_FILE_NOT_FOUND", "OUTPUT_EXECUTE_CSV_PRECHECK", "OUTPUT_EXECUTE_CSV_BOM_FAIL", "OUTPUT_EXECUTE_CSV_CRLF_IN_FIELDS", "OUTPUT_EXECUTE_SHEET_CREATED", "OUTPUT_EXECUTE_IMPORT_FAIL", "OUTPUT_EXECUTE_CSV_IMPORTED", "OUTPUT_EXECUTE_VERIFIED", "CI_PROOF_MNT_DATA_MISSING"
             Call Debug_AcaoAdd(acoes, "Execucao da diretiva OUTPUT_EXECUTE")
             Call Debug_AcaoAdd(acoes, "Importacao/validacao de CSV em worksheet dedicada")
+
+        Case "EXECUTE_LINT_MULTIPLE", "EXECUTE_LINT_IN_CODEBLOCK"
+            Call Debug_AcaoAdd(acoes, "Lint de diretivas EXECUTE no output do modelo")
+            Call Debug_AcaoAdd(acoes, "Aplicacao da politica de seguranca para diretivas executaveis")
 
         Case "M10_CI_NO_CITATION", "M10_CI_NO_CONTAINER_ID", "M10_CI_CONTAINER_EMPTY", "M10_CI_CONTAINER_LIST", "M10_CI_CONTAINER_SELECT_DIAG", "M10_CI_CONTAINER_INPUT_LIKE", "M10_CI_TEXT_FILENAME_HINTS", "M10_CI_MARKER_NOT_FOUND", "M10_CI_AMBIGUOUS_MARKER", "M10_CI_AMBIGUOUS_FALLBACK", "M10_CI_RESOLVE_RULE", "M10_CI_CONTRACT_STATUS", "M10_CI_DOWNLOAD_NOFILE", "M10_CI_DOWNLOAD_FAIL", "M10_CI_LIST_FAIL", "M10_CI_RAW_MISSING", "M10_CI_ZERO_BYTES", "M10_RAWFOLDER", "M10_RUNFOLDER", "M10_RAW_WRITE_FAIL", "M10_SCHEMA_SUMMARY", "M10_SCHEMA_INVALID", "M10_SCHEMA_DIAG_FAIL", "M10_META_PATH_TOO_LONG", "M10_PATH_TOO_LONG", "M10_FOLDER_CREATE_FAIL"
             Call Debug_AcaoAdd(acoes, "Inspecao de artefactos de output no container do Code Interpreter")
