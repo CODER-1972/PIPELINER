@@ -295,6 +295,34 @@ Para ContextKV, `CAPTURE_MISS` significa que o output não trouxe rótulos captu
 
 Nota: `tools` continua como chave proibida em `Config extra` (é ignorada com alerta), para preservar a coerência com as colunas/lógica dedicadas.
 
+
+### Contrato diagnóstico `ci_csv_v1` (prova mínima reforçada)
+
+Quando um passo ativa `diagnostic_contract: ci_csv_v1`, o gate valida (antes de `OUTPUT EXECUTE`) uma prova textual mínima para cenários CSV/CI:
+
+- `CSV_EXISTE_EM_MNT_DATA: SIM/NAO`;
+- `FILE_CSV: <basename.csv>`;
+- `MNT_DATA_LIST: <nome(bytes=...) ; ...>`.
+
+Se faltar algum marcador mínimo num passo com intenção CSV (`LOAD_CSV`, `EXECUTE`, `EXPORT_OK_CSV=true`), o contrato bloqueia continuidade com regra `C1B_MIN_PROOF_MARKERS_MISSING`.
+
+O parser de contrato aceita aliases controlados de configuração (ex.: `diagnostic_contract`, `contract_mode`, `diagnostic-contract`) para reduzir falso negativo por variação de escrita, e o marcador `CSV_EXISTE_EM_MNT_DATA` aceita afirmações equivalentes (`SIM|TRUE|YES|OK|1`).
+
+Além disso, no fluxo de CI (`M10`) o DEBUG passa a emitir `M10_CI_PROOF_SUMMARY` com:
+
+- `csv_exists`;
+- `word_exists`;
+- `mnt_data_list_count`;
+- `chosen_output`.
+
+Este resumo reduz falso diagnóstico entre “input anexado ao container” e “artefacto realmente produzido”.
+
+Quando o output declara sucesso CSV mas `CSV_EXISTE_EM_MNT_DATA` não confirma estado afirmativo, o contrato marca inconsistência (`C1C_CSV_STATE_INCONSISTENT`) e impede avanço silencioso.
+
+### ContextKV: CAPTURE_MISS com dica prescritiva
+
+Quando não existe nenhum rótulo capturável no output, o evento `CAPTURE_MISS` passa a incluir exemplos concretos de rótulos esperados (`RESULTS_JSON:`, `TSV_CATALOGO_FINAL_ENC:`, `NEXT_PROMPT_ID:`, `MEMORY_SHORT:`), acelerando correção do prompt.
+
 ### Diagnóstico rápido: `Erro VBA: The operation timed out`
 
 Quando o `Seguimento` mostra `HTTP Status=0` e `Output=[ERRO] Erro VBA: The operation timed out`, a falha tende a acontecer no cliente HTTP (tempo de espera do host/engine) e não necessariamente num erro de validação do payload.

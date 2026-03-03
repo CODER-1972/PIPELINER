@@ -8,6 +8,11 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-04 | Codex | Hardening de gates por etapa + validacoes preventivas de Next
+'   - Adiciona validacao preventiva de coerencia default em allowed antes da resolucao do proximo passo.
+'   - Emite diagnostico especifico quando NEXT_PROMPT_ID nao e encontrado em modo AUTO (fallback para default/STOP).
+'   - Inclui lint operacional para passos CSV/EXECUTE sem diagnostic_contract ativo no Config extra.
+'   - Lint reconhece aliases de chave de contrato, reporta process_mode e reduz falso alerta por token genérico CSV.
 ' - 2026-03-02 | Codex | Foco inicial no DEBUG e destaque visual de fim de prompt
 '   - Ao clicar INICIAR, ativa DEBUG!A1 para acompanhar novas linhas em tempo real.
 '   - Regista stage=step_completed no fim de cada passo para suportar destaque verde no DEBUG.
@@ -323,6 +328,7 @@ Private Sub Painel_RegistarPipeline(ByVal pipelineIndex As Long)
 
         Dim nextPrompt As String, nextDefault As String, nextAllowed As String
         Call Catalogo_LerNextConfig(atual, nextPrompt, nextDefault, nextAllowed)
+        Call Painel_ValidarConsistenciaNextConfig(nextPrompt, nextDefault, nextAllowed, 0, atual)
 
         Dim candidato As String
         candidato = Painel_ResolverNextDeterministico(nextPrompt, nextDefault)
@@ -805,6 +811,16 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             End If
         End If
 
+        If Painel_HasCsvExecuteIntent(prompt.textoPrompt, prompt.ConfigExtra) And _
+           (Not Painel_HasDiagnosticContractConfigured(prompt.ConfigExtra)) Then
+            Dim processModeHint As String
+            processModeHint = Painel_ConfigExtraGetValue(prompt.ConfigExtra, "process_mode")
+            Call Debug_Registar(passo, prompt.Id, "ALERTA", "", "CONFIG_LINT_CONTRACT", _
+                "Prompt com intencao CSV/EXECUTE sem contrato diagnostico ativo no Config extra." & _
+                IIf(Trim$(processModeHint) <> "", " process_mode=" & processModeHint & ".", ""), _
+                "Sugestao: adicionar diagnostic_contract: ci_csv_v1 para ativar gate de prova minima antes de EXECUTE.")
+        End If
+
         ' -------------------------------
         ' FILES MANAGEMENT (M09)
         ' -------------------------------
@@ -1061,10 +1077,20 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         ' Ler Next config
         Dim nextPrompt As String, nextDefault As String, nextAllowed As String
         Call Catalogo_LerNextConfig(atual, nextPrompt, nextDefault, nextAllowed)
+        Call Painel_ValidarConsistenciaNextConfig(nextPrompt, nextDefault, nextAllowed, passo, atual)
 
         ' Resolver proximo esperado com output (AUTO tenta extrair; senao default)
         Dim proximoEsperado As String
         proximoEsperado = Painel_ResolverNextComOutput(nextPrompt, nextDefault, resultado.outputText)
+        If UCase$(Trim$(nextPrompt)) = "AUTO" Then
+            Dim autoExtracted As String
+            autoExtracted = Painel_ExtrairNextPromptIdDoOutput(resultado.outputText)
+            If Trim$(autoExtracted) = "" Then
+                Call Debug_Registar(passo, atual, "ALERTA", "", "NEXT_PROMPT_ID", _
+                    "Next PROMPT=AUTO sem NEXT_PROMPT_ID no output; aplicado fallback para default/STOP.", _
+                    "Sugestao: devolver linha isolada NEXT_PROMPT_ID: <ID|STOP> e rever instrucoes de output do prompt.")
+            End If
+        End If
         If proximoEsperado = "" Then proximoEsperado = nextDefault
 
         If proximoEsperado = "" Or Painel_EhSTOP(proximoEsperado) Then
@@ -1993,6 +2019,80 @@ Private Function Painel_AllowedContem(ByVal allowedList As String, ByVal candida
     End If
 
     Painel_AllowedContem = False
+End Function
+
+Private Sub Painel_ValidarConsistenciaNextConfig(ByVal nextPrompt As String, ByVal nextDefault As String, ByVal nextAllowed As String, ByVal passo As Long, ByVal promptAtual As String)
+    Dim d As String
+    d = Trim$(nextDefault)
+    If d = "" Then
+        Call Debug_Registar(passo, promptAtual, "ALERTA", "", "Next PROMPT default", _
+            "Next PROMPT default vazio; o fallback pode terminar em STOP inesperado.", _
+            "Sugestao: preencher Next PROMPT default com ID valido ou STOP explicito.")
+        Exit Sub
+    End If
+
+    If UCase$(d) <> "STOP" Then
+        If Not Painel_AllowedContem(nextAllowed, d) Then
+            Call Debug_Registar(passo, promptAtual, "ALERTA", "", "Next allowed", _
+                "Inconsistencia de configuracao: default nao pertence a allowed.", _
+                "Sugestao: incluir o default em Next PROMPT allowed para manter fallback deterministico.")
+        End If
+    End If
+End Sub
+
+Private Function Painel_HasCsvExecuteIntent(ByVal promptText As String, ByVal configExtraText As String) As Boolean
+    Dim allTxt As String
+    allTxt = UCase$(Painel_Nz(promptText) & vbLf & Painel_Nz(configExtraText))
+
+    Dim hasExecute As Boolean
+    hasExecute = (InStr(1, allTxt, "LOAD_CSV", vbTextCompare) > 0) Or _
+                 (InStr(1, allTxt, "EXECUTE:", vbTextCompare) > 0) Or _
+                 (InStr(1, allTxt, "ACTION=LOAD_CSV", vbTextCompare) > 0)
+
+    Dim hasCsvProofContract As Boolean
+    hasCsvProofContract = (InStr(1, allTxt, "EXPORT_OK_CSV", vbTextCompare) > 0) Or _
+                          (InStr(1, allTxt, "CSV_EXISTE_EM_MNT_DATA", vbTextCompare) > 0) Or _
+                          (InStr(1, allTxt, "FILE_CSV:", vbTextCompare) > 0)
+
+    Painel_HasCsvExecuteIntent = hasExecute Or hasCsvProofContract
+End Function
+
+Private Function Painel_HasDiagnosticContractConfigured(ByVal configExtraText As String) As Boolean
+    Dim v As String
+    v = Painel_ConfigExtraGetValue(configExtraText, "diagnostic_contract")
+    If Trim$(v) = "" Then v = Painel_ConfigExtraGetValue(configExtraText, "contract_mode")
+    If Trim$(v) = "" Then v = Painel_ConfigExtraGetValue(configExtraText, "diagnostic-contract")
+    If Trim$(v) = "" Then v = Painel_ConfigExtraGetValue(configExtraText, "diagnostic contract")
+    If Trim$(v) = "" Then v = Painel_ConfigExtraGetValue(configExtraText, "diagnostic_contract_mode")
+
+    Painel_HasDiagnosticContractConfigured = (Trim$(v) <> "")
+End Function
+
+Private Function Painel_ConfigExtraGetValue(ByVal configExtraText As String, ByVal keyName As String) As String
+    Dim txt As String
+    txt = Replace(configExtraText, vbCrLf, vbLf)
+    txt = Replace(txt, vbCr, vbLf)
+
+    Dim lines() As String
+    lines = Split(txt, vbLf)
+
+    Dim i As Long
+    For i = LBound(lines) To UBound(lines)
+        Dim line As String
+        line = Trim$(CStr(lines(i)))
+        If line <> "" Then
+            Dim p As Long
+            p = InStr(1, line, ":", vbTextCompare)
+            If p > 0 Then
+                Dim k As String
+                k = Trim$(Left$(line, p - 1))
+                If StrComp(k, keyName, vbTextCompare) = 0 Then
+                    Painel_ConfigExtraGetValue = Trim$(Mid$(line, p + 1))
+                    Exit Function
+                End If
+            End If
+        End If
+    Next i
 End Function
 
 Private Sub Painel_LogStepStage(ByVal passo As Long, ByVal promptId As String, ByVal stageName As String, ByVal detail As String)
