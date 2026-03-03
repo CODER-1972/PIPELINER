@@ -111,6 +111,11 @@ A folha DEBUG inclui a coluna `Funcionalidade` (entre `Parâmetro` e `Problema`)
 O preenchimento desta coluna cobre explicitamente eventos de `INFO/ALERTA`, catálogo/encadeamento e diagnósticos de output/Code Interpreter (`M05_CI_*`, `M07_*`, `M10_*`, `OUTPUT_EXECUTE_*`), reduzindo classificações genéricas em troubleshooting.
 Cada célula de `Funcionalidade` passa a incluir, numa segunda linha em **negrito** (`ACAO EM CURSO:`), uma lista sistemática da(s) ação(ões) operacional(is) em execução no momento, podendo combinar várias ações no mesmo registo (ex.: validação de contrato + listagem/seleção de container + download + persistência + mitigação por timeout/retry). Sempre que disponível, é anexado contexto específico por chave (ex.: `filename=...`, `resolvedPath=...`, `stage=...`, `container_id=...`, `file_id=...`, `http_status=...`, `elapsed_ms=...`, `payload_len=...`, `dlErr=...`).
 
+Também existe suporte a um botão de utilidade na própria folha `DEBUG` para gerar um pacote de diagnóstico “copiar/colar” para chat:
+- macro `DebugClipboard_InstalarBotao` cria/atualiza o botão `Copiar pacote diagnóstico` (idempotente);
+- macro `DebugClipboard_CopiarPacoteDiagnostico` compõe, em texto único, os blocos de catálogo dos `Prompt ID` encontrados no DEBUG + tabela completa de `DEBUG` + tabela completa de `Seguimento`;
+- o bloco final termina com instrução pronta para pedir diagnóstico (problemas prováveis + causa + sugestão de ação).
+
 ## 3.5 Folhas de catálogo
 
 Cada folha contém prompts executáveis. O prefixo do ID deve corresponder ao nome da folha.
