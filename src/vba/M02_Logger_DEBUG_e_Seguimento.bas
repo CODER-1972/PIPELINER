@@ -161,7 +161,7 @@ Private Function Debug_DeduzirFuncionalidade(ByVal parametro As String) As Strin
         Exit Function
     End If
 
-    If Left$(p, 4) = "M07_" Or Left$(p, 15) = "OUTPUT_EXECUTE_" Then
+    If Left$(p, 4) = "M07_" Or Left$(p, 15) = "OUTPUT_EXECUTE_" Or Left$(p, 13) = "EXECUTE_LINT_" Then
         Debug_DeduzirFuncionalidade = "Aplicacao do plano de output e validacao dos artefactos guardados no OUTPUT Folder."
         Exit Function
     End If
@@ -266,9 +266,13 @@ Private Function Debug_DeduzirAcaoEmCurso(ByVal parametro As String, ByVal probl
             Call Debug_AcaoAdd(acoes, "Validacao do contrato de File Output")
             Call Debug_AcaoAdd(acoes, "Resolucao do ficheiro esperado no OUTPUT Folder")
 
-        Case "OUTPUT_EXECUTE_FOUND", "OUTPUT_EXECUTE_PARSED", "OUTPUT_EXECUTE_UNKNOWN_CMD", "OUTPUT_EXECUTE_INVALID_FILENAME", "OUTPUT_EXECUTE_FILE_NOT_FOUND", "OUTPUT_EXECUTE_CSV_PRECHECK", "OUTPUT_EXECUTE_CSV_BOM_FAIL", "OUTPUT_EXECUTE_CSV_CRLF_IN_FIELDS", "OUTPUT_EXECUTE_SHEET_CREATED", "OUTPUT_EXECUTE_IMPORT_FAIL", "OUTPUT_EXECUTE_CSV_IMPORTED", "OUTPUT_EXECUTE_VERIFIED"
+        Case "OUTPUT_EXECUTE_FOUND", "OUTPUT_EXECUTE_PARSED", "OUTPUT_EXECUTE_UNKNOWN_CMD", "OUTPUT_EXECUTE_INVALID_FILENAME", "OUTPUT_EXECUTE_FILE_NOT_FOUND", "OUTPUT_EXECUTE_CSV_PRECHECK", "OUTPUT_EXECUTE_CSV_BOM_FAIL", "OUTPUT_EXECUTE_CSV_CRLF_IN_FIELDS", "OUTPUT_EXECUTE_SHEET_CREATED", "OUTPUT_EXECUTE_IMPORT_FAIL", "OUTPUT_EXECUTE_CSV_IMPORTED", "OUTPUT_EXECUTE_VERIFIED", "CI_PROOF_MNT_DATA_MISSING"
             Call Debug_AcaoAdd(acoes, "Execucao da diretiva OUTPUT_EXECUTE")
             Call Debug_AcaoAdd(acoes, "Importacao/validacao de CSV em worksheet dedicada")
+
+        Case "EXECUTE_LINT_MULTIPLE", "EXECUTE_LINT_IN_CODEBLOCK"
+            Call Debug_AcaoAdd(acoes, "Lint de diretivas EXECUTE no output do modelo")
+            Call Debug_AcaoAdd(acoes, "Aplicacao da politica de seguranca para diretivas executaveis")
 
         Case "M10_CI_NO_CITATION", "M10_CI_NO_CONTAINER_ID", "M10_CI_CONTAINER_EMPTY", "M10_CI_CONTAINER_LIST", "M10_CI_CONTAINER_SELECT_DIAG", "M10_CI_CONTAINER_INPUT_LIKE", "M10_CI_TEXT_FILENAME_HINTS", "M10_CI_MARKER_NOT_FOUND", "M10_CI_AMBIGUOUS_MARKER", "M10_CI_AMBIGUOUS_FALLBACK", "M10_CI_RESOLVE_RULE", "M10_CI_CONTRACT_STATUS", "M10_CI_DOWNLOAD_NOFILE", "M10_CI_DOWNLOAD_FAIL", "M10_CI_LIST_FAIL", "M10_CI_RAW_MISSING", "M10_CI_ZERO_BYTES", "M10_RAWFOLDER", "M10_RUNFOLDER", "M10_RAW_WRITE_FAIL", "M10_SCHEMA_SUMMARY", "M10_SCHEMA_INVALID", "M10_SCHEMA_DIAG_FAIL", "M10_META_PATH_TOO_LONG", "M10_PATH_TOO_LONG", "M10_FOLDER_CREATE_FAIL"
             Call Debug_AcaoAdd(acoes, "Inspecao de artefactos de output no container do Code Interpreter")
@@ -359,6 +363,10 @@ Private Sub Debug_AplicarAcoesPorSinal(ByRef acoes As String, ByVal p As String,
             Call Debug_AcaoAdd(acoes, "Checklist pre-envio do payload (tools/input/tamanho)")
         Case "M05_JSON_PREFLIGHT"
             Call Debug_AcaoAdd(acoes, "Preflight de validade JSON antes do HTTP")
+        Case "CI_PROOF_MNT_DATA_MISSING"
+            Call Debug_AcaoAdd(acoes, "Correlacao de sinais M10 com ausencia de CSV para OUTPUT_EXECUTE")
+            Call Debug_AcaoAdd(acoes, "Estimativa de causa provavel (/mnt/data sem artefacto elegivel)")
+
         Case "OUTPUT_EXECUTE_CSV_PRECHECK"
             Call Debug_AcaoAdd(acoes, "Pre-validacao de encoding/BOM e estrutura CSV")
         Case "OUTPUT_EXECUTE_VERIFIED"
@@ -430,7 +438,7 @@ Private Function Debug_ExtrairDetalheOperacional(ByVal problema As String, ByVal
     Dim i As Long
 
     fonte = Trim$(problema & " | " & sugestao)
-    keys = Array("filename", "file", "full_path", "resolvedPath", "resolved_path", "inputFolder", "input_folder", "outputFolder", "output_folder", "stage", "endpoint", "prompt", "promptId", "pipeline", "pipeline_name", "container_id", "file_id", "status", "http_status", "httpStatus", "engine", "profile", "effective_mode", "mode_effective", "mode", "bytes", "created_at", "elapsed_ms", "payload_len", "response_id", "cause_hint", "confidence", "dlErr", "retry_outcome")
+    keys = Array("filename", "file", "exec_file", "full_path", "resolvedPath", "resolved_path", "inputFolder", "input_folder", "outputFolder", "output_folder", "output_exists", "stage", "endpoint", "prompt", "promptId", "pipeline", "pipeline_name", "container_id", "file_id", "status", "http_status", "httpStatus", "engine", "profile", "effective_mode", "mode_effective", "mode", "bytes", "created_at", "elapsed_ms", "payload_len", "response_id", "cause_hint", "confidence", "dlErr", "retry_outcome", "has_no_citation", "has_container_empty", "has_download_nofile", "has_marker_missing", "has_download_fail", "has_list_fail", "eligible")
 
     For i = LBound(keys) To UBound(keys)
         detalhe = Debug_ExtrairDetalhePorChave(fonte, CStr(keys(i)))
