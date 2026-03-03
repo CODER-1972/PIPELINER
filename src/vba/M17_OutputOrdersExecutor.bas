@@ -9,6 +9,12 @@ Option Explicit
 ' - Importar CSV para nova worksheet com logging completo em DEBUG e resumo para Seguimento.
 '
 ' AtualizaÃ§Ãµes:
+' - 2026-03-03 | Codex | ReforÃ§a correlaÃ§Ã£o M10 no diagnÃ³stico de CSV em falta
+'   - Melhora heurÃ­sticas de elegibilidade (selected/eligible/motivo) e cobertura de sinais de falha M10.
+'   - MantÃ©m alerta complementar antes do erro final sem alterar comportamento funcional bloqueante.
+' - 2026-03-03 | Codex | DiagnÃ³stico de causa provÃ¡vel antes de file-not-found no OUTPUT_EXECUTE
+'   - Adiciona alerta CI_PROOF_MNT_DATA_MISSING com correlaÃ§Ã£o compacta a sinais M10 e estado local.
+'   - Introduz parÃ¢metro opcional m10Signals no executor para contexto explÃ­cito vindo do orquestrador.
 ' - 2026-02-26 | Codex | Corrige dependÃªncias internas do SelfTest
 '   - Adiciona helpers locais EnsureFolder e WriteTextUTF8 usados pela bateria T1..T9.
 '   - Remove acoplamento implÃ­cito a helpers Private de outros mÃ³dulos.
@@ -18,7 +24,7 @@ Option Explicit
 '   - Inclui SelfTest_OutputOrders_RunAll com testes idempotentes T1..T9.
 '
 ' FunÃ§Ãµes e procedimentos:
-' - OutputOrders_TryExecute(...): executa ordens reconhecidas e devolve append para files_ops_log.
+' - OutputOrders_TryExecute(...): executa ordens reconhecidas, com contexto opcional de sinais M10 para diagnÃ³stico.
 ' - ParseExecuteDirectives(outputText): extrai diretivas EXECUTE fora de code fences.
 ' - ValidateCsvFileName(fileName): valida basename CSV contra path traversal e caracteres perigosos.
 ' - ResolveCsvSource(fileName, outputFolder, downloadedFiles): resolve origem do CSV em output/downloads.
@@ -28,6 +34,7 @@ Option Explicit
 ' - LoadCsvIntoSheet_QueryTable(...): importaÃ§Ã£o principal via QueryTable.
 ' - LoadCsvIntoSheet_OpenTextFallback(...): fallback de importaÃ§Ã£o via OpenText + cÃ³pia para destino.
 ' - VerifyImportedSheet(ws, expectedCols, ...): valida estrutura importada e recolhe evidÃªncias.
+' - BuildCiProofMissingContext(...): monta contexto compacto para alerta de ausÃªncia de artefacto CI provÃ¡vel.
 ' - SelfTest_OutputOrders_RunAll(): bateria idempotente de testes T1..T9 do executor.
 ' - EnsureFolder(folderPath): cria pasta local para fixtures temporÃ¡rias dos selftests.
 ' - WriteTextUTF8(filePath, txt): escreve ficheiros UTF-8 usados nos selftests.
@@ -42,7 +49,8 @@ Public Function OutputOrders_TryExecute( _
     ByVal responseId As String, _
     ByVal outputText As String, _
     ByVal outputFolder As String, _
-    ByVal downloadedFiles As Variant _
+    ByVal downloadedFiles As Variant, _
+    Optional ByVal m10Signals As String = "" _
 ) As String
     On Error GoTo EH
 
@@ -88,6 +96,10 @@ Public Function OutputOrders_TryExecute( _
         Dim csvPath As String
         csvPath = ResolveCsvSource(fileName, outputFolder, downloadedFiles)
         If Trim$(csvPath) = "" Then
+            Call Debug_Registar(passo, promptId, "ALERTA", "", "CI_PROOF_MNT_DATA_MISSING", _
+                BuildCiProofMissingContext(fileName, outputFolder, downloadedFiles, m10Signals), _
+                "Correlacione com eventos M10_CI_* do mesmo passo para confirmar ausÃªncia de artefacto elegÃ­vel.")
+
             Call Debug_Registar(passo, promptId, "ERRO", "", "OUTPUT_EXECUTE_FILE_NOT_FOUND", _
                 "NÃ£o foi possÃ­vel resolver ficheiro CSV: " & fileName & " | outputFolder=" & outputFolder, _
                 "Confirme download/geraÃ§Ã£o do ficheiro e nome exato no EXECUTE.")
@@ -149,6 +161,67 @@ NextDirective:
 EH:
     Call Debug_Registar(passo, promptId, "ERRO", "", OUTPUT_EXECUTE_TRACKER & "_UNHANDLED", _
         "Err " & CStr(Err.Number) & ": " & Err.Description, "Reveja parser/importaÃ§Ã£o de Output Orders.")
+End Function
+
+Private Function BuildCiProofMissingContext( _
+    ByVal execFile As String, _
+    ByVal outputFolder As String, _
+    ByVal downloadedFiles As Variant, _
+    ByVal m10Signals As String _
+) As String
+    Dim joinedCtx As String
+    Dim outputCandidate As String
+    Dim outputExists As Boolean
+    Dim downloadedText As String
+
+    downloadedText = OutputOrders_StringifyDownloadedFiles(downloadedFiles)
+    joinedCtx = UCase$(downloadedText & " | " & m10Signals)
+    outputCandidate = BuildPath(outputFolder, execFile)
+    outputExists = FileExistsFast(outputCandidate)
+
+    BuildCiProofMissingContext = _
+        "exec_file=" & Trim$(execFile) & _
+        " | output_exists=" & OutputOrders_BoolTag(outputExists) & _
+        " | has_no_citation=" & OutputOrders_BoolTag(InStr(1, joinedCtx, "M10_CI_NO_CITATION", vbTextCompare) > 0) & _
+        " | has_container_empty=" & OutputOrders_BoolTag(InStr(1, joinedCtx, "M10_CI_CONTAINER_EMPTY", vbTextCompare) > 0) & _
+        " | has_download_nofile=" & OutputOrders_BoolTag(InStr(1, joinedCtx, "M10_CI_DOWNLOAD_NOFILE", vbTextCompare) > 0) & _
+        " | has_marker_missing=" & OutputOrders_BoolTag(InStr(1, joinedCtx, "M10_CI_MARKER_NOT_FOUND", vbTextCompare) > 0) & _
+        " | has_download_fail=" & OutputOrders_BoolTag(InStr(1, joinedCtx, "M10_CI_DOWNLOAD_FAIL", vbTextCompare) > 0) & _
+        " | has_list_fail=" & OutputOrders_BoolTag(InStr(1, joinedCtx, "M10_CI_LIST_FAIL", vbTextCompare) > 0) & _
+        " | eligible=" & OutputOrders_DetectEligible(joinedCtx)
+End Function
+
+Private Function OutputOrders_StringifyDownloadedFiles(ByVal downloadedFiles As Variant) As String
+    On Error GoTo EH
+
+    If IsObject(downloadedFiles) Then
+        Dim it As Variant
+        For Each it In downloadedFiles
+            If OutputOrders_StringifyDownloadedFiles <> "" Then OutputOrders_StringifyDownloadedFiles = OutputOrders_StringifyDownloadedFiles & " | "
+            OutputOrders_StringifyDownloadedFiles = OutputOrders_StringifyDownloadedFiles & CStr(it)
+        Next it
+    Else
+        OutputOrders_StringifyDownloadedFiles = CStr(downloadedFiles)
+    End If
+    Exit Function
+EH:
+    OutputOrders_StringifyDownloadedFiles = ""
+End Function
+
+Private Function OutputOrders_BoolTag(ByVal v As Boolean) As String
+    OutputOrders_BoolTag = IIf(v, "SIM", "NAO")
+End Function
+
+Private Function OutputOrders_DetectEligible(ByVal joinedCtx As String) As String
+    If InStr(1, joinedCtx, "SELECTED=SIM", vbTextCompare) > 0 Or _
+       InStr(1, joinedCtx, "ELIGIBLE=SIM", vbTextCompare) > 0 Then
+        OutputOrders_DetectEligible = "SIM"
+    ElseIf InStr(1, joinedCtx, "SELECTED=NAO", vbTextCompare) > 0 Or _
+           InStr(1, joinedCtx, "ELIGIBLE=NAO", vbTextCompare) > 0 Then
+        OutputOrders_DetectEligible = "NAO"
+    Else
+        OutputOrders_DetectEligible = "UNKNOWN"
+    End If
 End Function
 
 Public Function ParseExecuteDirectives(ByVal outputText As String) As Collection

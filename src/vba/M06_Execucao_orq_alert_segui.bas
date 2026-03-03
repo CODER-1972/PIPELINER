@@ -141,8 +141,10 @@ Public Sub ExecutarPrompt_PorID()
         fo_pptxMode, fo_xlsxMode, fo_pdfMode, fo_imageMode, fo_filesUsedOut, fo_filesOpsOut)
     Dim fo_executeOpsLog As String
     fo_executeOpsLog = ""
+    Dim fo_executeM10Signals As String
+    fo_executeM10Signals = "filesUsed=" & fo_filesUsedOut & " | filesOps=" & fo_filesOpsOut
     If Trim$(resultado.Erro) = "" And resultado.httpStatus >= 200 And resultado.httpStatus < 300 Then
-        fo_executeOpsLog = OutputOrders_TryExecute(passo, prompt.Id, resultado.responseId, resultado.outputText, outputFolderBase, fo_filesOpsOut)
+        fo_executeOpsLog = OutputOrders_TryExecute(passo, prompt.Id, resultado.responseId, resultado.outputText, outputFolderBase, fo_filesOpsOut, fo_executeM10Signals)
         If Trim$(fo_executeOpsLog) <> "" Then
             If Trim$(fo_filesOpsOut) <> "" Then
                 fo_filesOpsOut = fo_filesOpsOut & " | " & fo_executeOpsLog
