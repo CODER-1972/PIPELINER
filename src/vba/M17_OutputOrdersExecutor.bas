@@ -13,6 +13,15 @@ Option Explicit
 '   - Enriquece OUTPUT_EXECUTE_FILE_NOT_FOUND com nome pedido, hints, downloadedFiles e resumo da outputFolder.
 '   - Emite CI_PROOF_MNT_DATA_MISSING quando hÃ¡ sinais explÃ­citos de CI sem artefacto local resolvido.
 '   - MantÃ©m bloqueio atual sem importaÃ§Ã£o quando o CSV nÃ£o existe.
+' - 2026-03-03 | Codex | Lint de diretivas EXECUTE durante parsing
+'   - Conta diretivas vÃ¡lidas fora de code blocks e ocorrÃªncias dentro de code fences.
+'   - Emite eventos EXECUTE_LINT_MULTIPLE e EXECUTE_LINT_IN_CODEBLOCK sem quebrar compatibilidade.
+' - 2026-03-03 | Codex | ReforÃ§a correlaÃ§Ã£o M10 no diagnÃ³stico de CSV em falta
+'   - Melhora heurÃ­sticas de elegibilidade (selected/eligible/motivo) e cobertura de sinais de falha M10.
+'   - MantÃ©m alerta complementar antes do erro final sem alterar comportamento funcional bloqueante.
+' - 2026-03-03 | Codex | DiagnÃ³stico de causa provÃ¡vel antes de file-not-found no OUTPUT_EXECUTE
+'   - Adiciona alerta CI_PROOF_MNT_DATA_MISSING com correlaÃ§Ã£o compacta a sinais M10 e estado local.
+'   - Introduz parÃ¢metro opcional m10Signals no executor para contexto explÃ­cito vindo do orquestrador.
 ' - 2026-02-26 | Codex | Corrige dependÃªncias internas do SelfTest
 '   - Adiciona helpers locais EnsureFolder e WriteTextUTF8 usados pela bateria T1..T9.
 '   - Remove acoplamento implÃ­cito a helpers Private de outros mÃ³dulos.
@@ -23,15 +32,20 @@ Option Explicit
 '
 ' FunÃ§Ãµes e procedimentos:
 ' - OutputOrders_TryExecute(...): executa ordens reconhecidas e devolve append para files_ops_log.
+' - ParseExecuteDirectives(outputText, ...): extrai diretivas EXECUTE e devolve mÃ©tricas de lint opcional.
+' - LineHasExecuteToken(rawLine): deteta intenÃ§Ã£o EXECUTE em linha (inclui variantes incompletas para lint).
+' - OutputOrders_TryExecute(...): executa ordens reconhecidas, com contexto opcional de sinais M10 para diagnÃ³stico.
 ' - ParseExecuteDirectives(outputText): extrai diretivas EXECUTE fora de code fences.
 ' - ValidateCsvFileName(fileName): valida basename CSV contra path traversal e caracteres perigosos.
 ' - ResolveCsvSource(fileName, outputFolder, downloadedFiles): resolve origem do CSV em output/downloads.
+' - OutputOrders_ResolveM10Context(m10Context, downloadedFiles): prioriza argumento opcional e fallback compacto em filesOps/downloadedFiles.
 ' - PrecheckCsv_BomAndCrLf(csvPath, ...): avalia BOM UTF-8, CR/LF quoted e sugestÃ£o de colunas.
 ' - DeriveSheetNameFromCsv(csvPath): deriva nome base da worksheet a partir do ficheiro.
 ' - CreateUniqueWorksheetName(baseName): gera nome de worksheet Ãºnico e compatÃ­vel com limite Excel.
 ' - LoadCsvIntoSheet_QueryTable(...): importaÃ§Ã£o principal via QueryTable.
 ' - LoadCsvIntoSheet_OpenTextFallback(...): fallback de importaÃ§Ã£o via OpenText + cÃ³pia para destino.
 ' - VerifyImportedSheet(ws, expectedCols, ...): valida estrutura importada e recolhe evidÃªncias.
+' - BuildCiProofMissingContext(...): monta contexto compacto para alerta de ausÃªncia de artefacto CI provÃ¡vel.
 ' - SelfTest_OutputOrders_RunAll(): bateria idempotente de testes T1..T9 do executor.
 ' - EnsureFolder(folderPath): cria pasta local para fixtures temporÃ¡rias dos selftests.
 ' - WriteTextUTF8(filePath, txt): escreve ficheiros UTF-8 usados nos selftests.
@@ -47,7 +61,8 @@ Public Function OutputOrders_TryExecute( _
     ByVal responseId As String, _
     ByVal outputText As String, _
     ByVal outputFolder As String, _
-    ByVal downloadedFiles As Variant _
+    ByVal downloadedFiles As Variant, _
+    Optional ByVal m10Context As String = "" _
 ) As String
     On Error GoTo EH
 
@@ -55,10 +70,29 @@ Public Function OutputOrders_TryExecute( _
     If Trim$(outputText) = "" Then Exit Function
 
     Dim directives As Collection
-    Set directives = ParseExecuteDirectives(outputText)
+    Dim validDirectiveCount As Long
+    Dim codeBlockDirectiveCount As Long
+    Set directives = ParseExecuteDirectives(outputText, validDirectiveCount, codeBlockDirectiveCount)
+
+    Dim normalizedM10Context As String
+    normalizedM10Context = OutputOrders_ResolveM10Context(m10Context, downloadedFiles)
 
     Call Debug_Registar(passo, promptId, "INFO", "", "OUTPUT_EXECUTE_FOUND", _
-        "response_id=" & Trim$(responseId) & " | directives=" & CStr(directives.Count), "")
+        "response_id=" & Trim$(responseId) & " | directives=" & CStr(directives.Count) & _
+        " | valid_directives=" & CStr(validDirectiveCount) & _
+        " | codeblock_directives=" & CStr(codeBlockDirectiveCount), "")
+
+    If validDirectiveCount > 1 Then
+        Call Debug_Registar(passo, promptId, "ALERTA", "", "EXECUTE_LINT_MULTIPLE", _
+            "Foram detetadas mÃºltiplas diretivas EXECUTE vÃ¡lidas: " & CStr(validDirectiveCount), _
+            "O executor processa no mÃ¡ximo " & CStr(OUTPUT_ORDERS_MAX) & " diretivas por resposta.")
+    End If
+
+    If codeBlockDirectiveCount > 0 Then
+        Call Debug_Registar(passo, promptId, "INFO", "", "EXECUTE_LINT_IN_CODEBLOCK", _
+            "Foram ignoradas diretivas EXECUTE dentro de blocos de cÃ³digo: " & CStr(codeBlockDirectiveCount), _
+            "Mantenha EXECUTE fora de ```code fences``` para execuÃ§Ã£o automÃ¡tica.")
+    End If
 
     If directives.Count = 0 Then Exit Function
 
@@ -105,6 +139,13 @@ Public Function OutputOrders_TryExecute( _
                     "Sinais de execuÃ§Ã£o CI sem artefacto local resolvido. " & notFoundCtx, _
                     "Garantir escrita/citaÃ§Ã£o do ficheiro em /mnt/data e download para OUTPUT Folder.")
             End If
+            GoTo NextDirective
+        End If
+
+        If Not FileExistsFast(csvPath) Then
+            Call Debug_Registar(passo, promptId, "ERRO", "", "OUTPUT_EXECUTE_FILE_NOT_FOUND", _
+                "CSV resolvido mas ausente no disco: " & csvPath & " | source=" & fileName, _
+                "Reveja FILE OUTPUT/download e permissÃµes da pasta OUTPUT.")
             GoTo NextDirective
         End If
 
@@ -165,6 +206,62 @@ EH:
         "Err " & CStr(Err.Number) & ": " & Err.Description, "Reveja parser/importaÃ§Ã£o de Output Orders.")
 End Function
 
+
+
+Private Function OutputOrders_ResolveM10Context(ByVal m10Context As String, ByVal downloadedFiles As Variant) As String
+    Dim directCtx As String
+    directCtx = OutputOrders_NormalizeM10Context(m10Context)
+    If directCtx <> "none" Then
+        OutputOrders_ResolveM10Context = directCtx
+        Exit Function
+    End If
+
+    Dim fallbackCtx As String
+    fallbackCtx = OutputOrders_ExtractM10ContextFromDownloaded(downloadedFiles)
+    OutputOrders_ResolveM10Context = OutputOrders_NormalizeM10Context(fallbackCtx)
+End Function
+
+Private Function OutputOrders_ExtractM10ContextFromDownloaded(ByVal downloadedFiles As Variant) As String
+    On Error GoTo EH
+
+    If IsObject(downloadedFiles) Then Exit Function
+
+    Dim raw As String
+    raw = Trim$(CStr(downloadedFiles))
+    If raw = "" Then Exit Function
+
+    Dim token As Variant
+    Dim norm As String
+    norm = Replace(Replace(raw, vbCrLf, "|"), ";", "|")
+
+    For Each token In Split(norm, "|")
+        Dim t As String
+        t = Trim$(CStr(token))
+        If LCase$(Left$(t, 7)) = "m10ctx:" Then
+            OutputOrders_ExtractM10ContextFromDownloaded = Trim$(Mid$(t, 8))
+            Exit Function
+        End If
+    Next token
+
+    Exit Function
+EH:
+    OutputOrders_ExtractM10ContextFromDownloaded = ""
+End Function
+
+Private Function OutputOrders_NormalizeM10Context(ByVal m10Context As String) As String
+    Dim t As String
+    t = Trim$(m10Context)
+    If t = "" Then
+        OutputOrders_NormalizeM10Context = "none"
+        Exit Function
+    End If
+
+    t = Replace(t, vbCrLf, " | ")
+    t = Replace(t, vbCr, " | ")
+    t = Replace(t, vbLf, " | ")
+    OutputOrders_NormalizeM10Context = t
+End Function
+
 Public Function ParseExecuteDirectives(ByVal outputText As String) As Collection
     Dim out As New Collection
     Dim lines() As String
@@ -172,6 +269,9 @@ Public Function ParseExecuteDirectives(ByVal outputText As String) As Collection
 
     Dim inCode As Boolean
     inCode = False
+
+    validDirectiveCount = 0
+    codeBlockDirectiveCount = 0
 
     Dim i As Long
     For i = LBound(lines) To UBound(lines)
@@ -182,16 +282,36 @@ Public Function ParseExecuteDirectives(ByVal outputText As String) As Collection
             inCode = Not inCode
             GoTo NextLine
         End If
-        If inCode Then GoTo NextLine
+        If inCode Then
+            If LineHasExecuteToken(raw) Then codeBlockDirectiveCount = codeBlockDirectiveCount + 1
+            GoTo NextLine
+        End If
 
         Dim parsed As Object
         Set parsed = ParseExecuteLine(raw)
-        If Not parsed Is Nothing Then out.Add parsed
+        If Not parsed Is Nothing Then
+            out.Add parsed
+            validDirectiveCount = validDirectiveCount + 1
+        End If
 
 NextLine:
     Next i
 
     Set ParseExecuteDirectives = out
+End Function
+
+Private Function LineHasExecuteToken(ByVal rawLine As String) As Boolean
+    Dim t As String
+    t = Trim$(rawLine)
+    If t = "" Then Exit Function
+
+    Dim re As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = False
+    re.IgnoreCase = True
+    re.Pattern = "^<?\s*EXECUTE\s*:"
+
+    LineHasExecuteToken = re.Test(t)
 End Function
 
 Private Function ParseExecuteLine(ByVal rawLine As String) As Object
@@ -740,7 +860,17 @@ Public Sub SelfTest_OutputOrders_RunAll()
     tPass = 0: tFail = 0
 
     SelfTest_Assert "T1 Parser sem EXECUTE", ParseExecuteDirectives("texto normal").Count = 0, tPass, tFail
-    SelfTest_Assert "T2 Parser com EXECUTE", ParseExecuteDirectives("<EXECUTE: LOAD_CSV([file.csv])>").Count = 1, tPass, tFail
+
+    Dim parserValid As Long, parserInCode As Long
+    SelfTest_Assert "T2 Parser com EXECUTE", ParseExecuteDirectives("<EXECUTE: LOAD_CSV([file.csv])>", parserValid, parserInCode).Count = 1 And parserValid = 1 And parserInCode = 0, tPass, tFail
+
+    parserValid = 0: parserInCode = 0
+    Call ParseExecuteDirectives("```" & vbLf & "EXECUTE: LOAD_CSV([inside.csv])" & vbLf & "```", parserValid, parserInCode)
+    SelfTest_Assert "T2b Parser ignora EXECUTE em codeblock", parserValid = 0 And parserInCode = 1, tPass, tFail
+
+    parserValid = 0: parserInCode = 0
+    Call ParseExecuteDirectives("```" & vbLf & "EXECUTE: LOAD_CSV inside" & vbLf & "```", parserValid, parserInCode)
+    SelfTest_Assert "T2c Lint detecta token EXECUTE incompleto em codeblock", parserValid = 0 And parserInCode = 1, tPass, tFail
 
     Dim r3 As String
     r3 = OutputOrders_TryExecute(1, "SELFTEST/T3", "resp", "EXECUTE: DELETE_FILE([x.csv])", base, "")
@@ -776,6 +906,14 @@ Public Sub SelfTest_OutputOrders_RunAll()
     SelfTest_Assert "T8 IdempotÃªncia cria sufixo", InStr(1, r8, "_01", vbTextCompare) > 0 Or InStr(1, r8, "_02", vbTextCompare) > 0, tPass, tFail
 
     SelfTest_Assert "T9 Frase Seguimento exacta", InStr(1, r7, "CREATED AND LOADED Excel Sheet ", vbBinaryCompare) = 1 And Right$(r7, Len(", and verified.")) = ", and verified.", tPass, tFail
+
+    Dim ctx10 As String
+    ctx10 = OutputOrders_ResolveM10Context("", "DL:catalogo_ok.csv|M10CTX:output_kind=file | process_mode=code_interpreter")
+    SelfTest_Assert "T10 Fallback m10Context via downloadedFiles", InStr(1, ctx10, "output_kind=file", vbTextCompare) > 0, tPass, tFail
+
+    Dim ctx11 As String
+    ctx11 = OutputOrders_ResolveM10Context("output_kind=file", "M10CTX:output_kind=none")
+    SelfTest_Assert "T11 Prioriza argumento opcional", (LCase$(Trim$(ctx11)) = "output_kind=file"), tPass, tFail
 
     Call Debug_Registar(0, "SELFTEST_OUTPUT_ORDERS", "INFO", "", "SELFTEST_SUMMARY", _
         "PASS=" & CStr(tPass) & " | FAIL=" & CStr(tFail), "")

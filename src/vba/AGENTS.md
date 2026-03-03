@@ -557,6 +557,14 @@ Se começar a ficar demasiado grande:
 
 - Em mapeamentos de funcionalidade no DEBUG, modelar `ACAO EM CURSO` como lista de ações acumuláveis (não exclusivas) e anexar contexto em formato `chave=valor`; evitar lógica de primeiro-match que esconda etapas simultâneas do mesmo evento.
 
-- Em extração de contexto para DEBUG, aceitar tanto `chave=valor` como `chave:valor` (normalizando para `chave=valor`) e privilegiar chaves operacionais objetivas (`file_id`, `container_id`, `http_status`, `elapsed_ms`) para facilitar troubleshooting.
+- Em selftests/fixtures VBA com JSON inline em literais de string, duplicar sempre aspas (`""`) em vez de escapes C-style; literais como `"{"type":"x"}"` causam `Compile error` ou string inválida no VBE e devem ser escritos como `"{""type"":""x""}"`.
 
 - Em mapeamento de ações do DEBUG, privilegiar primeiro regras explícitas por parâmetro (ex.: `M10_*`, `M05_*`, `OUTPUT_EXECUTE_*`) e só depois regras genéricas por substring para reduzir falsos positivos de interpretação.
+
+- Em rastreio de overrides de modo em FILES (`raw_mode` vs `effective_mode`), emitir o evento canónico (`FILES_MODE_OVERRIDE_TRACE`) apenas após o modo final do item estar estabilizado (incluindo fallbacks tardios como `pdf_upload -> text_embed`), para evitar diagnósticos incompletos ou duplicados.
+
+## Regra adicional de revisão VBA (agnóstica)
+- Em módulos com `Option Explicit`, não usar helpers implícitos (`Nz`, `IsMissing` fora de `Optional Variant`, etc.) sem garantir existência/assinatura no próprio módulo ou num contrato público estável.
+- Quando houver helper local (`Painel_Nz`, por exemplo), usar sempre a versão local para evitar regressão de compilação por dependência cruzada a procedimentos `Private`.
+
+- Em lints de inteno operacional (ex.: CSV/EXECUTE), evitar gatilhos por token genrico isolado (como "CSV"); preferir marcadores explcitos (`LOAD_CSV`, `EXECUTE:`, `EXPORT_OK_CSV`, `CSV_EXISTE_EM_MNT_DATA`, `FILE_CSV`) para reduzir falso-positivo em prompts descritivos.
