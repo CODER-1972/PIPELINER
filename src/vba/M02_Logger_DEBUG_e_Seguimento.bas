@@ -8,6 +8,12 @@ Option Explicit
 ' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
 '
 ' Atualizações:
+' - 2026-03-03 | Codex | Cobertura ampliada de acoes especificas no DEBUG
+'   - Reforca mapeamento por sinais de parametro/contexto para suportar combinacoes de acoes no mesmo registo.
+'   - Amplia extracao de contexto com pares chave=valor e chave:valor para diagnostico mais objetivo.
+' - 2026-03-02 | Codex | Enriquecimento da coluna Funcionalidade com acao em curso por evento
+'   - Acrescenta segunda linha padrao "ACAO EM CURSO" com detalhe operacional por registo.
+'   - Aplica negrito apenas à linha de acao e tenta inferir detalhe especifico (ficheiro/etapa/endpoint).
 ' - 2026-03-02 | Codex | Completa mapeamento da coluna Funcionalidade para eventos DEBUG sem contexto claro
 '   - Cobre codigos de CI/container (M10_* e M05_CI_*), catalogo/fluxo e sinalizacao INFO/ALERTA.
 '   - Reduz quedas para descricao generica em eventos de erro/alerta/info com parametro tecnico curto.
@@ -33,6 +39,10 @@ Option Explicit
 ' - Seguimento_ArquivarLimpar (Sub): rotina pública do módulo.
 ' - Debug_GetRenderPauseSeconds (Function): helper de leitura da Config para pausa de render no DEBUG.
 ' - Debug_DeduzirFuncionalidade (Function): descreve em linguagem simples o processo associado ao parametro.
+' - Debug_DeduzirAcaoEmCurso (Function): descreve de forma especifica a acao operacional corrente.
+' - Debug_AcaoAdd (Sub): agrega acoes sem duplicar texto na mesma celula.
+' - Debug_AplicarAcoesPorSinal (Sub): acrescenta acoes por sinais de parametro/contexto.
+' - Debug_ExtrairDetalheOperacional (Function): recolhe detalhes chave=valor para contexto da acao.
 ' =============================================================================
 
 Private Const SHEET_DEBUG As String = "DEBUG"
@@ -69,9 +79,17 @@ Public Sub Debug_Registar( _
     Dim novaLinha As Long
     novaLinha = ws.Cells(ws.rowS.Count, 1).End(xlUp).Row + 1
 
+    Dim funcionalidadeBase As String
     If Len(Trim$(funcionalidade)) = 0 Then
-        funcionalidade = Debug_DeduzirFuncionalidade(parametro)
+        funcionalidadeBase = Debug_DeduzirFuncionalidade(parametro)
+    Else
+        funcionalidadeBase = Trim$(funcionalidade)
     End If
+
+    Dim acaoEmCurso As String
+    acaoEmCurso = Debug_DeduzirAcaoEmCurso(parametro, problema, sugestao)
+
+    funcionalidade = Debug_MontarFuncionalidade(funcionalidadeBase, acaoEmCurso)
 
     Debug_SetValue ws, mapa, novaLinha, "Timestamp", Now
     Debug_SetValue ws, mapa, novaLinha, "Passo", passo
@@ -84,6 +102,7 @@ Public Sub Debug_Registar( _
     Debug_SetValue ws, mapa, novaLinha, "Sugestao", sugestao            ' aceita "Sugestão" no Excel
 
     Call Debug_AplicarEstiloLinha(ws, mapa, novaLinha, severidade, parametro, problema)
+    Call Debug_FormatarAcaoEmCurso(ws, mapa, novaLinha, funcionalidade)
     Call Debug_FocarUltimaLinha(ws, novaLinha)
 End Sub
 
@@ -197,6 +216,320 @@ Private Function Debug_DeduzirFuncionalidade(ByVal parametro As String) As Strin
     Debug_DeduzirFuncionalidade = "Monitorizacao tecnica de uma etapa da execucao."
 End Function
 
+Private Function Debug_DeduzirAcaoEmCurso(ByVal parametro As String, ByVal problema As String, ByVal sugestao As String) As String
+    Dim p As String
+    Dim ctx As String
+    Dim acoes As String
+    Dim detalhe As String
+
+    p = UCase$(Trim$(parametro))
+    ctx = UCase$(Trim$(problema & " | " & sugestao))
+
+    If p = "STEP_STAGE" Then
+        Call Debug_AcaoAdd(acoes, "Atualizacao do stage de execucao")
+        If InStr(1, ctx, "STAGE=BEFORE_API", vbTextCompare) > 0 Then Call Debug_AcaoAdd(acoes, "Preparacao da chamada /v1/responses")
+        If InStr(1, ctx, "STAGE=API_CALL_START", vbTextCompare) > 0 Then Call Debug_AcaoAdd(acoes, "Disparo do pedido HTTP para a API")
+        If InStr(1, ctx, "STAGE=STEP_COMPLETED", vbTextCompare) > 0 Then Call Debug_AcaoAdd(acoes, "Fecho tecnico do passo com logging final")
+    End If
+
+    Select Case p
+        Case "INFO", "ALERTA"
+            Call Debug_AcaoAdd(acoes, "Sinalizacao operacional para acompanhamento da execucao")
+
+        Case "REQ_INPUT_JSON"
+            Call Debug_AcaoAdd(acoes, "Montagem do bloco input do request")
+            Call Debug_AcaoAdd(acoes, "Validacao de anexos (input_file/input_image/text_embed)")
+
+        Case "INPUTFILES_MISSING"
+            Call Debug_AcaoAdd(acoes, "Validacao bloqueante do contrato FILES declarado")
+            Call Debug_AcaoAdd(acoes, "Interrupcao preventiva por anexo obrigatorio em falta")
+
+        Case "FILES_ITEM_TRACE"
+            Call Debug_AcaoAdd(acoes, "Resolucao de item FILES declarado no INPUTS")
+            Call Debug_AcaoAdd(acoes, "Aplicacao de flags required/latest/as_pdf/as_is/text_embed")
+
+        Case "FILES", "FILES UPLOAD", "FILES REUSE", "FILES IA", "FILES_DIAG", "DOCX_INPUTFILE_OVERRIDDEN", "PDF_CACHE_HIT", "PDF_CACHE_MISS_CONVERTED", "TEXT_EMBED_EMPTY", "TEXT_EMBED_TOO_LARGE", "AS_PDF", "TEXT_EMBED"
+            Call Debug_AcaoAdd(acoes, "Preparacao e transformacao de anexos")
+
+        Case "M05_PAYLOAD_CHECK", "M05_JSON_PREFLIGHT", "M05_UTF8_ROUNDTRIP", "M05_PAYLOAD_DUMP", "M05_PAYLOAD_DUMP_FAIL", "M05_TIMEOUT_DECISION", "M05_HTTP_TIMEOUTS", "M05_HTTP_TIMEOUT_INVALID", "M05_HTTP_TIMEOUT_ERROR", "M05_HTTP_RESULT", "API", "API_RETRY_5XX", "API_CONTEXT_LENGTH_ACTION", "API_CONTEXT_LENGTH_EXCEEDED"
+            Call Debug_AcaoAdd(acoes, "Montagem e validacao tecnica do payload")
+            Call Debug_AcaoAdd(acoes, "Execucao/monitorizacao da chamada HTTP")
+
+        Case "M05_CI_AUTO_SUPPRESS", "M05_CI_INTENT_EVAL"
+            Call Debug_AcaoAdd(acoes, "Avaliacao da intencao explicita de Code Interpreter")
+            Call Debug_AcaoAdd(acoes, "Gate da auto-injecao da tool code_interpreter")
+
+        Case "M07_FILEOUTPUT_MODE_MISMATCH", "M07_FILEOUTPUT_PARSE_GUARD", "OUTPUT_CHAIN_RESOLVE", "OUTPUT_CHAIN_NOT_FOUND", "OUTPUT_CHAIN_AMBIGUOUS", "OUTPUT_CONTRACT_FAIL", "OUTPUT_FILE_MISSING_ON_DISK"
+            Call Debug_AcaoAdd(acoes, "Validacao do contrato de File Output")
+            Call Debug_AcaoAdd(acoes, "Resolucao do ficheiro esperado no OUTPUT Folder")
+
+        Case "OUTPUT_EXECUTE_FOUND", "OUTPUT_EXECUTE_PARSED", "OUTPUT_EXECUTE_UNKNOWN_CMD", "OUTPUT_EXECUTE_INVALID_FILENAME", "OUTPUT_EXECUTE_FILE_NOT_FOUND", "OUTPUT_EXECUTE_CSV_PRECHECK", "OUTPUT_EXECUTE_CSV_BOM_FAIL", "OUTPUT_EXECUTE_CSV_CRLF_IN_FIELDS", "OUTPUT_EXECUTE_SHEET_CREATED", "OUTPUT_EXECUTE_IMPORT_FAIL", "OUTPUT_EXECUTE_CSV_IMPORTED", "OUTPUT_EXECUTE_VERIFIED"
+            Call Debug_AcaoAdd(acoes, "Execucao da diretiva OUTPUT_EXECUTE")
+            Call Debug_AcaoAdd(acoes, "Importacao/validacao de CSV em worksheet dedicada")
+
+        Case "M10_CI_NO_CITATION", "M10_CI_NO_CONTAINER_ID", "M10_CI_CONTAINER_EMPTY", "M10_CI_CONTAINER_LIST", "M10_CI_CONTAINER_SELECT_DIAG", "M10_CI_CONTAINER_INPUT_LIKE", "M10_CI_TEXT_FILENAME_HINTS", "M10_CI_MARKER_NOT_FOUND", "M10_CI_AMBIGUOUS_MARKER", "M10_CI_AMBIGUOUS_FALLBACK", "M10_CI_RESOLVE_RULE", "M10_CI_CONTRACT_STATUS", "M10_CI_DOWNLOAD_NOFILE", "M10_CI_DOWNLOAD_FAIL", "M10_CI_LIST_FAIL", "M10_CI_RAW_MISSING", "M10_CI_ZERO_BYTES", "M10_RAWFOLDER", "M10_RUNFOLDER", "M10_RAW_WRITE_FAIL", "M10_SCHEMA_SUMMARY", "M10_SCHEMA_INVALID", "M10_SCHEMA_DIAG_FAIL", "M10_META_PATH_TOO_LONG", "M10_PATH_TOO_LONG", "M10_FOLDER_CREATE_FAIL"
+            Call Debug_AcaoAdd(acoes, "Inspecao de artefactos de output no container do Code Interpreter")
+            Call Debug_AcaoAdd(acoes, "Selecao e download do artefacto final")
+            Call Debug_AcaoAdd(acoes, "Persistencia local e validacao do ficheiro descarregado")
+
+        Case "NEXT PROMPT", "NEXTDEFAULT", "NEXT ALLOWED", "CICLOS", "MAXSTEPS", "MAXREPETITIONS", "LIMITELISTA", "PIPELINE"
+            Call Debug_AcaoAdd(acoes, "Validacao de transicao de Next PROMPT")
+            Call Debug_AcaoAdd(acoes, "Aplicacao de limites de execucao da pipeline")
+
+        Case "CATALOGO", "CRIAR MAPA", "SET DEFAULT", "CONFIG_OUTPUT_CHAIN_MODE_INVALID", "OPENAI_API_KEY", "CONTEXT_KV", "INPUT FOLDER", "INPUT_TEXT_SIZE"
+            Call Debug_AcaoAdd(acoes, "Leitura de configuracao e metadados do passo")
+            If p = "CONTEXT_KV" Then Call Debug_AcaoAdd(acoes, "Captura/injecao de variaveis partilhadas entre prompts")
+            If p = "INPUT FOLDER" Then Call Debug_AcaoAdd(acoes, "Resolucao da pasta de entrada e politica de seguranca")
+
+        Case "SELFTEST_SUMMARY", "SELFTEST_CRASH", "DEBUG_DIAG", "CONFIG_EXTRA_CASE_OK", "CONFIG_EXTRA_CASE_FAIL"
+            Call Debug_AcaoAdd(acoes, "Execucao de autoteste/diagnostico interno")
+            Call Debug_AcaoAdd(acoes, "Registo de resultado PASS/FAIL com recomendacoes")
+    End Select
+
+    Call Debug_AplicarAcoesPorSinal(acoes, p, ctx)
+
+    If acoes = "" Then acoes = "Registo tecnico da operacao em curso"
+
+    detalhe = Debug_ExtrairDetalheOperacional(problema, sugestao)
+    If detalhe <> "" Then
+        Debug_DeduzirAcaoEmCurso = acoes & " | contexto: " & detalhe
+    Else
+        Debug_DeduzirAcaoEmCurso = acoes
+    End If
+End Function
+
+Private Sub Debug_AcaoAdd(ByRef lista As String, ByVal item As String)
+    Dim txt As String
+    txt = Trim$(item)
+    If txt = "" Then Exit Sub
+
+    If lista = "" Then
+        lista = txt
+    ElseIf InStr(1, "|" & lista & "|", "|" & txt & "|", vbTextCompare) = 0 Then
+        lista = lista & " | " & txt
+    End If
+End Sub
+
+Private Sub Debug_AplicarAcoesPorSinal(ByRef acoes As String, ByVal p As String, ByVal ctx As String)
+    Select Case p
+        Case "FILES REUSE"
+            Call Debug_AcaoAdd(acoes, "Reutilizacao de upload existente por hash/nome")
+        Case "FILES IA"
+            Call Debug_AcaoAdd(acoes, "Desambiguacao assistida para escolha do ficheiro candidato")
+        Case "DOCX_INPUTFILE_OVERRIDDEN"
+            Call Debug_AcaoAdd(acoes, "Override de modo de anexo Office para formato suportado")
+        Case "PDF_CACHE_HIT", "PDF_CACHE_MISS_CONVERTED"
+            Call Debug_AcaoAdd(acoes, "Gestao da cache de conversao PDF para anexos Office")
+        Case "TEXT_EMBED_EMPTY"
+            Call Debug_AcaoAdd(acoes, "Detecao de extracao vazia em text_embed")
+        Case "TEXT_EMBED_TOO_LARGE"
+            Call Debug_AcaoAdd(acoes, "Aplicacao de politica de overflow de text_embed")
+        Case "M10_CI_DOWNLOAD_FAIL", "M10_CI_DOWNLOAD_NOFILE"
+            Call Debug_AcaoAdd(acoes, "Tratamento de falha no download de artefacto do container")
+        Case "M10_CI_AMBIGUOUS_MARKER", "M10_CI_AMBIGUOUS_FALLBACK"
+            Call Debug_AcaoAdd(acoes, "Resolucao de ambiguidade na selecao do artefacto final")
+        Case "M10_META_PATH_TOO_LONG", "M10_PATH_TOO_LONG"
+            Call Debug_AcaoAdd(acoes, "Validacao de limite de caminho no sistema de ficheiros")
+        Case "API_CONTEXT_LENGTH_EXCEEDED", "API_CONTEXT_LENGTH_ACTION"
+            Call Debug_AcaoAdd(acoes, "Mitigacao de excesso de contexto antes de reenviar pedido")
+        Case "OUTPUT_CONTRACT_FAIL"
+            Call Debug_AcaoAdd(acoes, "Bloqueio por violacao do contrato de output esperado")
+        Case "M10_CI_CONTAINER_LIST"
+            Call Debug_AcaoAdd(acoes, "Listagem de ficheiros no container para eleicao de candidato")
+        Case "M10_CI_CONTAINER_SELECT_DIAG"
+            Call Debug_AcaoAdd(acoes, "Avaliacao de elegibilidade por ficheiro (motivo SIM/NAO)")
+        Case "M10_CI_NO_CITATION"
+            Call Debug_AcaoAdd(acoes, "Fallback para resolucao sem citation via contrato textual")
+        Case "M10_CI_RESOLVE_RULE"
+            Call Debug_AcaoAdd(acoes, "Aplicacao da prioridade citation > CI_OUTPUT_FILE > fallback")
+        Case "M10_CI_RAW_MISSING"
+            Call Debug_AcaoAdd(acoes, "Detecao de ausencia de raw de resposta para extracao de artefacto")
+        Case "M10_CI_MARKER_NOT_FOUND"
+            Call Debug_AcaoAdd(acoes, "Detecao de marcador de ficheiro ausente no output textual")
+        Case "M10_CI_TEXT_FILENAME_HINTS"
+            Call Debug_AcaoAdd(acoes, "Inferencia de candidato por pistas textuais de filename")
+        Case "M10_CI_CONTRACT_STATUS"
+            Call Debug_AcaoAdd(acoes, "Validacao de conformidade do artefacto com contrato de output")
+        Case "M10_CI_LIST_FAIL"
+            Call Debug_AcaoAdd(acoes, "Tratamento de erro ao listar ficheiros do container")
+        Case "M10_FOLDER_CREATE_FAIL", "M10_RAW_WRITE_FAIL"
+            Call Debug_AcaoAdd(acoes, "Tratamento de erro de escrita/criacao em disco local")
+        Case "M10_RUNFOLDER", "M10_RAWFOLDER"
+            Call Debug_AcaoAdd(acoes, "Preparacao de pastas de run/raw para auditoria")
+        Case "M10_SCHEMA_INVALID", "M10_SCHEMA_DIAG_FAIL"
+            Call Debug_AcaoAdd(acoes, "Validacao de schema esperado e classificacao de desvio")
+        Case "M05_HTTP_TIMEOUT_ERROR"
+            Call Debug_AcaoAdd(acoes, "Classificacao de fase de timeout (resolve/connect/send/receive)")
+        Case "M05_TIMEOUT_DECISION"
+            Call Debug_AcaoAdd(acoes, "Decisao operacional de retry/backoff apos timeout")
+        Case "M05_PAYLOAD_CHECK"
+            Call Debug_AcaoAdd(acoes, "Checklist pre-envio do payload (tools/input/tamanho)")
+        Case "M05_JSON_PREFLIGHT"
+            Call Debug_AcaoAdd(acoes, "Preflight de validade JSON antes do HTTP")
+        Case "M05_PAYLOAD_DUMP", "M05_PAYLOAD_DUMP_FAIL"
+            Call Debug_AcaoAdd(acoes, "Persistencia diagnostica do payload final de request")
+        Case "M05_CI_INTENT_EVAL", "M05_CI_AUTO_SUPPRESS"
+            Call Debug_AcaoAdd(acoes, "Avaliacao de intencao explicita de Code Interpreter no passo")
+        Case "M07_FILEOUTPUT_MODE_MISMATCH", "M07_FILEOUTPUT_PARSE_GUARD"
+            Call Debug_AcaoAdd(acoes, "Validacao de coerencia entre modo efetivo e contrato de File Output")
+        Case "OUTPUT_EXECUTE_CSV_PRECHECK"
+            Call Debug_AcaoAdd(acoes, "Pre-validacao de encoding/BOM e estrutura CSV")
+        Case "OUTPUT_EXECUTE_VERIFIED"
+            Call Debug_AcaoAdd(acoes, "Confirmacao final do artefacto importado e rastreabilidade")
+        Case "OUTPUT_EXECUTE_IMPORT_FAIL"
+            Call Debug_AcaoAdd(acoes, "Tratamento de falha de importacao CSV para worksheet")
+        Case "OUTPUT_EXECUTE_INVALID_FILENAME"
+            Call Debug_AcaoAdd(acoes, "Bloqueio de filename invalido por regras de seguranca")
+        Case "INPUTFILES_MISSING"
+            Call Debug_AcaoAdd(acoes, "Comparacao entre FILES declarados e anexos efetivos no payload")
+        Case "NEXTDEFAULT", "NEXT ALLOWED", "NEXT PROMPT"
+            Call Debug_AcaoAdd(acoes, "Aplicacao de regras default/allowed na transicao de prompt")
+        Case "CICLOS", "MAXSTEPS", "MAXREPETITIONS", "LIMITELISTA"
+            Call Debug_AcaoAdd(acoes, "Aplicacao de guardas anti-loop e limites de execucao")
+        Case "CATALOGO", "CRIAR MAPA"
+            Call Debug_AcaoAdd(acoes, "Resolucao de bloco do prompt no catalogo de origem")
+        Case "CONTEXT_KV"
+            Call Debug_AcaoAdd(acoes, "Injecao/captura de variaveis de contexto entre passos")
+        Case "OPENAI_API_KEY"
+            Call Debug_AcaoAdd(acoes, "Validacao de disponibilidade da chave API em Config")
+        Case "OUTPUT_CHAIN_NOT_FOUND", "OUTPUT_CHAIN_AMBIGUOUS"
+            Call Debug_AcaoAdd(acoes, "Resolucao da cadeia de output com fallback/controlos de ambiguidade")
+    End Select
+
+    If Left$(p, 4) = "M10_" Or InStr(1, p, "_CI_", vbTextCompare) > 0 Then
+        Call Debug_AcaoAdd(acoes, "Inspecao de artefactos de output no container do Code Interpreter")
+    End If
+
+    If InStr(1, p, "DOWNLOAD", vbTextCompare) > 0 Or InStr(1, ctx, "DOWNLOAD", vbTextCompare) > 0 Then
+        Call Debug_AcaoAdd(acoes, "Download de artefacto para staging/destino final")
+    End If
+
+    If InStr(1, p, "UPLOAD", vbTextCompare) > 0 Or InStr(1, p, "FILES", vbTextCompare) > 0 Or InStr(1, ctx, "/V1/FILES", vbTextCompare) > 0 Then
+        Call Debug_AcaoAdd(acoes, "Upload/ligacao de anexos no pedido")
+    End If
+
+    If InStr(1, p, "TIMEOUT", vbTextCompare) > 0 Or InStr(1, ctx, "TIMEOUT", vbTextCompare) > 0 Then
+        Call Debug_AcaoAdd(acoes, "Calculo e aplicacao de timeouts efetivos")
+    End If
+
+    If InStr(1, p, "RETRY", vbTextCompare) > 0 Or InStr(1, ctx, "RETRY", vbTextCompare) > 0 Then
+        Call Debug_AcaoAdd(acoes, "Gestao de retry por erro transitorio")
+    End If
+
+    If InStr(1, p, "OUTPUT", vbTextCompare) > 0 Then
+        Call Debug_AcaoAdd(acoes, "Validacao de output esperado e artefacto final")
+    End If
+
+    If InStr(1, p, "NEXT", vbTextCompare) > 0 Or InStr(1, p, "PIPELINE", vbTextCompare) > 0 Or InStr(1, p, "MAX", vbTextCompare) > 0 Then
+        Call Debug_AcaoAdd(acoes, "Controlo de transicao/limites da pipeline")
+    End If
+
+    If InStr(1, p, "CONFIG", vbTextCompare) > 0 Or InStr(1, p, "CATALOGO", vbTextCompare) > 0 Or InStr(1, p, "PARAM", vbTextCompare) > 0 Then
+        Call Debug_AcaoAdd(acoes, "Leitura e validacao de configuracao")
+    End If
+
+    If Left$(p, 9) = "SELFTEST_" Or InStr(1, p, "DEBUG_DIAG", vbTextCompare) > 0 Then
+        Call Debug_AcaoAdd(acoes, "Execucao de autoteste e consolidacao diagnostica")
+    End If
+
+    If InStr(1, ctx, "FILE_ID", vbTextCompare) > 0 Then
+        Call Debug_AcaoAdd(acoes, "Associacao de ficheiro por file_id no payload")
+    End If
+
+    If InStr(1, ctx, "CONTAINER_ID", vbTextCompare) > 0 Then
+        Call Debug_AcaoAdd(acoes, "Rastreio de container para resolucao de artefactos")
+    End If
+
+    If InStr(1, ctx, "PROCESS_MODE=CODE_INTERPRETER", vbTextCompare) > 0 Then
+        Call Debug_AcaoAdd(acoes, "Correlacao do modo code_interpreter com o contrato de output")
+    End If
+
+    If InStr(1, ctx, "HTTP STATUS", vbTextCompare) > 0 Or InStr(1, ctx, "HTTP_STATUS", vbTextCompare) > 0 Then
+        Call Debug_AcaoAdd(acoes, "Correlacao de status HTTP com acao de recuperacao")
+    End If
+End Sub
+
+Private Function Debug_ExtrairDetalheOperacional(ByVal problema As String, ByVal sugestao As String) As String
+    Dim fonte As String
+    Dim detalhe As String
+    Dim detalhes As String
+    Dim keys As Variant
+    Dim i As Long
+
+    fonte = Trim$(problema & " | " & sugestao)
+    keys = Array("filename", "file", "full_path", "resolvedPath", "resolved_path", "inputFolder", "input_folder", "outputFolder", "output_folder", "stage", "endpoint", "prompt", "promptId", "pipeline", "pipeline_name", "container_id", "file_id", "status", "http_status", "httpStatus", "engine", "profile", "effective_mode", "mode_effective", "mode", "bytes", "created_at", "elapsed_ms", "payload_len", "response_id", "cause_hint", "confidence", "dlErr", "retry_outcome")
+
+    For i = LBound(keys) To UBound(keys)
+        detalhe = Debug_ExtrairDetalhePorChave(fonte, CStr(keys(i)))
+        If detalhe <> "" Then Call Debug_AcaoAdd(detalhes, detalhe)
+    Next i
+
+    Debug_ExtrairDetalheOperacional = detalhes
+End Function
+
+Private Function Debug_ExtrairDetalhePorChave(ByVal fonte As String, ByVal chave As String) As String
+    Dim pos As Long
+    Dim ini As Long
+    Dim i As Long
+    Dim ch As String
+    Dim valor As String
+
+    pos = InStr(1, fonte, chave & "=", vbTextCompare)
+    If pos > 0 Then
+        ini = pos + Len(chave) + 1
+    Else
+        pos = InStr(1, fonte, chave & ":", vbTextCompare)
+        If pos <= 0 Then Exit Function
+        ini = pos + Len(chave) + 1
+    End If
+    For i = ini To Len(fonte)
+        ch = Mid$(fonte, i, 1)
+        If ch = ";" Or ch = "," Or ch = "|" Or ch = vbCr Or ch = vbLf Then Exit For
+        valor = valor & ch
+    Next i
+
+    valor = Trim$(Replace(Replace(Replace(valor, Chr$(34), ""), "'", ""), "`", ""))
+    If valor <> "" Then Debug_ExtrairDetalhePorChave = chave & "=" & valor
+End Function
+
+Private Function Debug_MontarFuncionalidade(ByVal funcionalidadeBase As String, ByVal acaoEmCurso As String) As String
+    Dim baseTxt As String
+    Dim acaoTxt As String
+
+    baseTxt = Trim$(funcionalidadeBase)
+    If baseTxt = "" Then baseTxt = "Monitorizacao tecnica de uma etapa da execucao."
+
+    acaoTxt = Trim$(acaoEmCurso)
+    If acaoTxt = "" Then acaoTxt = "Registo tecnico da operacao em curso."
+
+    Debug_MontarFuncionalidade = baseTxt & vbLf & "ACAO EM CURSO: " & acaoTxt
+End Function
+
+Private Sub Debug_FormatarAcaoEmCurso(ByVal ws As Worksheet, ByVal mapa As Object, ByVal linha As Long, ByVal funcionalidadeTexto As String)
+    On Error GoTo Fim
+
+    Dim keyFunc As String
+    Dim colFunc As Long
+    keyFunc = Debug_NormalizarCabecalho("Funcionalidade")
+    If Not mapa.exists(keyFunc) Then Exit Sub
+
+    colFunc = CLng(mapa(keyFunc))
+
+    Dim posQuebra As Long
+    posQuebra = InStr(1, funcionalidadeTexto, vbLf, vbBinaryCompare)
+    If posQuebra <= 0 Then Exit Sub
+
+    Dim startBold As Long
+    startBold = posQuebra + 1
+
+    With ws.Cells(linha, colFunc)
+        .WrapText = True
+        .Characters(startBold, Len(funcionalidadeTexto) - startBold + 1).Font.Bold = True
+    End With
+
+Fim:
+    On Error GoTo 0
+End Sub
 
 ' ============================================================================
 ' Helpers (DEBUG)
