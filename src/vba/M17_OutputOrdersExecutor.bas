@@ -2,44 +2,44 @@ Attribute VB_Name = "M17_OutputOrdersExecutor"
 Option Explicit
 
 ' =============================================================================
-' MÃ³dulo: M17_OutputOrdersExecutor
-' PropÃ³sito:
-' - Interpretar ordens EXECUTE emitidas no output do modelo apÃ³s sucesso HTTP.
-' - Implementar whitelist inicial de comandos (LOAD_CSV) com validaÃ§Ãµes de seguranÃ§a.
+' Módulo: M17_OutputOrdersExecutor
+' Propósito:
+' - Interpretar ordens EXECUTE emitidas no output do modelo após sucesso HTTP.
+' - Implementar whitelist inicial de comandos (LOAD_CSV) com validações de segurança.
 ' - Importar CSV para nova worksheet com logging completo em DEBUG e resumo para Seguimento.
 '
-' AtualizaÃ§Ãµes:
-' - 2026-03-03 | Codex | Integra contexto mÃ­nimo M10 no fluxo EXECUTE
+' Atualizações:
+' - 2026-03-03 | Codex | Integra contexto mínimo M10 no fluxo EXECUTE
 '   - Adiciona argumento opcional m10Context no entrypoint para auditoria/gates leves.
-'   - ReforÃ§a validaÃ§Ã£o de existÃªncia do CSV com ResolveCsvSource + FileExistsFast.
+'   - Reforça validação de existência do CSV com ResolveCsvSource + FileExistsFast.
 '   - Regista contexto efetivo de File Output no DEBUG para troubleshooting.
 '   - Aceita fallback de contexto compacto via downloadedFiles/filesOps quando m10Context vier vazio.
-'   - Suporta extraÃ§Ã£o de token M10CTX tanto em string compacta como em coleÃ§Ãµes de downloadedFiles.
-' - 2026-02-26 | Codex | Corrige dependÃªncias internas do SelfTest
+'   - Suporta extração de token M10CTX tanto em string compacta como em coleções de downloadedFiles.
+' - 2026-02-26 | Codex | Corrige dependências internas do SelfTest
 '   - Adiciona helpers locais EnsureFolder e WriteTextUTF8 usados pela bateria T1..T9.
-'   - Remove acoplamento implÃ­cito a helpers Private de outros mÃ³dulos.
-' - 2026-02-23 | Codex | ImplementaÃ§Ã£o inicial de Output Orders (v1.3)
-'   - Adiciona parser de linhas EXECUTE com tolerÃ¢ncia a variantes seguras.
-'   - Implementa LOAD_CSV com resoluÃ§Ã£o automÃ¡tica de ficheiro, prÃ©-check e importaÃ§Ã£o.
+'   - Remove acoplamento implícito a helpers Private de outros módulos.
+' - 2026-02-23 | Codex | Implementação inicial de Output Orders (v1.3)
+'   - Adiciona parser de linhas EXECUTE com tolerância a variantes seguras.
+'   - Implementa LOAD_CSV com resolução automática de ficheiro, pré-check e importação.
 '   - Inclui SelfTest_OutputOrders_RunAll com testes idempotentes T1..T9.
 '
-' FunÃ§Ãµes e procedimentos:
+' Funções e procedimentos:
 ' - OutputOrders_TryExecute(...): executa ordens reconhecidas e devolve append para files_ops_log.
-' - ParseExecuteDirectives(outputText, ...): extrai diretivas EXECUTE e devolve mÃ©tricas de lint opcional.
-' - LineHasExecuteToken(rawLine): deteta intenÃ§Ã£o EXECUTE em linha (inclui variantes incompletas para lint).
+' - ParseExecuteDirectives(outputText, ...): extrai diretivas EXECUTE e devolve métricas de lint opcional.
+' - LineHasExecuteToken(rawLine): deteta intenção EXECUTE em linha (inclui variantes incompletas para lint).
 ' - ValidateCsvFileName(fileName): valida basename CSV contra path traversal e caracteres perigosos.
 ' - ResolveCsvSource(fileName, outputFolder, downloadedFiles): resolve origem do CSV em output/downloads.
 ' - OutputOrders_ResolveM10Context(m10Context, downloadedFiles): prioriza argumento opcional e fallback compacto em filesOps/downloadedFiles.
-' - OutputOrders_ExtractM10ContextFromDownloaded(downloadedFiles): extrai token M10CTX em payload textual ou coleÃ§Ã£o.
-' - PrecheckCsv_BomAndCrLf(csvPath, ...): avalia BOM UTF-8, CR/LF quoted e sugestÃ£o de colunas.
+' - OutputOrders_ExtractM10ContextFromDownloaded(downloadedFiles): extrai token M10CTX em payload textual ou coleção.
+' - PrecheckCsv_BomAndCrLf(csvPath, ...): avalia BOM UTF-8, CR/LF quoted e sugestão de colunas.
 ' - DeriveSheetNameFromCsv(csvPath): deriva nome base da worksheet a partir do ficheiro.
-' - CreateUniqueWorksheetName(baseName): gera nome de worksheet Ãºnico e compatÃ­vel com limite Excel.
-' - LoadCsvIntoSheet_QueryTable(...): importaÃ§Ã£o principal via QueryTable.
-' - LoadCsvIntoSheet_OpenTextFallback(...): fallback de importaÃ§Ã£o via OpenText + cÃ³pia para destino.
-' - VerifyImportedSheet(ws, expectedCols, ...): valida estrutura importada e recolhe evidÃªncias.
-' - BuildCiProofMissingContext(...): monta contexto compacto para alerta de ausÃªncia de artefacto CI provÃ¡vel.
+' - CreateUniqueWorksheetName(baseName): gera nome de worksheet único e compatível com limite Excel.
+' - LoadCsvIntoSheet_QueryTable(...): importação principal via QueryTable.
+' - LoadCsvIntoSheet_OpenTextFallback(...): fallback de importação via OpenText + cópia para destino.
+' - VerifyImportedSheet(ws, expectedCols, ...): valida estrutura importada e recolhe evidências.
+' - BuildCiProofMissingContext(...): monta contexto compacto para alerta de ausência de artefacto CI provável.
 ' - SelfTest_OutputOrders_RunAll(): bateria idempotente de testes T1..T9 do executor.
-' - EnsureFolder(folderPath): cria pasta local para fixtures temporÃ¡rias dos selftests.
+' - EnsureFolder(folderPath): cria pasta local para fixtures temporárias dos selftests.
 ' - WriteTextUTF8(filePath, txt): escreve ficheiros UTF-8 usados nos selftests.
 ' - BuildFileNotFoundContext(...): agrega contexto operacional para troubleshooting em OUTPUT_EXECUTE_FILE_NOT_FOUND.
 ' =============================================================================
@@ -93,13 +93,13 @@ Public Function OutputOrders_TryExecute( _
 
         If cmd <> "LOAD_CSV" Then
             Call Debug_Registar(passo, promptId, "ALERTA", "", "OUTPUT_EXECUTE_UNKNOWN_CMD", _
-                "Comando nÃ£o permitido: " & cmd, "Whitelist atual: LOAD_CSV.")
+                "Comando não permitido: " & cmd, "Whitelist atual: LOAD_CSV.")
             GoTo NextDirective
         End If
 
         If Not ValidateCsvFileName(fileName) Then
             Call Debug_Registar(passo, promptId, "ERRO", "", "OUTPUT_EXECUTE_INVALID_FILENAME", _
-                "Filename invÃ¡lido: " & fileName, "Use apenas basename.csv sem paths/sÃ­mbolos perigosos.")
+                "Filename inválido: " & fileName, "Use apenas basename.csv sem paths/símbolos perigosos.")
             GoTo NextDirective
         End If
 
@@ -110,13 +110,13 @@ Public Function OutputOrders_TryExecute( _
             notFoundCtx = BuildFileNotFoundContext(fileName, outputText, downloadedFiles, outputFolder)
 
             Call Debug_Registar(passo, promptId, "ERRO", "", "OUTPUT_EXECUTE_FILE_NOT_FOUND", _
-                "NÃ£o foi possÃ­vel resolver ficheiro CSV. " & notFoundCtx, _
-                "Confirme download/geraÃ§Ã£o do ficheiro e nome exato no EXECUTE.")
+                "Não foi possível resolver ficheiro CSV. " & notFoundCtx, _
+                "Confirme download/geração do ficheiro e nome exato no EXECUTE.")
 
             If HasCiSignalsWithoutArtifact(outputText) Then
                 Call Debug_Registar(passo, promptId, "ALERTA", "", "CI_PROOF_MNT_DATA_MISSING", _
-                    "Sinais de execuÃ§Ã£o CI sem artefacto local resolvido. " & notFoundCtx, _
-                    "Garantir escrita/citaÃ§Ã£o do ficheiro em /mnt/data e download para OUTPUT Folder.")
+                    "Sinais de execução CI sem artefacto local resolvido. " & notFoundCtx, _
+                    "Garantir escrita/citação do ficheiro em /mnt/data e download para OUTPUT Folder.")
             End If
             GoTo NextDirective
         End If
@@ -124,14 +124,14 @@ Public Function OutputOrders_TryExecute( _
         If Not FileExistsFast(csvPath) Then
             Call Debug_Registar(passo, promptId, "ERRO", "", "OUTPUT_EXECUTE_FILE_NOT_FOUND", _
                 "CSV resolvido mas ausente no disco: " & csvPath & " | source=" & fileName, _
-                "Reveja FILE OUTPUT/download e permissÃµes da pasta OUTPUT.")
+                "Reveja FILE OUTPUT/download e permissões da pasta OUTPUT.")
             GoTo NextDirective
         End If
 
         If Not FileExistsFast(csvPath) Then
             Call Debug_Registar(passo, promptId, "ERRO", "", "OUTPUT_EXECUTE_FILE_NOT_FOUND", _
                 "CSV resolvido mas ausente no disco: " & csvPath & " | source=" & fileName, _
-                "Reveja FILE OUTPUT/download e permissÃµes da pasta OUTPUT.")
+                "Reveja FILE OUTPUT/download e permissões da pasta OUTPUT.")
             GoTo NextDirective
         End If
 
@@ -189,7 +189,7 @@ NextDirective:
     Exit Function
 EH:
     Call Debug_Registar(passo, promptId, "ERRO", "", OUTPUT_EXECUTE_TRACKER & "_UNHANDLED", _
-        "Err " & CStr(Err.Number) & ": " & Err.Description, "Reveja parser/importaÃ§Ã£o de Output Orders.")
+        "Err " & CStr(Err.Number) & ": " & Err.Description, "Reveja parser/importação de Output Orders.")
 End Function
 
 
@@ -828,7 +828,7 @@ Public Function VerifyImportedSheet(ByVal ws As Worksheet, ByVal expectedCols As
     colsImported = ws.UsedRange.Columns.Count
 
     If rowsImported = 1 And colsImported = 1 And Trim$(CStr(ws.Range("A1").Value)) = "" Then
-        evidence = "Sheet vazia apÃ³s importaÃ§Ã£o."
+        evidence = "Sheet vazia após importação."
         Exit Function
     End If
 
@@ -914,7 +914,7 @@ Public Sub SelfTest_OutputOrders_RunAll()
 
     Dim r8 As String
     r8 = OutputOrders_TryExecute(1, "SELFTEST/T8", "resp", "EXECUTE: LOAD_CSV([catalogo_ok.csv])", base, "DL:catalogo_ok.csv")
-    SelfTest_Assert "T8 IdempotÃªncia cria sufixo", InStr(1, r8, "_01", vbTextCompare) > 0 Or InStr(1, r8, "_02", vbTextCompare) > 0, tPass, tFail
+    SelfTest_Assert "T8 Idempotência cria sufixo", InStr(1, r8, "_01", vbTextCompare) > 0 Or InStr(1, r8, "_02", vbTextCompare) > 0, tPass, tFail
 
     SelfTest_Assert "T9 Frase Seguimento exacta", InStr(1, r7, "CREATED AND LOADED Excel Sheet ", vbBinaryCompare) = 1 And Right$(r7, Len(", and verified.")) = ", and verified.", tPass, tFail
 
@@ -932,12 +932,12 @@ Public Sub SelfTest_OutputOrders_RunAll()
     ctxItems.Add "M10CTX:output_kind=file | process_mode=metadata"
     Dim ctx12 As String
     ctx12 = OutputOrders_ResolveM10Context("", ctxItems)
-    SelfTest_Assert "T12 Fallback m10Context via coleÃ§Ã£o", InStr(1, ctx12, "process_mode=metadata", vbTextCompare) > 0, tPass, tFail
+    SelfTest_Assert "T12 Fallback m10Context via coleção", InStr(1, ctx12, "process_mode=metadata", vbTextCompare) > 0, tPass, tFail
 
     Call Debug_Registar(0, "SELFTEST_OUTPUT_ORDERS", "INFO", "", "SELFTEST_SUMMARY", _
         "PASS=" & CStr(tPass) & " | FAIL=" & CStr(tFail), "")
 
-    MsgBox "SelfTest_OutputOrders_RunAll concluÃ­do. PASS=" & tPass & " FAIL=" & tFail, IIf(tFail = 0, vbInformation, vbExclamation)
+    MsgBox "SelfTest_OutputOrders_RunAll concluído. PASS=" & tPass & " FAIL=" & tFail, IIf(tFail = 0, vbInformation, vbExclamation)
     Exit Sub
 EH:
     Call Debug_Registar(0, "SELFTEST_OUTPUT_ORDERS", "ERRO", "", "SELFTEST_CRASH", "Err " & Err.Number & ": " & Err.Description, "")
@@ -950,7 +950,7 @@ Private Sub SelfTest_Assert(ByVal testName As String, ByVal cond As Boolean, ByR
         Call Debug_Registar(0, "SELFTEST_OUTPUT_ORDERS", "INFO", "", testName, "PASS", "")
     Else
         failN = failN + 1
-        Call Debug_Registar(0, "SELFTEST_OUTPUT_ORDERS", "ERRO", "", testName, "FAIL", "Rever implementaÃ§Ã£o do Output Orders.")
+        Call Debug_Registar(0, "SELFTEST_OUTPUT_ORDERS", "ERRO", "", testName, "FAIL", "Rever implementação do Output Orders.")
     End If
 End Sub
 
