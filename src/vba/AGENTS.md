@@ -561,4 +561,4 @@ Se começar a ficar demasiado grande:
 
 - Em mapeamento de ações do DEBUG, privilegiar primeiro regras explícitas por parâmetro (ex.: `M10_*`, `M05_*`, `OUTPUT_EXECUTE_*`) e só depois regras genéricas por substring para reduzir falsos positivos de interpretação.
 
-- Quando um parâmetro `Variant` aceitar tanto string compacta como coleção (ex.: `downloadedFiles/files_ops_log`), o parser deve suportar **ambas** as formas para evitar perda de contexto em caminhos de execução alternativos (manual vs pipeline).
+- Em rastreio de overrides de modo em FILES (`raw_mode` vs `effective_mode`), emitir o evento canónico (`FILES_MODE_OVERRIDE_TRACE`) apenas após o modo final do item estar estabilizado (incluindo fallbacks tardios como `pdf_upload -> text_embed`), para evitar diagnósticos incompletos ou duplicados.
