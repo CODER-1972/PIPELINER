@@ -62,8 +62,18 @@ Inclui módulos que:
 - convertem configurações amigáveis para payloads API;
 - gerem anexos e uploads;
 - executam chamadas API;
+- criam blobs GitHub para conteúdos versionáveis (payload `utf-8` para texto e `base64` para binário, com limite `GH_MAX_FILE_MB` e logging canónico `GH_BLOB_OK`/`GH_BLOB_TOO_LARGE`);
 - persistem auditoria por passo;
-- resolvem encadeamento (`Next PROMPT`) até `STOP`.
+- resolvem encadeamento (`Next PROMPT`) até `STOP`;
+- incluem utilitários HTTP dedicados a integrações GitHub (`M23_GH_HTTP`) com timeout configurável, headers padrão (`Authorization`, `Accept`, `X-GitHub-Api-Version`, `User-Agent`) e logging estruturado de falhas via `M26_GH_Logger`.
+
+Também inclui um fluxo opcional de exportação dos logs `DEBUG`/`Seguimento` para GitHub, orquestrado por `M21_GitDebugExport` com separação por responsabilidades:
+
+- `M22_GH_Config`: leitura de `GIT_DEBUG_*` na folha `Config`;
+- `M23_GH_HTTP`: cliente HTTP com fallback WinHTTP/MSXML;
+- `M24_GH_Blob`: encoding UTF-8/Base64 e escaping JSON;
+- `M25_GH_TreeCommit`: composição de endpoint/payload de commit no GitHub;
+- `M26_GH_Logger`: logging funcional dedicado no `DEBUG`.
 
 ---
 
@@ -96,6 +106,15 @@ Defaults e opções globais, incluindo:
 - modelo/temperatura/tokens;
 - estratégia de transporte de ficheiros (`FILE_ID`/`INLINE_BASE64`);
 - opções de robustez de upload e fallback.
+Também suporta exportação opcional de debug para GitHub (Git Data API) no fim da execução da pipeline:
+
+- gatilho na célula **Auto-guardar ficheiros** da pipeline quando contém `sim, todos` ou `debug` (case-insensitive, mesmo com texto adicional);
+- publicação de `DEBUG.csv`, `catalogo_prompts_executadas.csv`, `Seguimento.csv` e `painel_pipeline.txt`;
+- atualização da coluna `GIT_DEBUG` nas folhas `Seguimento` e `HISTÓRICO` com o link da pasta remota.
+- macro `GitDebug_Config_InstalarParametros` para preencher/atualizar na folha `Config` as chaves `GH_*` com `default`, explicação pedagógica (coluna C) e valores/intervalos possíveis (coluna E), sem forçar overwrite dos valores atuais por defeito.
+
+Configuração recomendada (folha `Config`, formato Key/Value): `GH_OWNER`, `GH_REPO`, `GH_BRANCH`, `GH_API_BASE`, `GH_TOKEN_ENV`, `GH_TOKEN_CONFIG`, `GH_COMMIT_MESSAGE_TEMPLATE`, `GH_BASE_PATH`, `GH_API_VERSION`, `GH_USER_AGENT`.
+
 
 ## 3.3 Seguimento
 
