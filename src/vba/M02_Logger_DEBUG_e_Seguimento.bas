@@ -8,6 +8,9 @@ Option Explicit
 ' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
 '
 ' Atualizações:
+' - 2026-03-04 | Codex | Coluna GIT_DEBUG no arquivamento Seguimento -> HISTORICO
+'   - Inclui GIT_DEBUG no conjunto canonico de headers e mapeamento por nome.
+'   - Garante criacao retrocompativel do header em Seguimento/HISTORICO quando inexistente.
 ' - 2026-03-03 | Codex | Inclui CI_PROOF_MNT_DATA_MISSING no mapeamento operacional
 '   - Classifica o novo parametro nas acoes de OUTPUT_EXECUTE/diagnostico CI na coluna Funcionalidade.
 '   - Mantem coerencia de troubleshooting para eventos de artefacto em falta no fluxo CI.
@@ -939,7 +942,7 @@ End Function
 '   Timestamp | Nome do Pipeline | Passo | Prompt ID | Texto da prompt | Output (texto) |
 '   Modelo | Modos | Storage | Config extra (amigável) | Config extra (JSON convertido) |
 '   HTTP Status | Response ID | Next prompt decidido | files_used | files_ops_log | file_ids_used |
-'   captured_vars | captured_vars_meta | injected_vars
+'   captured_vars | captured_vars_meta | injected_vars | GIT_DEBUG
 '
 ' Mantém a lógica do original:
 ' - Insere no topo (linha 2 do HISTÓRICO)
@@ -985,7 +988,8 @@ Public Sub Seguimento_ArquivarLimpar()
         "file_ids_used", _
         "captured_vars", _
         "captured_vars_meta", _
-        "injected_vars" _
+        "injected_vars", _
+        "GIT_DEBUG" _
     )
     
     ' Mapeamento Seguimento -> Histórico por nome (sem taxonomias; só headers)
@@ -1014,6 +1018,7 @@ Public Sub Seguimento_ArquivarLimpar()
     srcForHist("captured_vars") = "captured_vars"
     srcForHist("captured_vars_meta") = "captured_vars_meta"
     srcForHist("injected_vars") = "injected_vars"
+    srcForHist("GIT_DEBUG") = "GIT_DEBUG"
     
     ' Mapas de headers -> coluna
     Dim mapS As Object, mapH As Object
@@ -1024,6 +1029,7 @@ Public Sub Seguimento_ArquivarLimpar()
     EnsureHeader wsS, mapS, "captured_vars", AUTO_CREATE_MISSING_HEADERS
     EnsureHeader wsS, mapS, "captured_vars_meta", AUTO_CREATE_MISSING_HEADERS
     EnsureHeader wsS, mapS, "injected_vars", AUTO_CREATE_MISSING_HEADERS
+    EnsureHeader wsS, mapS, "GIT_DEBUG", AUTO_CREATE_MISSING_HEADERS
     Set mapS = HeaderMap_ByName(wsS)
     
     Dim i As Long

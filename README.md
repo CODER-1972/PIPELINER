@@ -106,6 +106,15 @@ Defaults e opções globais, incluindo:
 - modelo/temperatura/tokens;
 - estratégia de transporte de ficheiros (`FILE_ID`/`INLINE_BASE64`);
 - opções de robustez de upload e fallback.
+Também suporta exportação opcional de debug para GitHub (Git Data API) no fim da execução da pipeline:
+
+- gatilho na célula **Auto-guardar ficheiros** da pipeline quando contém `sim, todos` ou `debug` (case-insensitive, mesmo com texto adicional);
+- publicação de `DEBUG.csv`, `catalogo_prompts_executadas.csv`, `Seguimento.csv` e `painel_pipeline.txt`;
+- atualização da coluna `GIT_DEBUG` nas folhas `Seguimento` e `HISTÓRICO` com o link da pasta remota.
+- macro `GitDebug_Config_InstalarParametros` para preencher/atualizar na folha `Config` as chaves `GH_*` com `default`, explicação pedagógica (coluna C) e valores/intervalos possíveis (coluna E), sem forçar overwrite dos valores atuais por defeito.
+
+Configuração recomendada (folha `Config`, formato Key/Value): `GH_OWNER`, `GH_REPO`, `GH_BRANCH`, `GH_API_BASE`, `GH_TOKEN_ENV`, `GH_TOKEN_CONFIG`, `GH_COMMIT_MESSAGE_TEMPLATE`, `GH_BASE_PATH`, `GH_API_VERSION`, `GH_USER_AGENT`.
+
 
 ## 3.3 Seguimento
 
