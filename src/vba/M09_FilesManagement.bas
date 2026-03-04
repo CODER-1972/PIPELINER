@@ -2,12 +2,12 @@ Attribute VB_Name = "M09_FilesManagement"
 Option Explicit
 
 ' =============================================================================
-' Módulo: M09_FilesManagement
-' Propósito:
-' - Gerir resolução de anexos FILES, upload, cache e auditoria em FILES_MANAGEMENT.
-' - Aplicar effective_mode, robustez multipart e utilitários de ficheiros para pipeline.
+' Modulo: M09_FilesManagement
+' Proposito:
+' - Gerir resolucao de anexos FILES, upload, cache e auditoria em FILES_MANAGEMENT.
+' - Aplicar effective_mode, robustez multipart e utilitarios de ficheiros para pipeline.
 '
-' Atualizações:
+' Atualizacoes:
 ' - 2026-03-03 | Codex | Emite trace final apos todos os fallbacks de modo FILES
 '   - Move emissao de `FILES_MODE_OVERRIDE_TRACE` para o fecho do item, garantindo effective_mode final.
 '   - Cobre overrides tardios (ex.: pdf_upload->text_embed por fallback de conversao/overflow).
@@ -24,52 +24,52 @@ Option Explicit
 '   - Regista 1 linha por ficheiro processado com status, modo, file_id e full_path resolvido.
 '   - Inclui fallback de caminho esperado quando o ficheiro nao e encontrado, para acelerar triagem.
 '   - Uniformiza etiqueta `FILES_ITEM_TRACE` para filtros de troubleshooting no DEBUG.
-' - 2026-03-01 | Codex | Evita falso sucesso quando text_embed não produz conteúdo
-'   - Trata `text_embed` sem texto extraído como falha operacional (não marca anexo como usado).
-'   - Emite evento `TEXT_EMBED_EMPTY` no DEBUG com ação objetiva para TXT/CSV/JSON.
-'   - Quando o ficheiro é `(required)`, bloqueia o passo com erro explícito para evitar respostas sem contexto.
-' - 2026-02-26 | Codex | Normalização visual de alturas na FILES_MANAGEMENT
-'   - Garante altura mínima para linhas de registo (não separadoras) para evitar herança visual de 6 pt.
-'   - Mantém separador por run com altura fixa de 6 pt e registos com altura normal legível.
-' - 2026-02-18 | Codex | Macro de diagnóstico para wildcard FILES (caso GUIA_DE_ESTILO)
-'   - Adiciona rotina pública para testar resolução determinística de padrões com `*` e `(latest)`.
-'   - Extrai lógica para função reutilizável (M12 SelfTest automático) e regista contagens de candidatos.
-'   - Corrige falso positivo de match exato quando `requested_name` contém wildcard (`*`/`?`).
+' - 2026-03-01 | Codex | Evita falso sucesso quando text_embed nao produz conteudo
+'   - Trata `text_embed` sem texto extraido como falha operacional (nao marca anexo como usado).
+'   - Emite evento `TEXT_EMBED_EMPTY` no DEBUG com acao objetiva para TXT/CSV/JSON.
+'   - Quando o ficheiro e `(required)`, bloqueia o passo com erro explicito para evitar respostas sem contexto.
+' - 2026-02-26 | Codex | Normalizacao visual de alturas na FILES_MANAGEMENT
+'   - Garante altura minima para linhas de registo (nao separadoras) para evitar heranca visual de 6 pt.
+'   - Mantem separador por run com altura fixa de 6 pt e registos com altura normal legivel.
+' - 2026-02-18 | Codex | Macro de diagnostico para wildcard FILES (caso GUIA_DE_ESTILO)
+'   - Adiciona rotina publica para testar resolucao deterministica de padroes com `*` e `(latest)`.
+'   - Extrai logica para funcao reutilizavel (M12 SelfTest automatico) e regista contagens de candidatos.
+'   - Corrige falso positivo de match exato quando `requested_name` contem wildcard (`*`/`?`).
 '   - Regista no DEBUG os candidatos Dir vs fallback normalizado para explicar `NOT_FOUND`/`AMBIGUOUS`.
-' - 2026-02-17 | Codex | Fallback flexível para wildcard em resolução de ficheiros
-'   - Mantém Dir como primeira tentativa para padrões com *.
-'   - Adiciona fallback por normalização de separadores (_, -, espaço) quando Dir devolve 0 candidatos.
-' - 2026-02-15 | Codex | Correção de sintaxe na normalização de nome de ficheiro
-'   - Corrige escaping de aspas em Replace para evitar erro de compilação no VBA.
-' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
-'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
-'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+' - 2026-02-17 | Codex | Fallback flexivel para wildcard em resolucao de ficheiros
+'   - Mantem Dir como primeira tentativa para padroes com *.
+'   - Adiciona fallback por normalizacao de separadores (_, -, espaco) quando Dir devolve 0 candidatos.
+' - 2026-02-15 | Codex | Correcao de sintaxe na normalizacao de nome de ficheiro
+'   - Corrige escaping de aspas em Replace para evitar erro de compilacao no VBA.
+' - 2026-02-12 | Codex | Implementacao do padrao de header obrigatorio
+'   - Adiciona proposito, historico de alteracoes e inventario de rotinas publicas.
+'   - Mantem documentacao tecnica do modulo alinhada com AGENTS.md.
 '
-' Funções e procedimentos (inventário público):
-' - Files_SetRunToken (Sub): rotina pública do módulo.
-' - Files_PrepararContextoDaPrompt (Function): rotina pública do módulo.
-' - Files_ResolverOutputToken (Sub): rotina pública do módulo.
-' - Files_LogEventOutput (Sub): rotina pública do módulo.
-' - Files_UploadFile_OpenAI (Function): rotina pública do módulo.
-' - Files_ContentTypePorExtensao (Function): rotina pública do módulo.
-' - Files_ExtrairCampoJsonSimples (Function): rotina pública do módulo.
-' - Files_SHA256_File (Function): rotina pública do módulo.
-' - Files_SHA256_Text (Function): rotina pública do módulo.
-' - Files_FNV32_String (Function): rotina pública do módulo.
-' - Files_ObterExtensao (Function): rotina pública do módulo.
-' - Files_RegressionTests (Sub): rotina pública do módulo.
-' - Files_Diag_TestarLeituraFicheiro (Sub): rotina pública do módulo.
-' - Files_Diag_TestarConectividadeOpenAI (Sub): rotina pública do módulo.
-' - Files_Diag_TestarUploadFicheiro (Sub): rotina pública do módulo.
-' - Files_Diag_CorridaCompleta (Sub): rotina pública do módulo.
-' - Files_Diag_ResolverWildcard (Function): resolve wildcard FILES e devolve diagnóstico estruturado.
-' - Files_Diag_TestarResolucaoWildcard (Sub): macro pública para testar padrões FILES com wildcard e latest.
-' - Files_SanitizeFilenameAsciiSafe (Function): rotina pública do módulo.
-' - Files_FNV32_LastDiag (Function): rotina pública do módulo.
-' - Files_SHA256_LastDiag (Function): rotina pública do módulo.
-' - Files_FNV32_Bytes (Function): rotina pública do módulo.
+' Funcoes e procedimentos (inventario publico):
+' - Files_SetRunToken (Sub): rotina publica do modulo.
+' - Files_PrepararContextoDaPrompt (Function): rotina publica do modulo.
+' - Files_ResolverOutputToken (Sub): rotina publica do modulo.
+' - Files_LogEventOutput (Sub): rotina publica do modulo.
+' - Files_UploadFile_OpenAI (Function): rotina publica do modulo.
+' - Files_ContentTypePorExtensao (Function): rotina publica do modulo.
+' - Files_ExtrairCampoJsonSimples (Function): rotina publica do modulo.
+' - Files_SHA256_File (Function): rotina publica do modulo.
+' - Files_SHA256_Text (Function): rotina publica do modulo.
+' - Files_FNV32_String (Function): rotina publica do modulo.
+' - Files_ObterExtensao (Function): rotina publica do modulo.
+' - Files_RegressionTests (Sub): rotina publica do modulo.
+' - Files_Diag_TestarLeituraFicheiro (Sub): rotina publica do modulo.
+' - Files_Diag_TestarConectividadeOpenAI (Sub): rotina publica do modulo.
+' - Files_Diag_TestarUploadFicheiro (Sub): rotina publica do modulo.
+' - Files_Diag_CorridaCompleta (Sub): rotina publica do modulo.
+' - Files_Diag_ResolverWildcard (Function): resolve wildcard FILES e devolve diagnostico estruturado.
+' - Files_Diag_TestarResolucaoWildcard (Sub): macro publica para testar padroes FILES com wildcard e latest.
+' - Files_SanitizeFilenameAsciiSafe (Function): rotina publica do modulo.
+' - Files_FNV32_LastDiag (Function): rotina publica do modulo.
+' - Files_SHA256_LastDiag (Function): rotina publica do modulo.
+' - Files_FNV32_Bytes (Function): rotina publica do modulo.
 ' - Files_ListarPorWildcardNormalizado (Function): helper privado para fallback de wildcard por tokens normalizados.
-' - Files_MatchWildcardNormalizado (Function): helper privado para validação de padrão com * após normalização.
+' - Files_MatchWildcardNormalizado (Function): helper privado para validacao de padrao com * apos normalizacao.
 ' =============================================================================
 
 ' ============================================================================
@@ -218,9 +218,9 @@ End Sub
 
 
 ' ============================================================
-' (ALTERAR) Files_PrepararContextoDaPrompt — versão integral
-'   SUBSTITUA A FUNÇÃO INTEIRA por esta versão
-'   (Esta é a versão que cumpre D4: call EnsureConfig + allowReuse/reuseTag + passagem de parâmetros)
+' (ALTERAR) Files_PrepararContextoDaPrompt - versao integral
+'   SUBSTITUA A FUNCAO INTEIRA por esta versao
+'   (Esta e a versao que cumpre D4: call EnsureConfig + allowReuse/reuseTag + passagem de parametros)
 ' ============================================================
 Public Function Files_PrepararContextoDaPrompt( _
     ByVal apiKey As String, _
@@ -240,12 +240,12 @@ Public Function Files_PrepararContextoDaPrompt( _
 ) As Boolean
 
     ' ============================================================
-    ' Versão com:
-    ' - effective_mode (override quando /v1/responses não aceita as_is para DOCX/PPTX)
-    ' - Política DOCX/PPTX: AUTO_AS_PDF / AUTO_TEXT_EMBED / ERROR
-    ' - Fallback conversão PDF: TEXT_EMBED ou ERROR
-    ' - Limite e ação para text_embed grande
-    ' - PDF cache (evita reconversão -> evita hash diferente -> permite reutilização de file_id)
+    ' Versao com:
+    ' - effective_mode (override quando /v1/responses nao aceita as_is para DOCX/PPTX)
+    ' - Politica DOCX/PPTX: AUTO_AS_PDF / AUTO_TEXT_EMBED / ERROR
+    ' - Fallback conversao PDF: TEXT_EMBED ou ERROR
+    ' - Limite e acao para text_embed grande
+    ' - PDF cache (evita reconversao -> evita hash diferente -> permite reutilizacao de file_id)
     ' - Label: ProcessarComoInputFile:
     ' ============================================================
 
@@ -277,7 +277,7 @@ Public Function Files_PrepararContextoDaPrompt( _
     Dim inlineMaxBytes As Double
     inlineMaxBytes = Files_Config_InlineMaxBytes()
 
-    ' --- políticas de contexto para Office + limites text_embed ---
+    ' --- politicas de contexto para Office + limites text_embed ---
     Dim docxContextMode As String
     Dim docxAsPdfFallback As String
     Dim textEmbedMaxChars As Long
@@ -309,7 +309,7 @@ Public Function Files_PrepararContextoDaPrompt( _
         opsMissingLogged = True
     End If
 
-    ' garantir que existe a opção de config para reutilização
+    ' garantir que existe a opcao de config para reutilizacao
     Call Files_EnsureConfig_ReutilizacaoUpload
 
     Dim diretivas As Collection
@@ -669,7 +669,7 @@ Public Function Files_PrepararContextoDaPrompt( _
         Dim textoExtraDeste As String
         textoExtraDeste = ""
 
-        ' calcular allowReuse/reuseTag por ficheiro (precedência: prompt > Config)
+        ' calcular allowReuse/reuseTag por ficheiro (precedencia: prompt > Config)
         Dim allowReuse As Boolean
         Dim reuseTag As String
 
@@ -741,7 +741,7 @@ Public Function Files_PrepararContextoDaPrompt( _
 
                 Select Case overflowAction
                     Case "ALERT_ONLY"
-                        ' Só alerta
+                        ' So alerta
 
                     Case "TRUNCATE"
                         textoExtraDeste = Left$(textoExtraDeste, textEmbedMaxChars) & vbCrLf & "[TRUNCADO AUTO: excedeu FILES_TEXT_EMBED_MAX_CHARS]"
@@ -849,9 +849,9 @@ Public Function Files_PrepararContextoDaPrompt( _
             Call Files_OperacoesAdicionarResultado(d, "OK", resolvedName, "text_embed", "", convertido, (overrideUsado Or overrideModo), False)
 
         ElseIf usoFinal = "image_upload" Then
-            ' (mantém o teu bloco existente de imagem — não alterado aqui)
-            ' ... (deixa como estava no teu módulo)
-            ' Para não perder funcionalidades, não mexo neste ramo aqui.
+            ' (mantem o teu bloco existente de imagem - nao alterado aqui)
+            ' ... (deixa como estava no teu modulo)
+            ' Para nao perder funcionalidades, nao mexo neste ramo aqui.
 
         ElseIf usoFinal = "pdf_upload" Or usoFinal = "as_is" Then
 
@@ -862,7 +862,7 @@ ProcessarComoInputFile:
             modoCache = IIf(usoFinal = "as_is", "as_is", "pdf_upload")
 
             If transportMode = TRANSPORT_INLINE Then
-                ' (mantém o teu bloco existente INLINE — não alterado aqui)
+                ' (mantem o teu bloco existente INLINE - nao alterado aqui)
                 ' ...
             Else
                 fileId = Files_ObterOuCriarFileId(wsFiles, mapaCab, apiKey, promptId, pipelineNome, _
@@ -1233,7 +1233,7 @@ End Function
 '   - Procura uma linha na folha Config com:
 '       Col A = "FILES_MULTIPART_FILENAME_MODE"
 '       Col B = RAW | ASCII_SAFE | RFC5987
-'   - Default: RAW (compatível com versões anteriores)
+'   - Default: RAW (compativel com versoes anteriores)
 Private Function Files_Config_MultipartFilenameMode() As String
     On Error GoTo Falha
 
@@ -1367,12 +1367,12 @@ Private Function Files_Config_TextEmbedOverflowAction() As String
 End Function
 
 ' ============================================================
-' NOVO: utilitários para políticas de formato em /v1/responses
+' NOVO: utilitarios para politicas de formato em /v1/responses
 ' ============================================================
 
 Private Function Files_IsExtSuportadaComoInputFileResponses(ByVal extLower As String) As Boolean
-    ' Extensões suportadas pelo /v1/responses para input_file (context stuffing).
-    ' Baseado na mensagem de erro observada (pode evoluir; ajustar se necessário).
+    ' Extensoes suportadas pelo /v1/responses para input_file (context stuffing).
+    ' Baseado na mensagem de erro observada (pode evoluir; ajustar se necessario).
     extLower = LCase$(Replace$(Trim$(extLower), ".", ""))
 
     If extLower = "" Then
@@ -1486,8 +1486,8 @@ End Function
 
 
 ' ============================================================
-' (ALTERAR) Files_ParseItem — adicionar reuse_override_*
-'   SUBSTITUA A FUNÇÃO INTEIRA por esta versão
+' (ALTERAR) Files_ParseItem - adicionar reuse_override_*
+'   SUBSTITUA A FUNCAO INTEIRA por esta versao
 ' ============================================================
 Private Function Files_ParseItem(ByVal itemRaw As String) As Object
     Dim d As Object
@@ -1520,7 +1520,7 @@ Private Function Files_ParseItem(ByVal itemRaw As String) As Object
     lowTrim = LCase$(Trim$(raw))
 
     If Left$(lowTrim, 8) = "@output(" Then
-        ' Preservar expressão completa: @OUTPUT(...)
+        ' Preservar expressao completa: @OUTPUT(...)
         nome = Trim$(raw)
     Else
         Dim p As Long
@@ -2323,8 +2323,8 @@ End Function
 ' ============================================================
 
 ' ============================================================
-' (ALTERAR) Files_ObterOuCriarFileId — aceitar allowReuse/reuseTag e validar ativo
-'   SUBSTITUA A FUNÇÃO INTEIRA por esta versão
+' (ALTERAR) Files_ObterOuCriarFileId - aceitar allowReuse/reuseTag e validar ativo
+'   SUBSTITUA A FUNCAO INTEIRA por esta versao
 ' ============================================================
 Private Function Files_ObterOuCriarFileId( _
     ByVal wsFiles As Worksheet, _
@@ -2363,7 +2363,7 @@ Private Function Files_ObterOuCriarFileId( _
         colFileId = Files_Col(mapaCab, H_FILE_ID)
         colNome = Files_Col(mapaCab, H_FILE_NAME)
 
-        ' 1) Cache canónica: hash + usage_mode
+        ' 1) Cache canonica: hash + usage_mode
         linha = Files_EncontrarLinhaPorHash(wsFiles, mapaCab, hashUsado, usageMode, True)
 
         If linha > 0 Then
@@ -2399,10 +2399,10 @@ Private Function Files_ObterOuCriarFileId( _
             reuseDiag = "cache: não encontrei linha por hash+usage_mode"
         End If
 
-        ' 2) Robustez/migração: full_path + usage_mode (com validação size + last_modified)
-        '    ALTERAÇÃO: não bloquear por "nome diferente" neste fallback.
-        '    Justificação: em fluxos DOCX->PDF ou overrides, o fileName pode diferir do nome guardado,
-        '    mas o fullPath+mode+size+lastmod asseguram que é o mesmo artefacto em disco.
+        ' 2) Robustez/migracao: full_path + usage_mode (com validacao size + last_modified)
+        '    ALTERACAO: nao bloquear por "nome diferente" neste fallback.
+        '    Justificacao: em fluxos DOCX->PDF ou overrides, o fileName pode diferir do nome guardado,
+        '    mas o fullPath+mode+size+lastmod asseguram que e o mesmo artefacto em disco.
         Dim linhaP As Long
         linhaP = Files_EncontrarLinhaPorPath(wsFiles, mapaCab, fullPath, usageMode, True)
 
@@ -2514,8 +2514,8 @@ Private Function Files_DeterminarPurpose(ByVal usageMode As String) As String
 End Function
 
 ' ============================================================
-' (NOVO) Wrapper público para registar outputs no FILES_MANAGEMENT
-'   - Reutiliza a lógica existente de upsert/inserção no topo (linha 2)
+' (NOVO) Wrapper publico para registar outputs no FILES_MANAGEMENT
+'   - Reutiliza a logica existente de upsert/insercao no topo (linha 2)
 ' ============================================================
 Public Sub Files_LogEventOutput( _
     ByVal pipelineNome As String, _
@@ -2664,7 +2664,7 @@ Private Sub Files_UpsertFilesManagement( _
 )
     ' v2: cada evento/uso gera sempre um novo registo, inserido no topo (linha 2 / topo da tabela).
     '     - DL/UL: DL se nao houve /v1/files; UL se houve upload real.
-    '     - Utilizações: contagem total por chave (file_id ou hash|usage_mode quando file_id vazio).
+    '     - Utilizacoes: contagem total por chave (file_id ou hash|usage_mode quando file_id vazio).
     '     - used_in_prompts: lista (1 linha) de prompt_id, mais recente primeiro, separador ";  ", max 20 + "(...)"
     '     - last_used_at: guarda o prompt_id do evento (nao timestamp).
 
@@ -2674,11 +2674,11 @@ Private Sub Files_UpsertFilesManagement( _
     Set lo = Files_GetOrCreateTable_FilesManagement(wsFiles)
     If lo Is Nothing Then Exit Sub
 
-    ' Timestamp único do evento
+    ' Timestamp unico do evento
     Dim ts As Date
     ts = Now
 
-    ' ---- Garantir hash (SHA-256 do conteúdo efetivamente usado) + diagnóstico
+    ' ---- Garantir hash (SHA-256 do conteudo efetivamente usado) + diagnostico
     If Trim$(CStr(hashUsado)) = "" Then
         If Trim$(CStr(fullPath)) <> "" Then
             If Dir(fullPath) <> "" Then
@@ -2748,11 +2748,11 @@ Private Sub Files_UpsertFilesManagement( _
     linha = lr.Range.Row
 
     ' ============================================================
-    ' CORRECÇÃO #1: o registo NÃO pode herdar a altura 6 do separador
+    ' CORRECCAO #1: o registo NAO pode herdar a altura 6 do separador
     ' ============================================================
     On Error Resume Next
     lr.Range.EntireRow.RowHeight = Files_DataRowHeightPt(wsFiles)
-    ' Também impedir herança de "preto" do separador
+    ' Tambem impedir heranca de "preto" do separador
     lr.Range.Interior.pattern = xlNone
     lr.Range.Font.Bold = False
     On Error GoTo Falha
@@ -2788,7 +2788,7 @@ Private Sub Files_UpsertFilesManagement( _
     wsFiles.Cells(linha, Files_Col(mapaCab, H_LAST_USED_AT)).value = promptId
     wsFiles.Cells(linha, Files_Col(mapaCab, H_NOTES)).value = notes
 
-    ' ---- Formatação específica
+    ' ---- Formatacao especifica
     On Error Resume Next
     wsFiles.Cells(linha, Files_Col(mapaCab, H_CONVERTED_TO_PDF)).HorizontalAlignment = xlCenter
     wsFiles.Cells(linha, Files_Col(mapaCab, H_USED_IN_PROMPTS)).WrapText = True
@@ -3009,28 +3009,28 @@ Falha:
 End Function
 
 Private Sub Files_AddRunSeparatorLine(ByVal wsFiles As Worksheet, ByVal lo As ListObject, ByVal runToken As String)
-    ' NOTA: Mantém-se o nome da rotina por compatibilidade com o resto do código,
+    ' NOTA: Mantem-se o nome da rotina por compatibilidade com o resto do codigo,
     '       mas o separador deixa de ser Shape e passa a ser uma "linha de intervalo" (row separadora),
-    '       idêntica ao mecanismo usado na folha HISTÓRICO.
+    '       identica ao mecanismo usado na folha HISTORICO.
 
     On Error GoTo Falha
 
     If lo Is Nothing Then Exit Sub
 
     ' Inserir row separadora no topo da tabela (Position:=1)
-    ' (Esta row ficará entre o novo run (que será inserido acima) e o histórico anterior.)
+    ' (Esta row ficara entre o novo run (que sera inserido acima) e o historico anterior.)
     Dim lrSep As ListRow
     Set lrSep = lo.ListRows.Add(Position:=1)
 
-    ' Limpar conteúdos e aplicar formatação do separador
+    ' Limpar conteudos e aplicar formatacao do separador
     With lrSep.Range
         .ClearContents
 
-        ' Preto sólido em toda a largura da tabela
+        ' Preto solido em toda a largura da tabela
         .Interior.pattern = xlSolid
         .Interior.Color = vbBlack
 
-        ' Garantir que não fica negrito nem wrap inesperado
+        ' Garantir que nao fica negrito nem wrap inesperado
         .Font.Bold = False
         .WrapText = False
     End With
@@ -3043,13 +3043,13 @@ Private Sub Files_AddRunSeparatorLine(ByVal wsFiles As Worksheet, ByVal lo As Li
     Exit Sub
 
 Falha:
-    ' Não bloquear a execução caso falhe a inserção/formatacao do separador
+    ' Nao bloquear a execucao caso falhe a insercao/formatacao do separador
 End Sub
 
 
 
 Private Function Files_SanitizarNomeObjeto(ByVal s As String) As String
-    ' Nomes de Shape devem ser curtos e sem caracteres especiais problemáticos.
+    ' Nomes de Shape devem ser curtos e sem caracteres especiais problematicos.
     Dim i As Long
     Dim ch As String
     Dim out As String
@@ -3479,7 +3479,7 @@ FallbackDet:
         Exit Function
     End If
 
-    ' Último recurso: metadata (menos robusto)
+    ' Ultimo recurso: metadata (menos robusto)
     On Error Resume Next
     h2 = Files_FNV32_String(fullPath & "|" & CStr(FileLen(fullPath)) & "|" & CStr(FileDateTime(fullPath)))
     On Error GoTo Falha
@@ -3646,12 +3646,12 @@ Public Function Files_FNV32_String(ByVal s As String) As String
     gLastFNV32Diag = ""
     Files_FNV32_String = ""
 
-    ' Determinístico: bytes UTF-16LE (VBA Unicode)
+    ' Deterministico: bytes UTF-16LE (VBA Unicode)
     Dim b() As Byte
     b = StrConv(s, vbUnicode)
 
 #If VBA7 And Win64 Then
-    ' 64-bit: usar LongLong + máscara 32-bit REAL (4294967295)
+    ' 64-bit: usar LongLong + mascara 32-bit REAL (4294967295)
     Dim mask As LongLong
     mask = CLngLng(4294967295#)
 
@@ -3667,7 +3667,7 @@ Public Function Files_FNV32_String(ByVal s As String) As String
     Files_FNV32_String = "fnv32-" & Right$("00000000" & Hex$(h), 8)
     Exit Function
 #Else
-    ' 32-bit: versão safe em Double (mod 2^32)
+    ' 32-bit: versao safe em Double (mod 2^32)
     Dim u As Double
     u = 2166136261#
 
@@ -3698,8 +3698,8 @@ ByVal textoFinal As String, _
 ByVal includeFilesContext As Boolean, _
 ByVal promptId As String _
 ) As String
-' Alertas de tamanho (diagnóstico)
-' - Não altera payload; apenas avisa quando o input_text é grande o suficiente
+' Alertas de tamanho (diagnostico)
+' - Nao altera payload; apenas avisa quando o input_text e grande o suficiente
 '   para aumentar risco de limites de request/contexto.
 Const WARN_CHARS As Long = 120000
 Const HARD_CHARS As Long = 250000
@@ -3801,15 +3801,15 @@ End Function
 
 Private Function Files_JsonEscape(ByVal s As String) As String
     ' Wrapper local para o escape estrito (JSON) definido em M00_JsonUtil.Json_EscapeString
-    ' - Mantém a assinatura existente no M09 para não quebrar chamadas internas
-    ' - Resolve erros "invalid_json" quando o text_embed contém caracteres de controlo
+    ' - Mantem a assinatura existente no M09 para nao quebrar chamadas internas
+    ' - Resolve erros "invalid_json" quando o text_embed contem caracteres de controlo
     On Error GoTo EH
 
     Files_JsonEscape = Json_EscapeString(CStr(s))
     Exit Function
 
 EH:
-    ' Fallback mínimo (não ideal, mas evita crash em caso de erro inesperado)
+    ' Fallback minimo (nao ideal, mas evita crash em caso de erro inesperado)
     Dim t As String
     t = CStr(s)
 
@@ -4001,13 +4001,13 @@ End Sub
 Private Function Files_BuildFilesContextResumo(ByVal diretivas As Collection) As String
     ' ============================================================
     ' FILES CONTEXT (resumo para humans)
-    ' Mantém compatibilidade com a versão anterior, mas torna explícito
+    ' Mantem compatibilidade com a versao anterior, mas torna explicito
     ' quando o modo final foi pdf_upload (ex.: DOCX/PPTX -> PDF).
     '
     ' Regras:
     ' - Se st="OK": mostra o ficheiro resolvido + modo
     '   * se modo="pdf_upload": "<nome> => PDF (pdf_upload)"
-    '   * caso contrário: "<nome> (<modo>)"
+    '   * caso contrario: "<nome> (<modo>)"
     ' - Se st<>"OK": mostra o pedido original + status: "<req> (<st>)"
     ' - Se "resultado_nome" vier vazio, faz fallback para "requested_name"
     ' ============================================================
@@ -4463,8 +4463,8 @@ End Function
 ' ============================================================
 
 Private Sub Files_EnsureSheetExists()
-    ' Garante existência da folha FILES_MANAGEMENT (v2) e da Tabela tblFILES_MANAGEMENT.
-    ' Se a folha existir mas tiver estrutura diferente, é renomeada para backup e é recriada vazia (sem migração).
+    ' Garante existencia da folha FILES_MANAGEMENT (v2) e da Tabela tblFILES_MANAGEMENT.
+    ' Se a folha existir mas tiver estrutura diferente, e renomeada para backup e e recriada vazia (sem migracao).
 
     On Error GoTo Falha
 
@@ -4499,7 +4499,7 @@ Private Sub Files_EnsureSheetExists()
     Dim lo As ListObject
     Set lo = Files_GetOrCreateTable_FilesManagement(ws)
 
-    ' Formatação obrigatória
+    ' Formatacao obrigatoria
     Dim mapa As Object
     Set mapa = Files_MapaCabecalhos(ws)
 
@@ -4513,14 +4513,14 @@ Private Sub Files_EnsureSheetExists()
 
 
     ' ------------------------------------------------------------
-    ' Formatação (idempotente): só o header a negrito; registos sem negrito
+    ' Formatacao (idempotente): so o header a negrito; registos sem negrito
     ' ------------------------------------------------------------
     If Not lo Is Nothing Then
         lo.HeaderRowRange.Font.Bold = True
         If Not lo.DataBodyRange Is Nothing Then lo.DataBodyRange.Font.Bold = False
     End If
 
-    ' Type e Utilizações centrados (header + registos)
+    ' Type e Utilizacoes centrados (header + registos)
     Dim cType As Long, cUtil As Long, cDlUl As Long
     cType = Files_Col(mapa, H_TYPE)
     cUtil = Files_Col(mapa, H_UTILIZACOES)
@@ -4677,7 +4677,7 @@ Private Function Files_GetOrCreateTable_FilesManagement(ByVal ws As Worksheet) A
     Dim lo As ListObject
     Set lo = Files_TryGetTable_FilesManagement(ws)
 
-    ' Validar estrutura mínima
+    ' Validar estrutura minima
     If Not lo Is Nothing Then
         If lo.HeaderRowRange.Row <> 1 Or lo.HeaderRowRange.Column <> 1 Or lo.ListColumns.Count <> 17 Then
             On Error Resume Next
@@ -4688,7 +4688,7 @@ Private Function Files_GetOrCreateTable_FilesManagement(ByVal ws As Worksheet) A
     End If
 
     If lo Is Nothing Then
-        ' Criar tabela com cabeçalho + 1 linha vazia (depois removida)
+        ' Criar tabela com cabecalho + 1 linha vazia (depois removida)
         Dim rng As Range
         Set rng = ws.Range(ws.Cells(1, 1), ws.Cells(2, 17))
         rng.rowS(2).ClearContents
@@ -4756,7 +4756,7 @@ End Function
 
 
 ' ============================================================
-' TESTES (Regressão) — FILES_MANAGEMENT v2
+' TESTES (Regressao) - FILES_MANAGEMENT v2
 ' ============================================================
 
 Public Sub Files_RegressionTests()
@@ -4795,7 +4795,7 @@ Public Sub Files_RegressionTests()
     ' Helper inline
     Dim SubOk As Boolean
 
-    ' --- Teste 1: Cabeçalhos
+    ' --- Teste 1: Cabecalhos
     SubOk = Files_HeaderV2_OK(wsF)
     Call Files_TestWrite(wsT, rowT, "Cabeçalhos v2 (ordem exacta)", SubOk, "")
     rowT = rowT + 1
@@ -4833,18 +4833,18 @@ Public Sub Files_RegressionTests()
             "C:\TEST", "C:\TEST\teste.pdf", "", "pdf_upload", False, "", Now, 1234, h, "teste", "DL")
     Next n
 
-    ' Re-obter mapa e lo (podem ter mudado com inserções)
+    ' Re-obter mapa e lo (podem ter mudado com insercoes)
     Set mapa = Files_MapaCabecalhos(wsF)
     Set lo = Files_GetOrCreateTable_FilesManagement(wsF)
 
-    ' --- Teste 3: Inserção no topo (linha 2)
+    ' --- Teste 3: Insercao no topo (linha 2)
     Dim topRow As Long
     topRow = lo.ListRows(1).Range.Row
     SubOk = (topRow = lo.HeaderRowRange.Row + 1)
     Call Files_TestWrite(wsT, rowT, "Inserção no topo (linha 2)", SubOk, "Row=" & CStr(topRow))
     rowT = rowT + 1
 
-    ' --- Teste 4: Utilizações incrementa (deve ser 25 no topo)
+    ' --- Teste 4: Utilizacoes incrementa (deve ser 25 no topo)
     Dim cUtil As Long
     cUtil = Files_Col(mapa, H_UTILIZACOES)
 
@@ -4873,13 +4873,13 @@ Public Sub Files_RegressionTests()
     Call Files_TestWrite(wsT, rowT, "DL/UL = DL (teste)", SubOk, "Valor=" & sDlUl)
     rowT = rowT + 1
 
-' --- Teste 7: Separador por run (linha separadora) — muda token e insere 1 registo
+' --- Teste 7: Separador por run (linha separadora) - muda token e insere 1 registo
 Call Files_SetRunToken("TEST_RUN2")
 Call Files_UpsertFilesManagement(wsF, mapa, "PIPE_TEST", "P_9999", "teste2.pdf", _
     "C:\TEST", "C:\TEST\teste2.pdf", "", "pdf_upload", False, "", Now, 1, h, "teste run2", "DL")
 
 ' Com o separador por linha:
-' - A linha 1 da tabela (ListRows(1)) é o novo registo do run actual
+' - A linha 1 da tabela (ListRows(1)) e o novo registo do run actual
 ' - A linha 2 da tabela (ListRows(2)) deve ser a "linha de intervalo" (RowHeight=6, vbBlack, xlSolid)
 Dim isSep As Boolean
 isSep = False
@@ -5254,10 +5254,10 @@ Falha:
 End Sub
 
 ' ============================================================
-' (NOVO) Sanitização de filename para multipart (ASCII_SAFE)
+' (NOVO) Sanitizacao de filename para multipart (ASCII_SAFE)
 '   - Apenas altera o "filename" enviado no Content-Disposition do multipart
 '   - NAO altera o ficheiro no disco
-'   - Mantém extensão (quando existir)
+'   - Mantem extensao (quando existir)
 ' ============================================================
 
 Public Function Files_SanitizeFilenameAsciiSafe(ByVal fileName As String) As String
@@ -5278,18 +5278,18 @@ Public Function Files_SanitizeFilenameAsciiSafe(ByVal fileName As String) As Str
         ext = Mid$(nameOnly, p + 1)
     End If
 
-    ' 1) Normalizações principais
+    ' 1) Normalizacoes principais
     baseName = Files_RemoverAcentosPT(baseName)
     baseName = Files_NormalizarPontuacaoFilename(baseName)
     baseName = Files_WhitespaceToHyphen(baseName)
 
-    ' 2) Forçar apenas ASCII seguro
+    ' 2) Forcar apenas ASCII seguro
     baseName = Files_SanitizeFilenameAsciiCore(baseName, True)
     baseName = Files_CollapseFilenameSeparators(baseName)
     baseName = Files_TrimChars(baseName, "-_.")
     If baseName = "" Then baseName = "file"
 
-    ' 3) Extensão: apenas alfanumérico ASCII
+    ' 3) Extensao: apenas alfanumerico ASCII
     If ext <> "" Then
         ext = Files_RemoverAcentosPT(ext)
         ext = Files_SanitizeExtensionAscii(ext)
@@ -5297,7 +5297,7 @@ Public Function Files_SanitizeFilenameAsciiSafe(ByVal fileName As String) As Str
         ext = LCase$(ext)
     End If
 
-    ' 4) Encurtar preservando extensão
+    ' 4) Encurtar preservando extensao
     Dim reserve As Long
     reserve = 0
     If ext <> "" Then reserve = Len(ext) + 1
@@ -5320,7 +5320,7 @@ Private Function Files_NormalizarPontuacaoFilename(ByVal s As String) As String
     s = Replace$(s, ChrW(8212), "-") ' —
     s = Replace$(s, ChrW(160), " ")  ' NBSP
 
-    ' Aspas tipográficas (remover)
+    ' Aspas tipograficas (remover)
     s = Replace$(s, ChrW(8216), "")
     s = Replace$(s, ChrW(8217), "")
     s = Replace$(s, ChrW(8220), "")
@@ -5488,7 +5488,7 @@ End Function
 
 
 ' ============================================================
-' (NOVO) CONFIG — Reutilização de ficheiros no upload
+' (NOVO) CONFIG - Reutilizacao de ficheiros no upload
 ' ============================================================
 Private Sub Files_EnsureConfig_ReutilizacaoUpload()
     On Error Resume Next
@@ -5512,7 +5512,7 @@ Private Sub Files_EnsureConfig_ReutilizacaoUpload()
         End If
     Next i
 
-    ' Se não existir, cria numa linha "segura" (ex.: 8)
+    ' Se nao existir, cria numa linha "segura" (ex.: 8)
     If r = 0 Then r = 8
 
     ws.Cells(r, 1).value = label
@@ -5562,8 +5562,8 @@ End Function
 
 
 ' ============================================================
-' (NOVO) Override por ficheiro na própria prompt
-'   Ex.: "relatorio.pdf (required) (Reutilização de ficheiro=FALSE)"
+' (NOVO) Override por ficheiro na propria prompt
+'   Ex.: "relatorio.pdf (required) (Reutilizacao de ficheiro=FALSE)"
 ' ============================================================
 Private Sub Files_ParseReuseOverride(ByVal rawItem As String, ByRef outFound As Boolean, ByRef outValue As Boolean)
     outFound = False
@@ -5590,7 +5590,7 @@ Private Sub Files_ParseReuseOverride(ByVal rawItem As String, ByRef outFound As 
     pEnd = InStr(1, sVal, ")", vbTextCompare)
     If pEnd > 0 Then sVal = Left$(sVal, pEnd - 1)
 
-    ' Limpar ruído
+    ' Limpar ruido
     sVal = Replace(sVal, "[", "")
     sVal = Replace(sVal, "]", "")
     sVal = Replace(sVal, """", "")
@@ -5604,7 +5604,7 @@ End Sub
 
 
 ' ============================================================
-' (NOVO) Validação online do file_id (ativo/reutilizável)
+' (NOVO) Validacao online do file_id (ativo/reutilizavel)
 ' ============================================================
 Private Function Files_OpenAI_FileIdAtivo(ByVal apiKey As String, ByVal fileId As String, ByRef outHttpStatus As Long, ByRef outErro As String) As Boolean
     On Error GoTo Falha
@@ -5682,36 +5682,36 @@ End Function
 Private Sub Files_MaybeAddRunSeparator(ByVal wsFiles As Worksheet, ByVal lo As ListObject)
     On Error GoTo Falha
 
-    ' Sem token de run: não há separador por run
+    ' Sem token de run: nao ha separador por run
     If Trim$(gRunToken) = "" Then Exit Sub
 
-    ' Já foi tratado este run: não repetir
+    ' Ja foi tratado este run: nao repetir
     If StrComp(gRunToken, gLastSeparatorRunToken, vbTextCompare) = 0 Then Exit Sub
 
-    ' Só inserir separador se existir histórico anterior
+    ' So inserir separador se existir historico anterior
     Dim haHistoricoAnterior As Boolean
     haHistoricoAnterior = False
 
     If Not lo Is Nothing Then
         haHistoricoAnterior = (lo.ListRows.Count > 0)
     Else
-        ' fallback (caso raro): histórico existe se houver dados a partir da linha 2
+        ' fallback (caso raro): historico existe se houver dados a partir da linha 2
         haHistoricoAnterior = (wsFiles.Cells(wsFiles.rowS.Count, 1).End(xlUp).Row >= 2)
     End If
 
     If haHistoricoAnterior Then
-        ' Insere a row separadora no topo do histórico anterior
+        ' Insere a row separadora no topo do historico anterior
         Call Files_AddRunSeparatorLine(wsFiles, lo, gRunToken)
     End If
 
     ' MUITO IMPORTANTE:
-    ' Mesmo que não haja histórico anterior (1º run), marcar o token como tratado,
+    ' Mesmo que nao haja historico anterior (1o run), marcar o token como tratado,
     ' para evitar inserir separador entre ficheiros do mesmo run.
     gLastSeparatorRunToken = gRunToken
     Exit Sub
 
 Falha:
-    ' Não bloquear o pipeline por erro de UI/formatacao do separador
+    ' Nao bloquear o pipeline por erro de UI/formatacao do separador
 End Sub
 
 
@@ -5745,7 +5745,7 @@ Private Function Files_U32_XorByte(ByVal u As Double, ByVal b As Byte) As Double
     hi = CLng(Fix(u / 65536#))
     lo = CLng(u - (CDbl(hi) * 65536#))
 
-    ' XOR só mexe no low byte — continua seguro em 16 bits
+    ' XOR so mexe no low byte - continua seguro em 16 bits
     lo = (lo Xor CLng(b)) And &HFFFF&
 
     Files_U32_XorByte = (CDbl(hi) * 65536#) + CDbl(lo)
@@ -5799,7 +5799,7 @@ End Function
 
 Private Function Files_Config_GetByKey(ByVal keyName As String, Optional ByVal defaultValue As String = "") As String
     ' Procura uma chave na folha Config (coluna A = chave, coluna B = valor).
-    ' Se não existir (ou houver erro), devolve defaultValue.
+    ' Se nao existir (ou houver erro), devolve defaultValue.
     On Error GoTo EH
 
     Dim ws As Worksheet
@@ -5836,20 +5836,20 @@ End Function
 
 Private Sub Files_EnsureConfig_DocxPolicies()
     ' ============================================================
-    ' Garante que as políticas/limites para DOCX/PPTX e text_embed
-    ' existem na folha Config (auto-documentação).
+    ' Garante que as politicas/limites para DOCX/PPTX e text_embed
+    ' existem na folha Config (auto-documentacao).
     '
-    ' Cria (se não existir) as chaves:
+    ' Cria (se nao existir) as chaves:
     ' - FILES_DOCX_CONTEXT_MODE
     ' - FILES_DOCX_AS_PDF_FALLBACK
     ' - FILES_TEXT_EMBED_MAX_CHARS
     ' - FILES_TEXT_EMBED_OVERFLOW_ACTION
     '
     ' Regras:
-    ' - Não sobrescreve valores já preenchidos (coluna B).
-    ' - Só preenche descrições (coluna C) se estiverem vazias.
+    ' - Nao sobrescreve valores ja preenchidos (coluna B).
+    ' - So preenche descricoes (coluna C) se estiverem vazias.
     ' - Evita colidir com B1..B7; escreve em linhas >= 9.
-    ' - Idempotente (pode correr múltiplas vezes sem duplicar).
+    ' - Idempotente (pode correr multiplas vezes sem duplicar).
     ' ============================================================
 
     On Error Resume Next
@@ -5858,8 +5858,8 @@ Private Sub Files_EnsureConfig_DocxPolicies()
     Set ws = ThisWorkbook.Worksheets(SHEET_CONFIG)
     If ws Is Nothing Then Exit Sub
 
-    ' (Opcional mas recomendável) garantir primeiro a chave antiga de reutilização em row "segura"
-    ' para manter coerência com o padrão já existente do M09.
+    ' (Opcional mas recomendavel) garantir primeiro a chave antiga de reutilizacao em row "segura"
+    ' para manter coerencia com o padrao ja existente do M09.
     Call Files_EnsureConfig_ReutilizacaoUpload
     Call Files_EnsureConfig_ReutilizacaoUpload
 
@@ -5889,7 +5889,7 @@ Private Sub Files_EnsureConfig_DocxPolicies()
     Dim lastR As Long
     lastR = ws.Cells(ws.rowS.Count, 1).End(xlUp).Row
 
-    ' Se a coluna A ainda não tem nada (porque Config usa B1..B7),
+    ' Se a coluna A ainda nao tem nada (porque Config usa B1..B7),
     ' End(xlUp) pode devolver 1; garantir zona "segura" >= 9.
     If lastR < 8 Then lastR = 8
 
@@ -5911,14 +5911,14 @@ Private Sub Files_EnsureConfig_DocxPolicies()
             End If
         Next i
 
-        ' Se não existe, criar nova linha no fim (>= 9)
+        ' Se nao existe, criar nova linha no fim (>= 9)
         If r = 0 Then
             r = lastR + 1
             If r < 9 Then r = 9
             lastR = r
         End If
 
-        ' Preencher chave / default / descrição
+        ' Preencher chave / default / descricao
         ws.Cells(r, 1).value = keyName
         If Trim$(CStr(ws.Cells(r, 2).value)) = "" Then ws.Cells(r, 2).value = CStr(defs(k))
         If Trim$(CStr(ws.Cells(r, 3).value)) = "" Then ws.Cells(r, 3).value = CStr(descs(k))
@@ -5929,12 +5929,12 @@ End Sub
 
 
 ' ============================================================
-' PDF Cache — evita reconversões desnecessárias (e file_id novo)
+' PDF Cache - evita reconversoes desnecessarias (e file_id novo)
 ' - Para DOCX/PPTX convertidos para PDF, o Word/PPT pode gerar
-'   bytes diferentes a cada exportação (metadata). Isso quebra a
-'   reutilização baseada em hash.
-' - Solução: cache local + sidecar .src.sha256 com o hash do source.
-'   Se o source não mudou, reutiliza o PDF existente sem reconverter.
+'   bytes diferentes a cada exportacao (metadata). Isso quebra a
+'   reutilizacao baseada em hash.
+' - Solucao: cache local + sidecar .src.sha256 com o hash do source.
+'   Se o source nao mudou, reutiliza o PDF existente sem reconverter.
 ' ============================================================
 
 
@@ -5973,7 +5973,7 @@ Private Function Files_PdfCache_GetOrConvertPdf( _
     sidecar = Files_PdfCache_SidecarPath(destPdfPath)
 
     ' ============================================================
-    ' 1) Cache HIT (preferência: sidecar hash)
+    ' 1) Cache HIT (preferencia: sidecar hash)
     ' ============================================================
     If Files_ExisteFicheiro(destPdfPath) Then
 
@@ -6148,7 +6148,7 @@ Public Function Files_FNV32_Bytes(ByRef b() As Byte) As String
     End If
 
 #If VBA7 And Win64 Then
-    ' 64-bit: usar LongLong com máscara 32-bit
+    ' 64-bit: usar LongLong com mascara 32-bit
     Dim mask As LongLong
     mask = CLngLng(4294967295#)
 

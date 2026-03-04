@@ -2,22 +2,22 @@ Attribute VB_Name = "M00_JsonUtil"
 Option Explicit
 
 ' =============================================================================
-' Módulo: M00_JsonUtil
-' Propósito:
-' - Fornecer utilitários de escape/normalização de strings JSON usados em payloads e logs.
-' - Centralizar regras de escaping para reduzir erros de serialização em módulos de API/parser.
+' Modulo: M00_JsonUtil
+' Proposito:
+' - Fornecer utilitarios de escape/normalizacao de strings JSON usados em payloads e logs.
+' - Centralizar regras de escaping para reduzir erros de serializacao em modulos de API/parser.
 '
-' Atualizações:
-' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
-'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
-'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+' Atualizacoes:
+' - 2026-02-12 | Codex | Implementacao do padrao de header obrigatorio
+'   - Adiciona proposito, historico de alteracoes e inventario de rotinas publicas.
+'   - Mantem documentacao tecnica do modulo alinhada com AGENTS.md.
 '
-' Funções e procedimentos (inventário público):
-' - Json_EscapeString (Function): rotina pública do módulo.
+' Funcoes e procedimentos (inventario publico):
+' - Json_EscapeString (Function): rotina publica do modulo.
 ' =============================================================================
 
 ' ============================================================
-' JSON Utils — Escape estrito para strings em JSON
+' JSON Utils - Escape estrito para strings em JSON
 ' - Escapa \ e "
 ' - TAB -> \t
 ' - CR/LF -> \n (CRLF tratado como 1 quebra)

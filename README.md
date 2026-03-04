@@ -27,6 +27,7 @@ Template Excel + VBA para execução de pipelines de prompts com auditoria opera
 - [9. Logs, troubleshooting e validação operacional](#9-logs-troubleshooting-e-validação-operacional)
 - [10. Segurança e compatibilidade retroativa](#10-segurança-e-compatibilidade-retroativa)
 - [11. Guia rápido de operação](#11-guia-rápido-de-operação)
+- [12. Higiene de encoding (VBA + VBE)](#12-higiene-de-encoding-vba--vbe)
 
 ---
 
@@ -922,3 +923,19 @@ A validação final UX/tempo deve ser executada no host Excel com workbook de re
 - confirmar no `DEBUG` os eventos `CONTRACT_PROVA_DIFF` e decisão tri-state final;
 - confirmar no bundle a presença de `step<passo>_PROVA_CI.txt`;
 - validar comportamento de gate quando `expected vs PROVA_CI` diverge.
+
+## 12. Higiene de encoding (VBA + VBE)
+
+Para evitar mojibake (`MÃ³dulo`, `ValidaÃ§Ã£o`, `nÃ£o`) sem quebrar compatibilidade com o VBE:
+
+- manter `.gitattributes` como fonte de verdade para módulos VBA (`working-tree-encoding=windows-1252` + `eol=crlf`);
+- editar módulos VBA com encoding **Windows-1252** (não salvar `.bas/.cls/.frm` em UTF-8 no working tree);
+- usar `python scripts/check_vba_encoding.py` antes de commit para validar:
+  - blob Git em UTF-8 válido;
+  - working tree em cp1252 + CRLF;
+  - deteção heurística de sequências de mojibake;
+- em CI, o workflow `.github/workflows/vba-encoding-check.yml` executa automaticamente a mesma validação em push/PR.
+
+Regra operacional rápida:
+- se um ficheiro parecer “corrompido” no terminal/editor, validar primeiro o encoding usado pela ferramenta antes de editar conteúdo textual.
+

@@ -2,12 +2,12 @@ Attribute VB_Name = "M10_FileOutput1"
 Option Explicit
 
 ' =============================================================================
-' Módulo: M10_FileOutput1
-' Propósito:
-' - Gerir registo e resolução de ficheiros de output produzidos por prompts.
-' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
+' Modulo: M10_FileOutput1
+' Proposito:
+' - Gerir registo e resolucao de ficheiros de output produzidos por prompts.
+' - Suportar cadeia output->input e escrita de eventos de output no historico de ficheiros.
 '
-' Atualizações:
+' Atualizacoes:
 ' - 2026-03-04 | Codex | Consistencia de marcadores afirmativos CI
 '   - Alinha CI_IsAffirmativeMarker com o contrato ci_csv_v1 (aceita SIM/TRUE/YES/OK/1/Y/S).
 '   - Evita divergencia entre M10_CI_PROOF_SUMMARY e validacao de contrato no M19.
@@ -15,15 +15,15 @@ Option Explicit
 '   - Regista M10_CI_PROOF_SUMMARY com csv_exists/word_exists/mnt_data_list_count/chosen_output.
 '   - Acrescenta marcador explicito quando a listagem do container contem apenas itens de input (file-*).
 '   - Torna fallback sem citation mais prescritivo com prova textual obrigatoria em /mnt/data.
-' - 2026-03-02 | Codex | Remoção de uso inválido de IsMissing no helper `Nz`
-'   - Remove verificação `IsMissing(v)` em argumento não-Optional para evitar `Compile error: Invalid use of IsMissing`.
-'   - Mantém fallback para Error/Null/string vazia sem alterar contratos de chamada existentes.
-' - 2026-03-02 | Codex | Correção de assinatura do helper `Nz`
-'   - Torna `Nz` compatível com fallback opcional (`Optional fallback As String = ""`) para evitar erro de compilação por número inválido de argumentos.
-'   - Preserva comportamento anterior nas chamadas de 1 argumento e corrige chamadas existentes de 2 argumentos no módulo.
-' - 2026-03-03 | Codex | Resolver determinístico do output de Code Interpreter
-'   - Prioriza `container_file_citation` como verdade absoluta e ignora fallback/listagem quando existe citação válida.
-'   - Adiciona marcador canónico `CI_OUTPUT_FILE:` como segunda prioridade de resolução.
+' - 2026-03-02 | Codex | Remocao de uso invalido de IsMissing no helper `Nz`
+'   - Remove verificacao `IsMissing(v)` em argumento nao-Optional para evitar `Compile error: Invalid use of IsMissing`.
+'   - Mantem fallback para Error/Null/string vazia sem alterar contratos de chamada existentes.
+' - 2026-03-02 | Codex | Correcao de assinatura do helper `Nz`
+'   - Torna `Nz` compativel com fallback opcional (`Optional fallback As String = ""`) para evitar erro de compilacao por numero invalido de argumentos.
+'   - Preserva comportamento anterior nas chamadas de 1 argumento e corrige chamadas existentes de 2 argumentos no modulo.
+' - 2026-03-03 | Codex | Resolver deterministico do output de Code Interpreter
+'   - Prioriza `container_file_citation` como verdade absoluta e ignora fallback/listagem quando existe citacao valida.
+'   - Adiciona marcador canonico `CI_OUTPUT_FILE:` como segunda prioridade de resolucao.
 '   - No fallback, exclui `file-*`, prefere `source=assistant` e falha em ambiguidades sem escolher ao acaso.
 ' - 2026-03-02 | Codex | Elegibilidade de TSV no fallback CI
 '   - Inclui `tsv` na whitelist de extensoes descarregaveis via listagem do container.
@@ -34,63 +34,63 @@ Option Explicit
 ' - 2026-03-03 | Codex | Resiliencia no download por container_id/file_id
 '   - Codifica segmentos da URL de download e tenta remap de file_id por filename em respostas 400/404.
 '   - Reduz falhas intermitentes quando o id retornado no fallback nao coincide com o recurso descarregavel.
-' - 2026-03-02 | Codex | Diagnóstico adicional no fallback CI sem citation
+' - 2026-03-02 | Codex | Diagnostico adicional no fallback CI sem citation
 '   - Regista qualidade dos marcadores textuais (validos vs malformados) via `M10_CI_TEXT_MARKER_DIAG`.
 '   - Em fallback por listagem, sinaliza quando os candidatos parecem ficheiros de input (`file-...`) para evitar falso sucesso silencioso.
-' - 2026-03-02 | Codex | Reforço de deteção de artefacto CI via marcadores textuais
-'   - Expande extração de nomes esperados no output_text para aceitar `CI_OUTPUT_FILE:`/`FILE_TSV:`/`OUTPUT_FILE:`.
+' - 2026-03-02 | Codex | Reforco de detecao de artefacto CI via marcadores textuais
+'   - Expande extracao de nomes esperados no output_text para aceitar `CI_OUTPUT_FILE:`/`FILE_TSV:`/`OUTPUT_FILE:`.
 '   - Aceita caminhos `sandbox:/mnt/data/...` e extrai basename para filtrar fallback por container list.
-'   - Reduz falso `File not found` quando o CI cria ficheiro mas não devolve `container_file_citation`.
+'   - Reduz falso `File not found` quando o CI cria ficheiro mas nao devolve `container_file_citation`.
 ' - 2026-03-01 | Codex | Compatibilidade de literal JSON no InStr
-'   - Substitui escape com barra invertida (\") por aspas duplicadas VBA no padrão de busca de "id".
-'   - Evita falso `Syntax error` em VBE/hosts que não aceitam notação C-style em literais.
-' - 2026-03-01 | Codex | Evita colisão com palavra reservada Enum
+'   - Substitui escape com barra invertida (\") por aspas duplicadas VBA no padrao de busca de "id".
+'   - Evita falso `Syntax error` em VBE/hosts que nao aceitam notacao C-style em literais.
+' - 2026-03-01 | Codex | Evita colisao com palavra reservada Enum
 '   - Renomeia eNum/eDesc para errNoCaptured/errDescCaptured em DownloadContainerFileEx.
-'   - Remove risco de "Syntax error" por tokenização case-insensitive (eNum ~ Enum).
-' - 2026-03-01 | Codex | Compatibilidade de declarações VBA em DownloadContainerFileEx
-'   - Move todas as declarações Dim para o topo da rotina para compatibilidade com VBE que exige declarações antes de instruções executáveis.
-'   - Evita erro de compilação de sintaxe em ambientes VBA mais estritos.
-' - 2026-03-01 | Codex | Correção de sintaxe VBA no handler TentativaFalha
-'   - Move declarações de eNum/eDesc para o início da rotina DownloadContainerFileEx (compatível com VBE).
-'   - Mantém captura de Err.Number/Err.Description antes de limpeza de erro para preservar causa raiz no lastErr.
+'   - Remove risco de "Syntax error" por tokenizacao case-insensitive (eNum ~ Enum).
+' - 2026-03-01 | Codex | Compatibilidade de declaracoes VBA em DownloadContainerFileEx
+'   - Move todas as declaracoes Dim para o topo da rotina para compatibilidade com VBE que exige declaracoes antes de instrucoes executaveis.
+'   - Evita erro de compilacao de sintaxe em ambientes VBA mais estritos.
+' - 2026-03-01 | Codex | Correcao de sintaxe VBA no handler TentativaFalha
+'   - Move declaracoes de eNum/eDesc para o inicio da rotina DownloadContainerFileEx (compativel com VBE).
+'   - Mantem captura de Err.Number/Err.Description antes de limpeza de erro para preservar causa raiz no lastErr.
 ' - 2026-02-27 | Codex | Contrato CI com fingerprint e frases finais consolidadas
-'   - Introduz fingerprint textual (FP=...) nos principais eventos de diagnóstico do process_mode=code_interpreter.
-'   - Acrescenta estado final explícito para separar sucesso HTTP de sucesso de contrato de output.
+'   - Introduz fingerprint textual (FP=...) nos principais eventos de diagnostico do process_mode=code_interpreter.
+'   - Acrescenta estado final explicito para separar sucesso HTTP de sucesso de contrato de output.
 ' - 2026-02-23 | Codex | Fallback adicional no modo CI com nomes de ficheiro no output textual
 '   - Extrai nomes de ficheiro do `output_text` quando faltam `container_file_citation`.
 '   - Em fallback por listagem do container, aplica filtro preferencial por nomes esperados para reduzir downloads desalinhados.
-'   - Regista diagnóstico dedicado (`M10_CI_TEXT_FILENAME_HINTS`, `M10_CI_TEXT_FILTER_*`).
-' - 2026-02-17 | Codex | Correção de fecho extra no schema JSON de File Output
+'   - Regista diagnostico dedicado (`M10_CI_TEXT_FILENAME_HINTS`, `M10_CI_TEXT_FILTER_*`).
+' - 2026-02-17 | Codex | Correcao de fecho extra no schema JSON de File Output
 '   - Remove um `}` excedente na montagem de `FileOutput_ManifestJsonSchema`.
 '   - Evita preflight estrutural `fecho_sem_abertura` ao combinar Config Extra + File Output.
 ' - 2026-02-17 | Codex | Ajuste do validador strict para schema aninhado de file_manifest
-'   - Corrige leitura de required[] para usar o bloco do item de ficheiro (evita falso erro com required do nível raiz).
-'   - Mantém o diagnóstico strict focado nas chaves file_name/file_type/subfolder/payload_kind/payload.
-' - 2026-02-17 | Codex | Correção de sintaxe no validador strict do manifest
-'   - Corrige escaping de aspas em regex (`"([^"]+)"`) para evitar erro de compilação em VBA.
-'   - Mantém parsing de `required[]` sem alterações adicionais de comportamento.
+'   - Corrige leitura de required[] para usar o bloco do item de ficheiro (evita falso erro com required do nivel raiz).
+'   - Mantem o diagnostico strict focado nas chaves file_name/file_type/subfolder/payload_kind/payload.
+' - 2026-02-17 | Codex | Correcao de sintaxe no validador strict do manifest
+'   - Corrige escaping de aspas em regex (`"([^"]+)"`) para evitar erro de compilacao em VBA.
+'   - Mantem parsing de `required[]` sem alteracoes adicionais de comportamento.
 ' - 2026-02-16 | Codex | Hardening de Structured Outputs (json_schema) para File Output
 '   - Corrige schema strict: inclui `subfolder` em `required` quando presente em `properties`.
-'   - Adiciona validação preventiva (properties vs required) e logs de diagnóstico no DEBUG.
-' - 2026-02-16 | Codex | Test macro alinhada com resolução central de API key
-'   - Test_FileOutput passa a usar Config_ResolveOpenAIApiKey para evitar dependência direta de Config!B1.
-' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
-'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
-'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+'   - Adiciona validacao preventiva (properties vs required) e logs de diagnostico no DEBUG.
+' - 2026-02-16 | Codex | Test macro alinhada com resolucao central de API key
+'   - Test_FileOutput passa a usar Config_ResolveOpenAIApiKey para evitar dependencia direta de Config!B1.
+' - 2026-02-12 | Codex | Implementacao do padrao de header obrigatorio
+'   - Adiciona proposito, historico de alteracoes e inventario de rotinas publicas.
+'   - Mantem documentacao tecnica do modulo alinhada com AGENTS.md.
 '
-' Funções e procedimentos (inventário público):
-' - FileOutput_ResolveEffectiveConfig (Sub): rotina pública do módulo.
-' - FileOutput_PrepareRequest (Sub): rotina pública do módulo.
-' - FileOutput_ProcessAfterResponse (Function): rotina pública do módulo.
-' - CI_ResolveOutputCandidateForSelfTest (Function): selftest do resolvedor determinístico CI.
-' - Test_FileOutput (Sub): rotina pública do módulo.
+' Funcoes e procedimentos (inventario publico):
+' - FileOutput_ResolveEffectiveConfig (Sub): rotina publica do modulo.
+' - FileOutput_PrepareRequest (Sub): rotina publica do modulo.
+' - FileOutput_ProcessAfterResponse (Function): rotina publica do modulo.
+' - CI_ResolveOutputCandidateForSelfTest (Function): selftest do resolvedor deterministico CI.
+' - Test_FileOutput (Sub): rotina publica do modulo.
 ' =============================================================================
 
 ' ============================================================
 ' M10_FileOutput
-'   Gestão de outputs em ficheiro (metadata + code_interpreter)
+'   Gestao de outputs em ficheiro (metadata + code_interpreter)
 '   - Resolve config (FLOW_TEMPLATE > PAINEL > Config)
-'   - Prepara request (tools + Structured Outputs quando aplicável)
+'   - Prepara request (tools + Structured Outputs quando aplicavel)
 '   - Grava raw outputs em disco (por step)
 '   - Processa manifest metadata/files[] e grava ficheiros
 '   - Detecta container_file_citation e descarrega bytes (CI)
@@ -105,7 +105,7 @@ Private Const MAX_PATH_SAFE_DEFAULT As Long = 240 ' [POR CONFIRMAR] depende da p
 Private gRunId(0 To 10) As String
 
 ' -------------------------------
-' PUBLIC - Resolver Config (precedência)
+' PUBLIC - Resolver Config (precedencia)
 ' -------------------------------
 Public Sub FileOutput_ResolveEffectiveConfig( _
     ByVal pipelineIndex As Long, _
@@ -257,7 +257,7 @@ Public Sub FileOutput_PrepareRequest( _
     ByRef modos As String, _
     ByRef extraFragment As String _
 )
-    ' Tools: code_interpreter (M05 trata a injecção via "modos")
+    ' Tools: code_interpreter (M05 trata a injeccao via "modos")
     If LCase$(Trim$(processMode)) = "code_interpreter" Then
         If InStr(1, modos, "Code Interpreter", vbTextCompare) = 0 Then
             If Trim$(modos) <> "" Then
@@ -280,7 +280,7 @@ Public Sub FileOutput_PrepareRequest( _
 End Sub
 
 ' -------------------------------
-' PUBLIC - Pós-resposta (gravar ficheiros + logs)
+' PUBLIC - Pos-resposta (gravar ficheiros + logs)
 '   Devolve texto curto para Seguimento (sem colar JSON/base64 gigantes).
 ' -------------------------------
 Public Function FileOutput_ProcessAfterResponse( _
@@ -372,7 +372,7 @@ Falha:
 End Function
 
 ' ============================================================
-' Implementação - METADATA (manifest JSON)
+' Implementacao - METADATA (manifest JSON)
 ' ============================================================
 Private Function Process_Metadata( _
     ByVal runFolder As String, _
@@ -527,7 +527,7 @@ Falha:
 End Function
 
 ' ============================================================
-' Implementação - CODE_INTERPRETER (container_file_citation)
+' Implementacao - CODE_INTERPRETER (container_file_citation)
 ' ============================================================
 Private Function Process_CodeInterpreter( _
     ByVal apiKey As String, _
@@ -1004,7 +1004,7 @@ Private Sub ExtraFragment_Append(ByRef extraFragment As String, ByVal fragmentSe
     If f = "" Then Exit Sub
 
     ' O M05 faz: json = json & "," & extraFragment
-    ' Logo: aqui NÃO queremos que extraFragment comece por vírgula.
+    ' Logo: aqui NAO queremos que extraFragment comece por virgula.
     Dim e As String
     e = Trim$(extraFragment)
 
@@ -1047,7 +1047,7 @@ Private Function FlowTemplate_GetPromptRow(ByVal promptId As String) As Object
 
     ' Suporta 2 layouts:
     '   A) Tabela simples (coluna "Prompt ID" + colunas dedicadas output_kind/process_mode/...)
-    '   B) Layout catálogo/blocos (coluna "ID" + coluna "Config extra" com linhas chave: valor)
+    '   B) Layout catalogo/blocos (coluna "ID" + coluna "Config extra" com linhas chave: valor)
 
     Dim colId As Long
 
@@ -1124,7 +1124,7 @@ Private Function FlowTemplate_GetPromptRow(ByVal promptId As String) As Object
 
             Else
 
-                ' Layout catálogo/blocos: ler da coluna "Config extra" e fazer parse só às chaves de File Output
+                ' Layout catalogo/blocos: ler da coluna "Config extra" e fazer parse so as chaves de File Output
                 Dim colCfg As Long
 
                 colCfg = 0
@@ -1248,11 +1248,11 @@ End Function
 
 ' ============================================================
 
-' Parser mínimo (File Output): extrair chaves internas a partir de "Config extra"
+' Parser minimo (File Output): extrair chaves internas a partir de "Config extra"
 
 '   - Aceita linhas "chave: valor" (uma por linha)
 
-'   - Ignora comentários (# ou // no início da linha)
+'   - Ignora comentarios (# ou // no inicio da linha)
 
 '   - Devolve apenas as chaves relevantes para File Output
 
@@ -1441,9 +1441,9 @@ Falha:
     Config_Get = defaultValue
 End Function
 Private Function FileOutput_MaxPathSafe() As Long
-    ' [POR CONFIRMAR] O limite real pode variar (política de Long Paths no Windows).
+    ' [POR CONFIRMAR] O limite real pode variar (politica de Long Paths no Windows).
     ' Usamos um default conservador para reduzir falhas de I/O em VBA/Office.
-    ' Pode ser parametrizado em Config: FILE_MAX_PATH_SAFE (número).
+    ' Pode ser parametrizado em Config: FILE_MAX_PATH_SAFE (numero).
     On Error GoTo Falha
     Dim s As String
     s = Config_Get("FILE_MAX_PATH_SAFE", CStr(MAX_PATH_SAFE_DEFAULT))
@@ -1542,7 +1542,7 @@ Private Function FileOutput_ResolveSubfolder(ByVal runFolder As String, ByVal pi
     rel = Replace(rel, "/", "\")
     rel = Trim$(rel)
 
-    ' segurança: bloquear path traversal e absolutos
+    ' seguranca: bloquear path traversal e absolutos
     If rel <> "" Then
         If InStr(1, rel, "..", vbTextCompare) > 0 Then rel = ""
         If InStr(1, rel, ":\", vbTextCompare) > 0 Then rel = ""
@@ -1636,7 +1636,7 @@ Private Function FileOutput_SafeFileName(ByVal s As String) As String
     s = Replace(s, "/", "_")
     s = FileOutput_SafeCommon(s)
 
-    ' não terminar em ponto/espaço
+    ' nao terminar em ponto/espaco
     Do While Right$(s, 1) = "." Or Right$(s, 1) = " "
         s = Left$(s, Len(s) - 1)
         If Len(s) = 0 Then s = "output": Exit Do
@@ -1951,7 +1951,7 @@ Private Function CI_ExtractContainerIdFromCall(ByVal rawJson As String) As Strin
     Dim pos As Long
     pos = InStr(1, rawJson, """type"":""code_interpreter_call""", vbTextCompare)
 
-    ' fallback: procurar primeiro container_id disponível
+    ' fallback: procurar primeiro container_id disponivel
     If pos = 0 Then
         pos = InStr(1, rawJson, """container_id""", vbTextCompare)
         If pos = 0 Then Exit Function
@@ -2001,7 +2001,7 @@ Private Function CI_ListContainerFiles(ByVal apiKey As String, ByVal containerId
 
     Dim ms As Object
 
-    ' padrão principal (id + object=container_file + path)
+    ' padrao principal (id + object=container_file + path)
     re.pattern = """id""\s*:\s*""([^""]+)""[\s\S]{0,200}?""object""\s*:\s*""container\.file""[\s\S]{0,800}?""path""\s*:\s*""([^""]+)"""
     Set ms = re.Execute(txt)
 
@@ -2214,7 +2214,7 @@ Private Function CI_ExtractExpectedFileNamesFromOutputText(ByVal outputText As S
         Call CI_AddExpectedFileName(CI_ExtractExpectedFileNamesFromOutputText, seen, CI_PathBaseName(CStr(m.SubMatches(0))))
     Next m
 
-    ' Tokens soltos com extensão
+    ' Tokens soltos com extensao
     re.Pattern = "\b([A-Za-z0-9_\-\.]+\.(docx|pptx|xlsx|pdf|txt|md|csv|tsv|png|jpg|jpeg|webp|gif|zip|json))\b"
     Set ms = re.Execute(txt)
     For Each m In ms
@@ -2552,7 +2552,7 @@ Falha:
 End Sub
 
 Private Function Try_SHA256_File(ByVal fullPath As String) As String
-    ' Best-effort: tenta usar função existente no projecto (ex.: em M09).
+    ' Best-effort: tenta usar funcao existente no projecto (ex.: em M09).
     On Error Resume Next
     Dim v As Variant
     v = Application.Run("Files_SHA256_File", fullPath)
@@ -2579,7 +2579,7 @@ Private Sub Try_Files_LogEventOutput( _
     Optional ByVal outputIndex As Long = -1, _
     Optional ByVal sourceType As String = "OUTPUT" _
 )
-    ' Best-effort: evita "Sub or Function not defined" se o wrapper ainda não existir/importado.
+    ' Best-effort: evita "Sub or Function not defined" se o wrapper ainda nao existir/importado.
     On Error Resume Next
     Application.Run "Files_LogEventOutput", pipelineNome, promptId, runFolder, fullPath, usageMode, op, notes, responseId, runId, stepN, outputIndex, sourceType
     On Error GoTo 0
@@ -2595,7 +2595,7 @@ Private Function Json_Q(ByVal s As String) As String
 End Function
 
 ' ============================================================
-' JSON helpers (mínimos; suficiente para manifest determinístico)
+' JSON helpers (minimos; suficiente para manifest deterministico)
 ' ============================================================
 Private Function Json_GetString(ByVal json As String, ByVal key As String) As String
     On Error GoTo Falha
@@ -2703,7 +2703,7 @@ Private Function Json_FindMatching(ByVal s As String, ByVal startPos As Long, By
     Dim depth As Long
     depth = 0
 
-    ' IMPORTANTE: não usar nome "inStr" (colide semanticamente com a função InStr)
+    ' IMPORTANTE: nao usar nome "inStr" (colide semanticamente com a funcao InStr)
     Dim inString As Boolean
     inString = False
 
@@ -2775,7 +2775,7 @@ Private Function Json_ReadQuoted(ByVal s As String, ByVal startQuotePos As Long)
 End Function
 
 Private Function Json_Unescape(ByVal s As String) As String
-    ' Unescape robusto (evita erros de Replace em sequências como \\n)
+    ' Unescape robusto (evita erros de Replace em sequencias como \\n)
     Dim i As Long
     i = 1
 
@@ -2814,7 +2814,7 @@ Private Function Json_Unescape(ByVal s As String) As String
                             res = res & ChrW$(CLng("&H" & hex4))
                             i = i + 6
                         Else
-                            ' fallback: mantém literal
+                            ' fallback: mantem literal
                             res = res & "\u"
                             i = i + 2
                         End If
@@ -2942,13 +2942,13 @@ Public Sub Test_FileOutput()
         "file", "metadata", "Sim", "suffix", "{PIPELINE}_{PROMPT_ID}_{STEP}_{YYYYMMDD}_{HHMMSS}", "docs", _
         "structure", "structure", "export", "base64", filesUsed, filesOps)
 
-    ' overwrite_mode=suffix: correr 2x para forçar _001
+    ' overwrite_mode=suffix: correr 2x para forcar _001
     Dim logTxt2 As String
     logTxt2 = FileOutput_ProcessAfterResponse(apiKey, outputFolderBase, pipelineNome, 0, passo, promptId, res, _
         "file", "metadata", "Sim", "suffix", "{PIPELINE}_{PROMPT_ID}_{STEP}_{YYYYMMDD}_{HHMMSS}", "docs", _
         "structure", "structure", "export", "base64", filesUsed, filesOps)
 
-    ' Teste Seguimento: output longo -> múltiplas linhas sem truncagem (M02)
+    ' Teste Seguimento: output longo -> multiplas linhas sem truncagem (M02)
     Dim big As String
     big = String$(SAFE_LIMIT + 5000, "A") & String$(SAFE_LIMIT + 5000, "B")
 

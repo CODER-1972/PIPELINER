@@ -2,19 +2,19 @@ Attribute VB_Name = "M01_Tipos"
 Option Explicit
 
 ' =============================================================================
-' Módulo: M01_Tipos
-' Propósito:
-' - Declarar tipos partilhados entre módulos para transporte de dados de prompts e respostas API.
-' - Evitar estruturas ad-hoc e manter contratos internos explícitos.
+' Modulo: M01_Tipos
+' Proposito:
+' - Declarar tipos partilhados entre modulos para transporte de dados de prompts e respostas API.
+' - Evitar estruturas ad-hoc e manter contratos internos explicitos.
 '
-' Atualizações:
-' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
-'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
-'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+' Atualizacoes:
+' - 2026-02-12 | Codex | Implementacao do padrao de header obrigatorio
+'   - Adiciona proposito, historico de alteracoes e inventario de rotinas publicas.
+'   - Mantem documentacao tecnica do modulo alinhada com AGENTS.md.
 '
-' Funções e procedimentos (inventário público):
-' - PromptDefinicao (Type): Estrutura pública partilhada entre módulos.
-' - ApiResultado (Type): Estrutura pública partilhada entre módulos.
+' Funcoes e procedimentos (inventario publico):
+' - PromptDefinicao (Type): Estrutura publica partilhada entre modulos.
+' - ApiResultado (Type): Estrutura publica partilhada entre modulos.
 ' =============================================================================
 
 Public Type PromptDefinicao

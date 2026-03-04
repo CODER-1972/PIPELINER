@@ -2,23 +2,23 @@ Attribute VB_Name = "M07_Painel_Pipelines"
 Option Explicit
 
 ' =============================================================================
-' Módulo: M07_Painel_Pipelines
-' Propósito:
-' - Orquestrar execução de pipelines a partir da folha PAINEL e ações de botões.
-' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
+' Modulo: M07_Painel_Pipelines
+' Proposito:
+' - Orquestrar execucao de pipelines a partir da folha PAINEL e acoes de botoes.
+' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
-' Atualizações:
+' Atualizacoes:
 ' - 2026-03-04 | Codex | Hardening de gates por etapa + validacoes preventivas de Next
 '   - Adiciona validacao preventiva de coerencia default em allowed antes da resolucao do proximo passo.
 '   - Emite diagnostico especifico quando NEXT_PROMPT_ID nao e encontrado em modo AUTO (fallback para default/STOP).
 '   - Inclui lint operacional para passos CSV/EXECUTE sem diagnostic_contract ativo no Config extra.
-'   - Lint reconhece aliases de chave de contrato, reporta process_mode e reduz falso alerta por token genérico CSV.
+'   - Lint reconhece aliases de chave de contrato, reporta process_mode e reduz falso alerta por token generico CSV.
 ' - 2026-03-02 | Codex | Foco inicial no DEBUG e destaque visual de fim de prompt
 '   - Ao clicar INICIAR, ativa DEBUG!A1 para acompanhar novas linhas em tempo real.
 '   - Regista stage=step_completed no fim de cada passo para suportar destaque verde no DEBUG.
-' - 2026-03-01 | Codex | DEBUG_SCHEMA_VERSION=2 com relatório paralelo DEBUG_DIAG
-'   - Mede tempos de subfases (files/api/directives) e regista diagnóstico aditivo em DEBUG_DIAG quando DEBUG_LEVEL>=DIAG.
-'   - Mantém DEBUG legado intacto e adiciona bundle opcional via DEBUG_BUNDLE sem impacto em BASE.
+' - 2026-03-01 | Codex | DEBUG_SCHEMA_VERSION=2 com relatorio paralelo DEBUG_DIAG
+'   - Mede tempos de subfases (files/api/directives) e regista diagnostico aditivo em DEBUG_DIAG quando DEBUG_LEVEL>=DIAG.
+'   - Mantem DEBUG legado intacto e adiciona bundle opcional via DEBUG_BUNDLE sem impacto em BASE.
 ' - 2026-03-01 | Codex | Passa intencao CI resolvida para o M05 (debug e anti-falso-supressao)
 '   - Calcula ciIntentResolved via modo efetivo file/code_interpreter e envia para OpenAI_Executar.
 '   - Mantem compatibilidade para chamadas antigas (parametro opcional no M05).
@@ -35,20 +35,20 @@ Option Explicit
 '   - Limita M07_FILEOUTPUT_MODE_MISMATCH a cenarios com intencao explicita de File Output no Config extra/outputKind.
 '   - Padroniza mensagem com PROBLEMA/IMPACTO/ACAO/DETALHE para triagem rapida no DEBUG.
 ' - 2026-03-01 | Codex | Alerta preventivo para downgrade silencioso de modo de File Output
-'   - Regista M07_FILEOUTPUT_MODE_MISMATCH quando Code Interpreter está ativo nos modos mas o modo efetivo não é file/code_interpreter.
-'   - Regista M07_FILEOUTPUT_PARSE_GUARD quando Config extra menciona output_kind/process_mode mas cai em text/metadata por parseável inválido.
-' - 2026-03-01 | Codex | Corrige dependência inválida de helper privado entre módulos
-'   - Substitui chamadas `Nz(...)` por helper local `Painel_Nz(...)` nas rotinas de validação FILES do módulo.
+'   - Regista M07_FILEOUTPUT_MODE_MISMATCH quando Code Interpreter esta ativo nos modos mas o modo efetivo nao e file/code_interpreter.
+'   - Regista M07_FILEOUTPUT_PARSE_GUARD quando Config extra menciona output_kind/process_mode mas cai em text/metadata por parseavel invalido.
+' - 2026-03-01 | Codex | Corrige dependencia invalida de helper privado entre modulos
+'   - Substitui chamadas `Nz(...)` por helper local `Painel_Nz(...)` nas rotinas de validacao FILES do modulo.
 '   - Elimina `Compile error: Sub or Function not defined` sem alterar comportamento funcional.
 ' - 2026-03-01 | Codex | D1 bloqueante aware de wildcard/latest
 '   - Resolve padroes FILES com wildcard/latest para nomes reais antes da comparacao com filesUsed.
 '   - Evita falso negativo de INPUTFILES_MISSING quando M09 seleciona nome final por pattern.
-' - 2026-02-28 | Codex | Corrige compile error na status bar por variável não declarada
-'   - Adiciona parâmetro opcional promptId em Painel_StatusBar_Set para suportar exibição do ID atual.
-'   - Atualiza chamadas durante o passo (preparação/upload/execução/resposta) para passar prompt ID consistente.
+' - 2026-02-28 | Codex | Corrige compile error na status bar por variavel nao declarada
+'   - Adiciona parametro opcional promptId em Painel_StatusBar_Set para suportar exibicao do ID atual.
+'   - Atualiza chamadas durante o passo (preparacao/upload/execucao/resposta) para passar prompt ID consistente.
 ' - 2026-02-28 | Codex | Ajusta total exibido em "Step x of y" para total planeado da lista
-'   - Passa a calcular total visível por passo com base em "Row n de z" (prompts planeados).
-'   - Mantém Max Steps como limite duro de execução, evitando mostrar total inferior ao passo atual.
+'   - Passa a calcular total visivel por passo com base em "Row n de z" (prompts planeados).
+'   - Mantem Max Steps como limite duro de execucao, evitando mostrar total inferior ao passo atual.
 ' - 2026-02-28 | Codex | Status bar passa a exibir Prompt ID completo por fase
 '   - Inclui o prompt ID entre "Row n de z" e o detalhe da fase (preparacao/upload/execucao/resposta).
 '   - Mantem formato existente de Step/Retry/Row para preservar compatibilidade visual no PAINEL.
@@ -56,45 +56,45 @@ Option Explicit
 '   - Ajusta Painel_LerLimitesPipeline para ler Max Steps da linha 5 e Max Repetitions da linha 6.
 '   - Elimina bug em que Max Steps herdava indevidamente o valor de Max Repetitions.
 ' - 2026-02-27 | Codex | Fingerprint operacional e mensagens FILES mais explicativas
-'   - Injeta fingerprint textual (pipeline/step/prompt/mode) na chamada M05 para correlação com M10.
-'   - Refina mensagens REQ_INPUT_JSON e text_embed para diferenciar anexação textual de upload com file_id.
+'   - Injeta fingerprint textual (pipeline/step/prompt/mode) na chamada M05 para correlacao com M10.
+'   - Refina mensagens REQ_INPUT_JSON e text_embed para diferenciar anexacao textual de upload com file_id.
 ' - 2026-02-26 | Codex | STOP passa a encerrar contagem de Row n de z no PAINEL
 '   - Ajusta Painel_ContarPromptsPlaneados para terminar no primeiro STOP encontrado.
 '   - Evita que IDs residuais abaixo de STOP inflem o total mostrado na status bar.
-' - 2026-02-26 | Codex | Lookup robusto de IDs no catálogo para evitar STOP falso
-'   - Adiciona fallback por varrimento normalizado de IDs quando o Find exato não encontra a célula.
-'   - Normaliza quebras de linha/NBSP/TAB em IDs para tolerar colagens de DOCX/CSV com lixo invisível.
+' - 2026-02-26 | Codex | Lookup robusto de IDs no catalogo para evitar STOP falso
+'   - Adiciona fallback por varrimento normalizado de IDs quando o Find exato nao encontra a celula.
+'   - Normaliza quebras de linha/NBSP/TAB em IDs para tolerar colagens de DOCX/CSV com lixo invisivel.
 ' - 2026-02-26 | Codex | Contagem robusta de "Row n de z" com lista INICIAR esparsa
 '   - Ignora STOP/lacunas intermedias quando ainda existem IDs validos abaixo na coluna INICIAR.
 '   - Calcula rowPos pelo indice logico de prompts validos, evitando "Row 1 de 1" falso com listas maiores.
 ' - 2026-02-26 | Codex | Status bar com posicao da linha no PAINEL
 '   - Mostra "Row n de z" com base na lista INICIAR (exclui STOP) para contexto visual do utilizador.
 '   - Mantem "Step x of y" como limite de execucao (Max Steps), sem quebrar compatibilidade.
-' - 2026-02-23 | Codex | Execução de Output Orders (EXECUTE: LOAD_CSV)
-'   - Executa parser/whitelist de ordens após File Output em respostas com sucesso.
-'   - Acrescenta logs de importação CSV em files_ops_log sem quebrar fluxo sem EXECUTE.
+' - 2026-02-23 | Codex | Execucao de Output Orders (EXECUTE: LOAD_CSV)
+'   - Executa parser/whitelist de ordens apos File Output em respostas com sucesso.
+'   - Acrescenta logs de importacao CSV em files_ops_log sem quebrar fluxo sem EXECUTE.
 ' - 2026-02-18 | Codex | Enriquecimento da status bar por fase operacional
 '   - Permite detalhar a fase atual (ex.: preparacao, upload de ficheiros, chamada API).
 '   - Atualiza a barra de estado antes de operacoes criticas para feedback em tempo real.
 ' - 2026-02-17 | Codex | Corrige fonte do texto enviado ao M09
 '   - Passa promptTextFinal (com INPUTS_DECLARADOS_NO_CATALOGO) para Files_PrepararContextoDaPrompt.
-'   - Evita perda de URLS_ENTRADA/FILES no input_text quando há anexos.
+'   - Evita perda de URLS_ENTRADA/FILES no input_text quando ha anexos.
 ' - 2026-02-17 | Codex | Injecao explicita de INPUTS (incluindo FILES/FICHEIROS) no texto enviado ao modelo
 '   - Anexa ao prompt final as linhas operacionais do INPUTS (URLS_ENTRADA, MODO_DE_VERIFICACAO e FILES/FICHEIROS).
 '   - Mantem o anexo tecnico dos ficheiros no fluxo M09; bloco textual passa a ser informativo para o modelo.
-' - 2026-02-16 | Codex | Resolução de API key via ambiente com fallback compatível
+' - 2026-02-16 | Codex | Resolucao de API key via ambiente com fallback compativel
 '   - Substitui leitura direta de Config!B1 por resolver central (M14_ConfigApiKey).
 '   - Regista ALERTA/ERRO no DEBUG para origem/falhas da credencial sem expor segredo.
-' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
-'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
-'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+' - 2026-02-12 | Codex | Implementacao do padrao de header obrigatorio
+'   - Adiciona proposito, historico de alteracoes e inventario de rotinas publicas.
+'   - Mantem documentacao tecnica do modulo alinhada com AGENTS.md.
 '
-' Funções e procedimentos (inventário público):
-' - Painel_CriarBotoes (Sub): rotina pública do módulo.
-' - Painel_Click_Iniciar (Sub): rotina pública do módulo.
-' - Painel_Click_Registar (Sub): rotina pública do módulo.
-' - Painel_Click_SetDefault (Sub): rotina pública do módulo.
-' - Painel_Click_CriarMapa (Sub): rotina pública do módulo.
+' Funcoes e procedimentos (inventario publico):
+' - Painel_CriarBotoes (Sub): rotina publica do modulo.
+' - Painel_Click_Iniciar (Sub): rotina publica do modulo.
+' - Painel_Click_Registar (Sub): rotina publica do modulo.
+' - Painel_Click_SetDefault (Sub): rotina publica do modulo.
+' - Painel_Click_CriarMapa (Sub): rotina publica do modulo.
 ' - Painel_LogStepStage (Private Sub): breadcrumb de fase no DEBUG para troubleshooting pre-API.
 ' - Painel_RegistarFalhaNoSeguimento (Private Sub): fallback de auditoria no Seguimento para erros inesperados.
 ' =============================================================================
@@ -551,7 +551,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     Dim oldEnableEvents As Boolean
     Dim oldStatusBar As Variant
 
-    ' ---- FILE OUTPUT (declarações) ----
+    ' ---- FILE OUTPUT (declaracoes) ----
     Dim fo_outputKind As String, fo_processMode As String, fo_autoSave As String, fo_overwriteMode As String
     Dim fo_prefixTmpl As String, fo_subfolderTmpl As String, fo_structuredMode As String
     Dim fo_pptxMode As String, fo_xlsxMode As String, fo_pdfMode As String, fo_imageMode As String
@@ -638,7 +638,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     ' Limpar/arquivar Seguimento (rotina existente)
     Seguimento_ArquivarLimpar
 
-    ' Garantir foco no DEBUG (monitorização em tempo real)
+    ' Garantir foco no DEBUG (monitorizacao em tempo real)
     Call Painel_FocarDebugA1
 
     ' Determinar ID inicial

@@ -2,23 +2,23 @@ Attribute VB_Name = "M20_DebugClipboard"
 Option Explicit
 
 ' =============================================================================
-' Módulo: M20_DebugClipboard
-' Propósito:
-' - Criar/atualizar botão na folha DEBUG para copiar um pacote de diagnóstico.
-' - Montar texto único com catálogos dos prompts executados + tabelas DEBUG e Seguimento.
+' Modulo: M20_DebugClipboard
+' Proposito:
+' - Criar/atualizar botao na folha DEBUG para copiar um pacote de diagnostico.
+' - Montar texto unico com catalogos dos prompts executados + tabelas DEBUG e Seguimento.
 ' - Copiar o pacote para o clipboard com fallback resiliente entre hosts Office.
 '
-' Atualizações:
-' - 2026-03-03 | Codex | Criação do módulo de clipboard para troubleshooting guiado
-'   - Adiciona macro pública para instalar botão na folha DEBUG com OnAction dedicado.
-'   - Implementa geração do pacote textual com catálogos usados no DEBUG e logs completos.
-'   - Implementa cópia para clipboard com DataObject e fallback HTMLFile + logging em DEBUG.
+' Atualizacoes:
+' - 2026-03-03 | Codex | Criacao do modulo de clipboard para troubleshooting guiado
+'   - Adiciona macro publica para instalar botao na folha DEBUG com OnAction dedicado.
+'   - Implementa geracao do pacote textual com catalogos usados no DEBUG e logs completos.
+'   - Implementa copia para clipboard com DataObject e fallback HTMLFile + logging em DEBUG.
 '
-' Funções e procedimentos:
+' Funcoes e procedimentos:
 ' - DebugClipboard_InstalarBotao() (Sub)
-'   - Garante botão idempotente na folha DEBUG e aponta para macro de cópia.
+'   - Garante botao idempotente na folha DEBUG e aponta para macro de copia.
 ' - DebugClipboard_CopiarPacoteDiagnostico() (Sub)
-'   - Gera o texto completo do diagnóstico e copia para clipboard.
+'   - Gera o texto completo do diagnostico e copia para clipboard.
 ' =============================================================================
 
 Private Const SHEET_DEBUG As String = "DEBUG"

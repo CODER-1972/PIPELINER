@@ -2,21 +2,21 @@ Attribute VB_Name = "M15_Catalog_ConfigExtraTools"
 Option Explicit
 
 ' =============================================================================
-' Módulo: M15_Catalog_ConfigExtraTools
-' Propósito:
-' - Criar folha de catálogo compatível com o layout do PIPELINER (blocos de 5 linhas).
-' - Executar diagnóstico sequencial de Config Extra para troubleshooting de payload JSON.
-' - Gerar evidência auditável numa folha dedicada sem alterar layout estrutural de folhas core.
+' Modulo: M15_Catalog_ConfigExtraTools
+' Proposito:
+' - Criar folha de catalogo compativel com o layout do PIPELINER (blocos de 5 linhas).
+' - Executar diagnostico sequencial de Config Extra para troubleshooting de payload JSON.
+' - Gerar evidencia auditavel numa folha dedicada sem alterar layout estrutural de folhas core.
 '
-' Atualizações:
-' - 2026-02-17 | Codex | Criação de toolkit de catálogo + diagnóstico de Config Extra
-'   - Adiciona macro para criar folha catálogo modelo (headers + bloco base + instruções Next PROMPT).
-'   - Adiciona macro de testes sequenciais de Config Extra com relatório em CONFIG_EXTRA_TESTS.
-'   - Inclui pré-validação estrutural de JSON para detetar fecho sem abertura e outras quebras.
+' Atualizacoes:
+' - 2026-02-17 | Codex | Criacao de toolkit de catalogo + diagnostico de Config Extra
+'   - Adiciona macro para criar folha catalogo modelo (headers + bloco base + instrucoes Next PROMPT).
+'   - Adiciona macro de testes sequenciais de Config Extra com relatorio em CONFIG_EXTRA_TESTS.
+'   - Inclui pre-validacao estrutural de JSON para detetar fecho sem abertura e outras quebras.
 '
-' Funções e procedimentos:
+' Funcoes e procedimentos:
 ' - TOOL_CreateCatalogTemplateSheet()
-'   - Cria uma folha de catálogo pronta para uso no formato esperado pelo PIPELINER.
+'   - Cria uma folha de catalogo pronta para uso no formato esperado pelo PIPELINER.
 ' - TOOL_RunConfigExtraSequentialDiagnostics()
 '   - Corre bateria de casos de Config Extra e regista resultados na folha CONFIG_EXTRA_TESTS + DEBUG.
 ' =============================================================================
