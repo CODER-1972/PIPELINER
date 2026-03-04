@@ -9,6 +9,9 @@ Option Explicit
 ' - Registar o link da pasta remota em Seguimento/HISTORICO na coluna GIT_DEBUG.
 '
 ' Atualizacoes:
+' - 2026-03-04 | Codex | Endurece instalacao de parametros GH_* na folha Config
+'   - Garante cabecalhos Key/Value/Explicacao/Default/Valores na linha 8 e dados apenas em linhas >= 9.
+'   - Mantem politica de overwrite seletivo em B:E e regista falhas no DEBUG com codigo estavel.
 ' - 2026-03-04 | Codex | Macro de instalacao guiada dos parametros GH_* no Config
 '   - Adiciona rotina para criar/atualizar chaves GH_* com default, explicacao pedagogica e valores possiveis.
 '   - Mantem retrocompatibilidade (nao sobrescreve valores existentes por defeito).
@@ -26,6 +29,8 @@ Private Const SHEET_CONFIG As String = "Config"
 Private Const SHEET_DEBUG As String = "DEBUG"
 Private Const SHEET_SEGUIMENTO As String = "Seguimento"
 Private Const SHEET_HIST As String = "HISTÓRICO"
+Private Const GH_CONFIG_HEADER_ROW As Long = 8
+Private Const GH_CONFIG_FIRST_DATA_ROW As Long = 9
 
 Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByVal painelAutoSave As String)
     On Error GoTo EH
@@ -298,7 +303,7 @@ Private Function Git_Http(ByVal method As String, ByVal url As String, ByVal tok
     Dim http As Object: Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
     http.Open method, url, False
     http.SetRequestHeader "Authorization", "Bearer " & token
-    http.SetRequestHeader "Accept", "application/vnd.github+json"
+    http.SetRequestHeader "Accept", GitCfg_Get("GH_ACCEPT_HEADER", "application/vnd.github+json")
     http.SetRequestHeader "X-GitHub-Api-Version", GitCfg_Get("GH_API_VERSION", "2022-11-28")
     http.SetRequestHeader "User-Agent", GitCfg_Get("GH_USER_AGENT", "PIPELINER-VBA")
     If body <> "" Then
@@ -499,15 +504,16 @@ Public Sub GitDebug_Config_InstalarParametros(Optional ByVal sobrescreverValores
     Exit Sub
 
 EH:
+    Call Debug_Registar(0, "", "ERRO", "", "GH_CONFIG_INSTALL_FAIL", "Falha ao instalar parametros GH_* no Config.", "err=" & CStr(Err.Number) & " | " & Left$(Err.Description, 180))
     MsgBox "Erro em GitDebug_Config_InstalarParametros: " & Err.Description, vbExclamation
 End Sub
 
 Private Sub GitDebug_Config_EnsureGuideHeaders(ByVal ws As Worksheet)
-    If Trim$(CStr(ws.Cells(1, 1).Value)) = "" Then ws.Cells(1, 1).Value = "Key"
-    If Trim$(CStr(ws.Cells(1, 2).Value)) = "" Then ws.Cells(1, 2).Value = "Value"
-    If Trim$(CStr(ws.Cells(1, 3).Value)) = "" Then ws.Cells(1, 3).Value = "Explicacao (leigos)"
-    If Trim$(CStr(ws.Cells(1, 4).Value)) = "" Then ws.Cells(1, 4).Value = "Default"
-    If Trim$(CStr(ws.Cells(1, 5).Value)) = "" Then ws.Cells(1, 5).Value = "Valores possiveis / intervalo"
+    ws.Cells(GH_CONFIG_HEADER_ROW, 1).Value = "Key"
+    ws.Cells(GH_CONFIG_HEADER_ROW, 2).Value = "Value"
+    ws.Cells(GH_CONFIG_HEADER_ROW, 3).Value = "Explicacao (leigos)"
+    ws.Cells(GH_CONFIG_HEADER_ROW, 4).Value = "Default"
+    ws.Cells(GH_CONFIG_HEADER_ROW, 5).Value = "Valores possiveis / intervalo"
 End Sub
 
 Private Function GitDebug_Config_Definitions() As Collection
@@ -547,7 +553,9 @@ Private Function GitDebug_Config_Definitions() As Collection
     Call GitDebug_Config_Add(defs, "GH_LOG_BLOB_SHA", "true", "Se true, mostra SHA curto dos blobs criados no DEBUG.", "true | false")
 
     Call GitDebug_Config_Add(defs, "GH_API_VERSION", "2022-11-28", "Versao da API GitHub enviada em header.", "YYYY-MM-DD")
+    Call GitDebug_Config_Add(defs, "GH_ACCEPT_HEADER", "application/vnd.github+json", "Header Accept enviado para a API GitHub.", "media type HTTP valido")
     Call GitDebug_Config_Add(defs, "GH_USER_AGENT", "PIPELINER-VBA", "User-Agent usado nas chamadas a API.", "texto sem vazio")
+    Call GitDebug_Config_Add(defs, "GH_HEADERS_EXTRA_JSON", "", "Headers extra opcionais em JSON simples (ex.: {""X-Trace"":""abc""}).", "JSON objeto ou vazio")
 
     Set GitDebug_Config_Definitions = defs
 End Function
@@ -565,9 +573,13 @@ End Sub
 Private Function GitDebug_Config_FindKeyRow(ByVal ws As Worksheet, ByVal keyName As String) As Long
     Dim lr As Long
     lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    If lr < GH_CONFIG_FIRST_DATA_ROW Then
+        GitDebug_Config_FindKeyRow = 0
+        Exit Function
+    End If
 
     Dim r As Long
-    For r = 1 To lr
+    For r = GH_CONFIG_FIRST_DATA_ROW To lr
         If StrComp(Trim$(CStr(ws.Cells(r, 1).Value)), keyName, vbTextCompare) = 0 Then
             GitDebug_Config_FindKeyRow = r
             Exit Function
@@ -580,6 +592,6 @@ End Function
 Private Function GitDebug_Config_NextRow(ByVal ws As Worksheet) As Long
     Dim lr As Long
     lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    If lr < 9 Then lr = 8
+    If lr < GH_CONFIG_FIRST_DATA_ROW Then lr = GH_CONFIG_HEADER_ROW
     GitDebug_Config_NextRow = lr + 1
 End Function
