@@ -126,6 +126,8 @@ Regras visuais de leitura rápida: linhas `ERRO` são mostradas em **negrito ver
 
 Registo curto e acionável de erros/alertas/info de parsing, validação de encadeamento, limites e troubleshooting técnico.
 
+Para o fluxo de integração com GitHub, o módulo `M26_GH_Logger` normaliza eventos com esquema canónico (`timestamp`, `pipeline_name`, `run_id`, `component`, `event_code`, `severity`, `details`) e escreve via `Debug_Registar`, incluindo sanitização de tokens/segredos antes de persistir no DEBUG.
+
 A folha DEBUG inclui a coluna `Funcionalidade` (entre `Parâmetro` e `Problema`) para explicar em linguagem simples, para utilizadores não técnicos, que processo está a ser registado em cada linha.
 O preenchimento desta coluna cobre explicitamente eventos de `INFO/ALERTA`, catálogo/encadeamento e diagnósticos de output/Code Interpreter (`M05_CI_*`, `M07_*`, `M10_*`, `OUTPUT_EXECUTE_*`), reduzindo classificações genéricas em troubleshooting.
 Cada célula de `Funcionalidade` passa a incluir, numa segunda linha em **negrito** (`ACAO EM CURSO:`), uma lista sistemática da(s) ação(ões) operacional(is) em execução no momento, podendo combinar várias ações no mesmo registo (ex.: validação de contrato + listagem/seleção de container + download + persistência + mitigação por timeout/retry). Sempre que disponível, é anexado contexto específico por chave (ex.: `filename=...`, `resolvedPath=...`, `stage=...`, `container_id=...`, `file_id=...`, `http_status=...`, `elapsed_ms=...`, `payload_len=...`, `dlErr=...`). A priorização do mapeamento é: regra explícita por parâmetro, seguida de enriquecimento por sinais de contexto, para reduzir ambiguidades entre eventos próximos.
