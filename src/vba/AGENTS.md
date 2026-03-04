@@ -563,6 +563,6 @@ Se começar a ficar demasiado grande:
 
 - Em mapeamento de ações do DEBUG, privilegiar primeiro regras explícitas por parâmetro (ex.: `M10_*`, `M05_*`, `OUTPUT_EXECUTE_*`) e só depois regras genéricas por substring para reduzir falsos positivos de interpretação.
 
-- Em funções públicas usadas por selftests e runtime (ex.: parsers), manter parâmetros de métricas como `Optional ByRef` para compatibilidade com call-sites novos e antigos; alterações de assinatura devem ser validadas por varredura (`rg`) para evitar `Compile error: Wrong number of arguments or invalid property assignment`.
+- Em rastreio de overrides de modo em FILES (`raw_mode` vs `effective_mode`), emitir o evento canónico (`FILES_MODE_OVERRIDE_TRACE`) apenas após o modo final do item estar estabilizado (incluindo fallbacks tardios como `pdf_upload -> text_embed`), para evitar diagnósticos incompletos ou duplicados.
 
-- Em módulos VBA tocados no PR, executar varredura de helpers usados (`rg`) e garantir que cada helper chamado é local ao módulo ou `Public`; chamadas a helper `Private` de outro módulo devem ser tratadas como P1 por risco de compilação.
+- Em repositórios com `.gitattributes` a forçar `working-tree-encoding=windows-1252` para `.bas/.cls/.frm`, evitar “normalizações” massivas de encoding no working tree; validar primeiro com script de higiene de encoding (blob UTF-8 + worktree cp1252 + heurística mojibake) para não introduzir regressões visuais entre VBE e editor/terminal.

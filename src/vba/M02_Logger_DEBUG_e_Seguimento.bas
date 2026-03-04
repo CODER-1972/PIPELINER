@@ -806,8 +806,6 @@ Public Sub Seguimento_Registar( _
         ws.Cells(linha, mapa("Config extra (amigável)")).value = prompt.ConfigExtra
     ElseIf mapa.exists("Config extra (amigavel)") Then
         ws.Cells(linha, mapa("Config extra (amigavel)")).value = prompt.ConfigExtra
-    ElseIf mapa.exists("Config extra (amigÃ¡vel)") Then
-        ws.Cells(linha, mapa("Config extra (amigÃ¡vel)")).value = prompt.ConfigExtra
     End If
     If mapa.exists("Config extra (JSON convertido)") Then ws.Cells(linha, mapa("Config extra (JSON convertido)")).value = auditJson
 
