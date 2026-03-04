@@ -63,7 +63,8 @@ Inclui módulos que:
 - gerem anexos e uploads;
 - executam chamadas API;
 - persistem auditoria por passo;
-- resolvem encadeamento (`Next PROMPT`) até `STOP`.
+- resolvem encadeamento (`Next PROMPT`) até `STOP`;
+- incluem utilitários HTTP dedicados a integrações GitHub (`M23_GH_HTTP`) com timeout configurável, headers padrão (`Authorization`, `Accept`, `X-GitHub-Api-Version`, `User-Agent`) e logging estruturado de falhas via `M26_GH_Logger`.
 
 ---
 
