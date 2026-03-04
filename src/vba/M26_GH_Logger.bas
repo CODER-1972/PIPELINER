@@ -2,34 +2,47 @@ Attribute VB_Name = "M26_GH_Logger"
 Option Explicit
 
 ' =============================================================================
-' MÃ³dulo: M26_GH_Logger
-' PropÃ³sito:
-' - Uniformizar logs funcionais da exportaÃ§Ã£o GitHub no DEBUG.
-' - Encapsular integraÃ§Ã£o com Debug_Registar para reduzir repetiÃ§Ã£o.
-' - Garantir mensagens curtas e acionÃ¡veis para troubleshooting.
+' Modulo: M26_GH_Logger
+' Proposito:
+' - Centralizar eventos/codigos canonicos GH_* para troubleshooting previsivel.
+' - Encapsular chamadas a Debug_Registar para reduzir duplicacao de boilerplate.
+' - Garantir mensagens curtas, sem segredos e com sugestoes acionaveis.
 '
-' AtualizaÃ§Ãµes:
-' - 2026-03-04 | Codex | CriaÃ§Ã£o do logger dedicado GitHub
-'   - Adiciona helpers GH_LogInfo/GH_LogWarn/GH_LogError.
-'   - Normaliza parÃ¢metro e sugestÃ£o para eventos de exportaÃ§Ã£o.
+' Atualizacoes:
+' - 2026-03-04 | Codex | Refactor de logging GitHub para modulo dedicado
+'   - Move codigos de eventos GH_* para constantes publicas reutilizaveis.
+'   - Mantem wrappers GH_LogInfo/GH_LogWarn/GH_LogError para padronizacao.
 '
-' FunÃ§Ãµes e procedimentos:
-' - GH_LogInfo(stepNo, promptId, paramName, message, suggestion) (Sub)
-'   - Regista evento INFO da integraÃ§Ã£o GitHub.
-' - GH_LogWarn(stepNo, promptId, paramName, message, suggestion) (Sub)
-'   - Regista evento ALERTA da integraÃ§Ã£o GitHub.
-' - GH_LogError(stepNo, promptId, paramName, message, suggestion) (Sub)
-'   - Regista evento ERRO da integraÃ§Ã£o GitHub.
+' Funcoes e procedimentos:
+' - GH_LogInfo(stepNo, pipelineNome, eventCode, message, suggestion) (Sub)
+'   - Regista evento INFO no DEBUG com codigo canonico.
+' - GH_LogWarn(stepNo, pipelineNome, eventCode, message, suggestion) (Sub)
+'   - Regista evento ALERTA no DEBUG com codigo canonico.
+' - GH_LogError(stepNo, pipelineNome, eventCode, message, suggestion) (Sub)
+'   - Regista evento ERRO no DEBUG com codigo canonico.
 ' =============================================================================
 
-Public Sub GH_LogInfo(ByVal stepNo As Long, ByVal promptId As String, ByVal paramName As String, ByVal message As String, Optional ByVal suggestion As String = "")
-    Call Debug_Registar(stepNo, promptId, "INFO", "", paramName, message, suggestion)
+Public Const GH_EVT_CONFIG As String = "GH_CONFIG"
+Public Const GH_EVT_UPLOAD As String = "GH_UPLOAD"
+Public Const GH_EVT_HTTP As String = "GH_HTTP"
+Public Const GH_EVT_HTTP_FAIL As String = "GH_HTTP_FAIL"
+Public Const GH_EVT_REF_OK As String = "GH_REF_OK"
+Public Const GH_EVT_BASE_TREE_OK As String = "GH_BASE_TREE_OK"
+Public Const GH_EVT_BLOB_OK As String = "GH_BLOB_OK"
+Public Const GH_EVT_BLOB_TOO_LARGE As String = "GH_BLOB_TOO_LARGE"
+Public Const GH_EVT_TREE_CREATED As String = "GH_TREE_CREATED"
+Public Const GH_EVT_COMMIT_CREATED As String = "GH_COMMIT_CREATED"
+Public Const GH_EVT_REF_UPDATED As String = "GH_REF_UPDATED"
+Public Const GH_EVT_MAX_FILES As String = "GH_MAX_FILES"
+
+Public Sub GH_LogInfo(ByVal stepNo As Long, ByVal pipelineNome As String, ByVal eventCode As String, ByVal message As String, Optional ByVal suggestion As String = "")
+    Call Debug_Registar(stepNo, pipelineNome, "INFO", "", eventCode, message, suggestion)
 End Sub
 
-Public Sub GH_LogWarn(ByVal stepNo As Long, ByVal promptId As String, ByVal paramName As String, ByVal message As String, Optional ByVal suggestion As String = "")
-    Call Debug_Registar(stepNo, promptId, "ALERTA", "", paramName, message, suggestion)
+Public Sub GH_LogWarn(ByVal stepNo As Long, ByVal pipelineNome As String, ByVal eventCode As String, ByVal message As String, Optional ByVal suggestion As String = "")
+    Call Debug_Registar(stepNo, pipelineNome, "ALERTA", "", eventCode, message, suggestion)
 End Sub
 
-Public Sub GH_LogError(ByVal stepNo As Long, ByVal promptId As String, ByVal paramName As String, ByVal message As String, Optional ByVal suggestion As String = "")
-    Call Debug_Registar(stepNo, promptId, "ERRO", "", paramName, message, suggestion)
+Public Sub GH_LogError(ByVal stepNo As Long, ByVal pipelineNome As String, ByVal eventCode As String, ByVal message As String, Optional ByVal suggestion As String = "")
+    Call Debug_Registar(stepNo, pipelineNome, "ERRO", "", eventCode, message, suggestion)
 End Sub
