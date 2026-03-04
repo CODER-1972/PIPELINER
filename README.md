@@ -115,6 +115,32 @@ Também suporta exportação opcional de debug para GitHub (Git Data API) no fim
 
 Configuração recomendada (folha `Config`, formato Key/Value): `GH_OWNER`, `GH_REPO`, `GH_BRANCH`, `GH_API_BASE`, `GH_TOKEN_ENV`, `GH_TOKEN_CONFIG`, `GH_COMMIT_MESSAGE_TEMPLATE`, `GH_BASE_PATH`, `GH_API_VERSION`, `GH_USER_AGENT`.
 
+### Quadro resumido `GH_*` (defaults e valores permitidos)
+
+| Chave (`Config`) | Default | Valores permitidos / intervalo |
+|---|---|---|
+| `GH_OWNER` | `cpsa-org` | texto não vazio |
+| `GH_REPO` | `pipeliner-data` | texto não vazio |
+| `GH_BRANCH` | `main` | branch existente |
+| `GH_API_BASE` | `https://api.github.com` | URL válida |
+| `GH_TOKEN_ENV` | `GITHUB_TOKEN` | nome de variável de ambiente |
+| `GH_TOKEN_CONFIG` | vazio | vazio ou token |
+| `GH_COMMIT_MESSAGE_TEMPLATE` | `PIPELINER run {{RUN_ID}}` | template com placeholders |
+| `GH_BASE_PATH` | `pipeliner_runs` | path relativo sem `/` inicial |
+| `GH_API_VERSION` | `2022-11-28` | formato `YYYY-MM-DD` |
+| `GH_USER_AGENT` | `PIPELINER-VBA` | texto não vazio |
+| `GH_FORCE_UPDATE` | `false` | `true` ou `false` |
+| `GH_MAX_FILES` | `200` | `1..1000` |
+| `GH_MAX_FILE_MB` | `50` | `1..200` |
+| `GH_MAX_RETRIES` | `3` | `0..10` |
+
+Fallback de token (ordem exata):
+
+1. tenta ler `ENV(GH_TOKEN_ENV)` (por defeito: `ENV("GITHUB_TOKEN")`);
+2. se vazio, usa `GH_TOKEN_CONFIG` (fallback local no workbook).
+
+> **Segurança (produção):** evitar guardar token em claro no workbook. Preferir sempre variável de ambiente (`GH_TOKEN_ENV`) e deixar `GH_TOKEN_CONFIG` vazio, usando este último apenas para testes controlados.
+
 
 ## 3.3 Seguimento
 
