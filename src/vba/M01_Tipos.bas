@@ -8,6 +8,9 @@ Option Explicit
 ' - Evitar estruturas ad-hoc e manter contratos internos explícitos.
 '
 ' Atualizações:
+' - 2026-03-04 | Codex | Tipos estruturados para integração GitHub
+'   - Adiciona GH_HttpCallResult para normalizar retorno HTTP (ok/status/body/errorDetail/stepName).
+'   - Adiciona GH_CommitOrchestratorResult para resumo final ao orquestrador.
 ' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
 '   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
 '   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
@@ -15,6 +18,8 @@ Option Explicit
 ' Funções e procedimentos (inventário público):
 ' - PromptDefinicao (Type): Estrutura pública partilhada entre módulos.
 ' - ApiResultado (Type): Estrutura pública partilhada entre módulos.
+' - GH_HttpCallResult (Type): Contrato estruturado para chamadas HTTP GitHub.
+' - GH_CommitOrchestratorResult (Type): Resumo final para controlo no PIPELINER.
 ' =============================================================================
 
 Public Type PromptDefinicao
@@ -42,4 +47,20 @@ Public Type ApiResultado
     outputText As String
     rawResponseJson As String
     Erro As String
+End Type
+
+Public Type GH_HttpCallResult
+    ok As Boolean
+    status As Long
+    body As String
+    errorDetail As String
+    stepName As String
+End Type
+
+Public Type GH_CommitOrchestratorResult
+    ok As Boolean
+    commitSha As String
+    attemptCount As Long
+    errorCode As String
+    errorDetail As String
 End Type

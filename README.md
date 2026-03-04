@@ -69,10 +69,10 @@ Inclui módulos que:
 
 Também inclui um fluxo opcional de exportação dos logs `DEBUG`/`Seguimento` para GitHub, orquestrado por `M21_GitDebugExport` com separação por responsabilidades:
 
-- `M22_GH_Config`: leitura de `GIT_DEBUG_*` na folha `Config`;
+- `M22_GH_Config`: leitura/normalização/validação de `GH_*` na folha `Config`;
 - `M23_GH_HTTP`: cliente HTTP com fallback WinHTTP/MSXML;
 - `M24_GH_Blob`: encoding UTF-8/Base64 e escaping JSON;
-- `M25_GH_TreeCommit`: composição de endpoint/payload de commit no GitHub;
+- `M25_GH_TreeCommit`: fluxo `ref -> commit base -> blobs -> tree -> commit -> update ref`;
 - `M26_GH_Logger`: logging funcional dedicado no `DEBUG`.
 
 ---
@@ -115,7 +115,35 @@ Também suporta exportação opcional de debug para GitHub (Git Data API) no fim
 - a macro fixa os cabeçalhos `Key | Value | Explicacao (leigos) | Default | Valores possiveis / intervalo` na linha 8 e escreve os parâmetros `GH_*` apenas a partir da linha 9 (evitando conflito com `Config!B1:B7`).
 - quando `sobrescreverValores=False`, só preenche células vazias nas colunas B:E; quando `sobrescreverValores=True`, reescreve B:E com defaults/documentação atuais.
 
-Configuração recomendada (folha `Config`, formato Key/Value): `GH_OWNER`, `GH_REPO`, `GH_BRANCH`, `GH_API_BASE`, `GH_TOKEN_ENV`, `GH_TOKEN_CONFIG`, `GH_COMMIT_MESSAGE_TEMPLATE`, `GH_BASE_PATH`, `GH_API_VERSION`, `GH_USER_AGENT`.
+Configuração recomendada (folha `Config`, formato Key/Value): `GH_OWNER`, `GH_REPO`, `GH_BRANCH`, `GH_API_BASE`, `GH_TOKEN_ENV`, `GH_TOKEN_CONFIG`, `GH_COMMIT_MESSAGE_TEMPLATE`, `GH_BASE_PATH`, `GH_API_VERSION`, `GH_USER_AGENT`, `GH_RETRY_ON_CONFLICT`, `GH_MAX_RETRIES`.
+
+No update de `PATCH /git/refs/heads/{branch}`, conflitos HTTP `409` são tratados explicitamente como concorrência: quando `GH_RETRY_ON_CONFLICT=true`, o fluxo reinicia desde a leitura de HEAD até ao limite de `GH_MAX_RETRIES`, registando eventos canónicos `GH_REF_CONFLICT`, `GH_RETRY_ATTEMPT`, `GH_REF_UPDATED` e `GH_DONE_FAIL`.
+
+### Quadro resumido `GH_*` (defaults e valores permitidos)
+
+| Chave (`Config`) | Default | Valores permitidos / intervalo |
+|---|---|---|
+| `GH_OWNER` | `cpsa-org` | texto não vazio |
+| `GH_REPO` | `pipeliner-data` | texto não vazio |
+| `GH_BRANCH` | `main` | branch existente |
+| `GH_API_BASE` | `https://api.github.com` | URL válida |
+| `GH_TOKEN_ENV` | `GITHUB_TOKEN` | nome de variável de ambiente |
+| `GH_TOKEN_CONFIG` | vazio | vazio ou token |
+| `GH_COMMIT_MESSAGE_TEMPLATE` | `PIPELINER run {{RUN_ID}}` | template com placeholders |
+| `GH_BASE_PATH` | `pipeliner_runs` | path relativo sem `/` inicial |
+| `GH_API_VERSION` | `2022-11-28` | formato `YYYY-MM-DD` |
+| `GH_USER_AGENT` | `PIPELINER-VBA` | texto não vazio |
+| `GH_FORCE_UPDATE` | `false` | `true` ou `false` |
+| `GH_MAX_FILES` | `200` | `1..1000` |
+| `GH_MAX_FILE_MB` | `50` | `1..200` |
+| `GH_MAX_RETRIES` | `3` | `0..10` |
+
+Fallback de token (ordem exata):
+
+1. tenta ler `ENV(GH_TOKEN_ENV)` (por defeito: `ENV("GITHUB_TOKEN")`);
+2. se vazio, usa `GH_TOKEN_CONFIG` (fallback local no workbook).
+
+> **Segurança (produção):** evitar guardar token em claro no workbook. Preferir sempre variável de ambiente (`GH_TOKEN_ENV`) e deixar `GH_TOKEN_CONFIG` vazio, usando este último apenas para testes controlados.
 
 
 ## 3.3 Seguimento
@@ -127,6 +155,8 @@ Auditoria por passo: prompt executado, configuração usada, status HTTP, output
 Regras visuais de leitura rápida: linhas `ERRO` são mostradas em **negrito vermelho**, linhas `ALERTA` em **negrito azul**, e eventos de conclusão de passo (`STEP_STAGE` com `stage=step_completed`) em **negrito verde**.
 
 Registo curto e acionável de erros/alertas/info de parsing, validação de encadeamento, limites e troubleshooting técnico.
+
+Para o fluxo de integração com GitHub, o módulo `M26_GH_Logger` normaliza eventos com esquema canónico (`timestamp`, `pipeline_name`, `run_id`, `component`, `event_code`, `severity`, `details`) e escreve via `Debug_Registar`, incluindo sanitização de tokens/segredos antes de persistir no DEBUG.
 
 A folha DEBUG inclui a coluna `Funcionalidade` (entre `Parâmetro` e `Problema`) para explicar em linguagem simples, para utilizadores não técnicos, que processo está a ser registado em cada linha.
 O preenchimento desta coluna cobre explicitamente eventos de `INFO/ALERTA`, catálogo/encadeamento e diagnósticos de output/Code Interpreter (`M05_CI_*`, `M07_*`, `M10_*`, `OUTPUT_EXECUTE_*`), reduzindo classificações genéricas em troubleshooting.
