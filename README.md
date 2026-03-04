@@ -63,7 +63,8 @@ Inclui módulos que:
 - gerem anexos e uploads;
 - executam chamadas API;
 - persistem auditoria por passo;
-- resolvem encadeamento (`Next PROMPT`) até `STOP`.
+- resolvem encadeamento (`Next PROMPT`) até `STOP`;
+- suportam commits GitHub por Git Database (ref -> commit base -> blobs -> tree -> commit -> update ref), com retry configurável por `GH_RETRY_ON_CONFLICT` e `GH_MAX_RETRIES`.
 
 ---
 
