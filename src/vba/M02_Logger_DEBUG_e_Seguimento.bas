@@ -8,9 +8,12 @@ Option Explicit
 ' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
 '
 ' Atualizações:
-' - 2026-03-03 | Codex | Mapeia trace padronizado de override de modo FILES
-'   - Inclui `FILES_MODE_OVERRIDE_TRACE` nas ações deduzidas da coluna Funcionalidade.
-'   - Amplia extração de contexto operacional com requested/resolved/raw_mode/effective_mode/reason.
+' - 2026-03-04 | Codex | Coluna GIT_DEBUG no arquivamento Seguimento -> HISTORICO
+'   - Inclui GIT_DEBUG no conjunto canonico de headers e mapeamento por nome.
+'   - Garante criacao retrocompativel do header em Seguimento/HISTORICO quando inexistente.
+' - 2026-03-03 | Codex | Inclui CI_PROOF_MNT_DATA_MISSING no mapeamento operacional
+'   - Classifica o novo parametro nas acoes de OUTPUT_EXECUTE/diagnostico CI na coluna Funcionalidade.
+'   - Mantem coerencia de troubleshooting para eventos de artefacto em falta no fluxo CI.
 ' - 2026-03-03 | Codex | Cobertura ampliada de acoes especificas no DEBUG
 '   - Reforca mapeamento por sinais de parametro/contexto para suportar combinacoes de acoes no mesmo registo.
 '   - Amplia extracao de contexto com pares chave=valor e chave:valor para diagnostico mais objetivo.
@@ -251,7 +254,7 @@ Private Function Debug_DeduzirAcaoEmCurso(ByVal parametro As String, ByVal probl
             Call Debug_AcaoAdd(acoes, "Resolucao de item FILES declarado no INPUTS")
             Call Debug_AcaoAdd(acoes, "Aplicacao de flags required/latest/as_pdf/as_is/text_embed")
 
-        Case "FILES", "FILES UPLOAD", "FILES REUSE", "FILES IA", "FILES_DIAG", "FILES_MODE_OVERRIDE_TRACE", "DOCX_INPUTFILE_OVERRIDDEN", "PDF_CACHE_HIT", "PDF_CACHE_MISS_CONVERTED", "TEXT_EMBED_EMPTY", "TEXT_EMBED_TOO_LARGE", "AS_PDF", "TEXT_EMBED"
+        Case "FILES", "FILES UPLOAD", "FILES REUSE", "FILES IA", "FILES_DIAG", "DOCX_INPUTFILE_OVERRIDDEN", "PDF_CACHE_HIT", "PDF_CACHE_MISS_CONVERTED", "TEXT_EMBED_EMPTY", "TEXT_EMBED_TOO_LARGE", "TEXT_EMBED_TRACE", "AS_PDF", "TEXT_EMBED"
             Call Debug_AcaoAdd(acoes, "Preparacao e transformacao de anexos")
 
         Case "M05_PAYLOAD_CHECK", "M05_JSON_PREFLIGHT", "M05_UTF8_ROUNDTRIP", "M05_PAYLOAD_DUMP", "M05_PAYLOAD_DUMP_FAIL", "M05_TIMEOUT_DECISION", "M05_HTTP_TIMEOUTS", "M05_HTTP_TIMEOUT_INVALID", "M05_HTTP_TIMEOUT_ERROR", "M05_HTTP_RESULT", "API", "API_RETRY_5XX", "API_CONTEXT_LENGTH_ACTION", "API_CONTEXT_LENGTH_EXCEEDED"
@@ -266,7 +269,7 @@ Private Function Debug_DeduzirAcaoEmCurso(ByVal parametro As String, ByVal probl
             Call Debug_AcaoAdd(acoes, "Validacao do contrato de File Output")
             Call Debug_AcaoAdd(acoes, "Resolucao do ficheiro esperado no OUTPUT Folder")
 
-        Case "OUTPUT_EXECUTE_FOUND", "OUTPUT_EXECUTE_PARSED", "OUTPUT_EXECUTE_UNKNOWN_CMD", "OUTPUT_EXECUTE_INVALID_FILENAME", "OUTPUT_EXECUTE_FILE_NOT_FOUND", "OUTPUT_EXECUTE_CSV_PRECHECK", "OUTPUT_EXECUTE_CSV_BOM_FAIL", "OUTPUT_EXECUTE_CSV_CRLF_IN_FIELDS", "OUTPUT_EXECUTE_SHEET_CREATED", "OUTPUT_EXECUTE_IMPORT_FAIL", "OUTPUT_EXECUTE_CSV_IMPORTED", "OUTPUT_EXECUTE_VERIFIED"
+        Case "OUTPUT_EXECUTE_FOUND", "OUTPUT_EXECUTE_PARSED", "OUTPUT_EXECUTE_UNKNOWN_CMD", "OUTPUT_EXECUTE_INVALID_FILENAME", "OUTPUT_EXECUTE_FILE_NOT_FOUND", "CI_PROOF_MNT_DATA_MISSING", "OUTPUT_EXECUTE_CSV_PRECHECK", "OUTPUT_EXECUTE_CSV_BOM_FAIL", "OUTPUT_EXECUTE_CSV_CRLF_IN_FIELDS", "OUTPUT_EXECUTE_SHEET_CREATED", "OUTPUT_EXECUTE_IMPORT_FAIL", "OUTPUT_EXECUTE_CSV_IMPORTED", "OUTPUT_EXECUTE_VERIFIED"
             Call Debug_AcaoAdd(acoes, "Execucao da diretiva OUTPUT_EXECUTE")
             Call Debug_AcaoAdd(acoes, "Importacao/validacao de CSV em worksheet dedicada")
 
@@ -333,6 +336,8 @@ Private Sub Debug_AplicarAcoesPorSinal(ByRef acoes As String, ByVal p As String,
             Call Debug_AcaoAdd(acoes, "Detecao de extracao vazia em text_embed")
         Case "TEXT_EMBED_TOO_LARGE"
             Call Debug_AcaoAdd(acoes, "Aplicacao de politica de overflow de text_embed")
+        Case "TEXT_EMBED_TRACE"
+            Call Debug_AcaoAdd(acoes, "Rastreio de integridade de text_embed (name/len_chars/hash_short)")
         Case "M10_CI_DOWNLOAD_FAIL", "M10_CI_DOWNLOAD_NOFILE"
             Call Debug_AcaoAdd(acoes, "Tratamento de falha no download de artefacto do container")
         Case "M10_CI_AMBIGUOUS_MARKER", "M10_CI_AMBIGUOUS_FALLBACK"
@@ -375,12 +380,8 @@ Private Sub Debug_AplicarAcoesPorSinal(ByRef acoes As String, ByVal p As String,
             Call Debug_AcaoAdd(acoes, "Checklist pre-envio do payload (tools/input/tamanho)")
         Case "M05_JSON_PREFLIGHT"
             Call Debug_AcaoAdd(acoes, "Preflight de validade JSON antes do HTTP")
-        Case "M05_PAYLOAD_DUMP", "M05_PAYLOAD_DUMP_FAIL"
-            Call Debug_AcaoAdd(acoes, "Persistencia diagnostica do payload final de request")
-        Case "M05_CI_INTENT_EVAL", "M05_CI_AUTO_SUPPRESS"
-            Call Debug_AcaoAdd(acoes, "Avaliacao de intencao explicita de Code Interpreter no passo")
-        Case "M07_FILEOUTPUT_MODE_MISMATCH", "M07_FILEOUTPUT_PARSE_GUARD"
-            Call Debug_AcaoAdd(acoes, "Validacao de coerencia entre modo efetivo e contrato de File Output")
+        Case "CI_PROOF_MNT_DATA_MISSING"
+            Call Debug_AcaoAdd(acoes, "Detecao de prova CI sem artefacto descarregado para a pasta de output")
         Case "OUTPUT_EXECUTE_CSV_PRECHECK"
             Call Debug_AcaoAdd(acoes, "Pre-validacao de encoding/BOM e estrutura CSV")
         Case "OUTPUT_EXECUTE_VERIFIED"
@@ -939,7 +940,7 @@ End Function
 '   Timestamp | Nome do Pipeline | Passo | Prompt ID | Texto da prompt | Output (texto) |
 '   Modelo | Modos | Storage | Config extra (amigável) | Config extra (JSON convertido) |
 '   HTTP Status | Response ID | Next prompt decidido | files_used | files_ops_log | file_ids_used |
-'   captured_vars | captured_vars_meta | injected_vars
+'   captured_vars | captured_vars_meta | injected_vars | GIT_DEBUG
 '
 ' Mantém a lógica do original:
 ' - Insere no topo (linha 2 do HISTÓRICO)
@@ -985,7 +986,8 @@ Public Sub Seguimento_ArquivarLimpar()
         "file_ids_used", _
         "captured_vars", _
         "captured_vars_meta", _
-        "injected_vars" _
+        "injected_vars", _
+        "GIT_DEBUG" _
     )
     
     ' Mapeamento Seguimento -> Histórico por nome (sem taxonomias; só headers)
@@ -1014,6 +1016,7 @@ Public Sub Seguimento_ArquivarLimpar()
     srcForHist("captured_vars") = "captured_vars"
     srcForHist("captured_vars_meta") = "captured_vars_meta"
     srcForHist("injected_vars") = "injected_vars"
+    srcForHist("GIT_DEBUG") = "GIT_DEBUG"
     
     ' Mapas de headers -> coluna
     Dim mapS As Object, mapH As Object
@@ -1024,6 +1027,7 @@ Public Sub Seguimento_ArquivarLimpar()
     EnsureHeader wsS, mapS, "captured_vars", AUTO_CREATE_MISSING_HEADERS
     EnsureHeader wsS, mapS, "captured_vars_meta", AUTO_CREATE_MISSING_HEADERS
     EnsureHeader wsS, mapS, "injected_vars", AUTO_CREATE_MISSING_HEADERS
+    EnsureHeader wsS, mapS, "GIT_DEBUG", AUTO_CREATE_MISSING_HEADERS
     Set mapS = HeaderMap_ByName(wsS)
     
     Dim i As Long

@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integração com catálogo/API/logs e geração de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-04 | Codex | Auto-upload Git de artefactos de debug por pipeline
+'   - Ativa exportacao no fim da execucao quando auto-guardar contem "sim, todos" ou "debug".
+'   - Publica CSV de DEBUG/Seguimento/catalogo e TXT do PAINEL via Git Data API usando GH_* no Config.
 ' - 2026-03-04 | Codex | Hardening de gates por etapa + validacoes preventivas de Next
 '   - Adiciona validacao preventiva de coerencia default em allowed antes da resolucao do proximo passo.
 '   - Emite diagnostico especifico quando NEXT_PROMPT_ID nao e encontrado em modo AUTO (fallback para default/STOP).
@@ -558,6 +561,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     Dim modosEfetivo As String, extraFragmentFO As String
     Dim fo_filesUsedOut As String, fo_filesOpsOut As String, fo_logSeguimento As String
     Dim textoSeguimento As String, filesUsedResumo As String, filesOpsResumo As String
+    Dim runExecutouPassos As Boolean
 
 
     oldDisplayStatusBar = Application.DisplayStatusBar
@@ -704,8 +708,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     promptCtx = ""
 
     For passo = 1 To maxSteps
-
-
+        runExecutouPassos = True
         passoCtx = passo
         promptCtx = atual
         stepStartAt = Now
@@ -1196,6 +1199,10 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
 
 SaidaLimpa:
+    If runExecutouPassos Then
+        Call PipelineGitDebug_ExportIfEnabled(pipelineIndex, pipelineNome, painelAutoSave)
+    End If
+
     Application.StatusBar = False
     Application.DisplayStatusBar = oldDisplayStatusBar
     Application.EnableEvents = oldEnableEvents
