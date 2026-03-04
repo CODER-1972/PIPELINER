@@ -4,50 +4,40 @@ Option Explicit
 ' =============================================================================
 ' Modulo: M21_GitDebugExport
 ' Proposito:
-' - Exportar artefactos de DEBUG/Seguimento no fim da execucao da pipeline.
-' - Publicar ficheiros no GitHub via Git Data API (blobs -> tree -> commit -> update ref).
-' - Registar o link da pasta remota em Seguimento/HISTORICO na coluna GIT_DEBUG.
+' - Manter facade/entrypoint de compatibilidade para exportacao Git debug.
+' - Gerar artefactos DEBUG/Seguimento/catalogo/painel para upload.
+' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
-' - 2026-03-04 | Codex | Retry com conflito 409 e resumo para orquestrador
-'   - Introduz contrato estruturado de HTTP/resultado final (ok/status/body/errorDetail/stepName).
-'   - Implementa retry configurável (GH_RETRY_ON_CONFLICT/GH_MAX_RETRIES) desde leitura de HEAD.
-'   - Regista eventos canónicos GH_REF_CONFLICT, GH_RETRY_ATTEMPT, GH_REF_UPDATED e GH_DONE_FAIL.
+' - 2026-03-04 | Codex | Refactor para arquitetura M22..M26 mantendo facade M21
+'   - PipelineGitDebug_ExportIfEnabled passa a delegar GH_* em modulos dedicados.
+'   - Remove implementacao HTTP/blob/tree do facade e preserva chamadas existentes de M07.
+'   - Mantem macro de instalacao guiada dos parametros GH_* no Config.
 ' - 2026-03-04 | Codex | Macro de instalacao guiada dos parametros GH_* no Config
-'   - Adiciona rotina para criar/atualizar chaves GH_* com default, explicacao pedagogica e valores possiveis.
-'   - Mantem retrocompatibilidade (nao sobrescreve valores existentes por defeito).
-' - 2026-03-04 | Codex | Implementa auto-upload Git debug por pipeline
-'   - Le parametros GH_* da folha Config com defaults internos (retrocompativel).
-'   - Ativa apenas quando auto-guardar contem "sim, todos" ou "debug".
-'   - Gera 4 artefactos: DEBUG.csv, catalogo_prompts_executadas.csv, Seguimento.csv, painel_pipeline.txt.
+'   - Adiciona rotina para criar/atualizar chaves GH_* com default e explicacoes.
 '
 ' Funcoes e procedimentos:
-' - PipelineGitDebug_ExportIfEnabled(...): entry point chamado no fim da pipeline.
-' - GitDebug_Config_InstalarParametros(...): instala parametros GH_* no Config com ajuda para leigos.
+' - PipelineGitDebug_ExportIfEnabled(pipelineIndex As Long, pipelineNome As String, painelAutoSave As String)
+'   - Entry point chamado no fim da pipeline para export opcional de debug para GitHub.
+' - GitDebug_Config_InstalarParametros(Optional sobrescreverValores As Boolean = False)
+'   - Preenche/atualiza chaves GH_* na folha Config sem quebra de retrocompatibilidade.
 ' =============================================================================
 
-Private Const SHEET_CONFIG As String = "Config"
 Private Const SHEET_DEBUG As String = "DEBUG"
 Private Const SHEET_SEGUIMENTO As String = "Seguimento"
-Private Const SHEET_HIST As String = "HISTÓRICO"
+Private Const SHEET_HIST As String = "HISTÃ“RICO"
 
 Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByVal painelAutoSave As String)
     On Error GoTo EH
 
-    If Not GitDebug_IsEnabled(painelAutoSave) Then Exit Sub
+    Dim cfg As Object
+    Set cfg = GH_Config_Load(painelAutoSave)
 
-    Dim token As String
-    token = GitCfg_ResolveToken()
-    If Trim$(token) = "" Then
-        Call Debug_Registar(0, pipelineNome, "ALERTA", "", "GH_TOKEN", "Auto-upload debug ativo mas token GitHub ausente.", "Defina GH_TOKEN_ENV ou GH_TOKEN_CONFIG na folha Config.")
-        Exit Sub
-    End If
+    If Not GH_Config_GetBoolean(cfg, "enabled", False) Then Exit Sub
 
-    Dim owner As String: owner = GitCfg_Get("GH_OWNER", "")
-    Dim repo As String: repo = GitCfg_Get("GH_REPO", "")
-    Dim branch As String: branch = GitCfg_Get("GH_BRANCH", "main")
-    If owner = "" Or repo = "" Then
-        Call Debug_Registar(0, pipelineNome, "ALERTA", "", "GH_CONFIG", "GH_OWNER/GH_REPO em falta.", "Preencha GH_OWNER e GH_REPO no Config.")
+    Dim reason As String
+    If Not GH_Config_Validate(cfg, reason) Then
+        Call GH_LogWarn(0, pipelineNome, GH_EVT_CONFIG, "Configuracao GitHub invalida.", reason)
         Exit Sub
     End If
 
@@ -55,47 +45,49 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     ghFolder = GitDebug_BuildRunFolder(pipelineNome)
 
     Dim files As Collection
-    Set files = GitDebug_BuildFilesForUpload(pipelineIndex, pipelineNome, ghFolder)
+    Set files = GitDebug_BuildFilesForUpload(pipelineIndex, pipelineNome, ghFolder, cfg)
     If files Is Nothing Or files.Count = 0 Then Exit Sub
 
-    Dim commitSummary As GH_CommitOrchestratorResult
-    commitSummary = GitData_CommitFiles(owner, repo, branch, token, files, pipelineNome)
-    If Not commitSummary.ok Then
-        Call Debug_Registar(0, pipelineNome, "ERRO", "", "GH_DONE_FAIL", "Falha no auto-upload de debug.", "code=" & commitSummary.errorCode & " | detail=" & commitSummary.errorDetail)
+    Dim commitSha As String
+    If Not GH_TreeCommit_CommitFiles(cfg, files, pipelineNome, commitSha, reason) Then
+        Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD, "Falha no auto-upload de debug.", reason)
         Exit Sub
     End If
 
     Dim webUrl As String
-    webUrl = "https://github.com/" & owner & "/" & repo & "/tree/" & Git_UrlEncodeSegment(branch) & "/" & Git_UrlEncodePath(ghFolder)
+    webUrl = GH_TreeCommit_BuildWebFolderUrl(cfg, GH_Config_GetString(cfg, "base_path", "pipeliner_runs") & "/" & ghFolder)
 
     Call GitDebug_WriteLinkToSeguimento(pipelineNome, webUrl)
     Call GitDebug_WriteLinkToHistorico(pipelineNome, webUrl)
 
-    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_REF_UPDATED", "Debug export publicado no GitHub.", "attempts=" & CStr(commitSummary.attemptCount) & " | " & webUrl)
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_REF_UPDATED, "Debug export publicado no GitHub.", webUrl)
     Exit Sub
+
 EH:
-    Call Debug_Registar(0, pipelineNome, "ERRO", "", "GH_UPLOAD", "Falha no auto-upload de debug: " & Err.Description, "Validar parâmetros GH_* e conectividade com api.github.com.")
+    Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD, "Falha no auto-upload de debug: " & Err.Description, "Validar parametros GH_* e conectividade com api.github.com.")
 End Sub
 
-Private Function GitDebug_IsEnabled(ByVal painelAutoSave As String) As Boolean
-    Dim s As String
-    s = LCase$(Trim$(painelAutoSave))
-    GitDebug_IsEnabled = (InStr(1, s, "sim, todos", vbTextCompare) > 0) Or (InStr(1, s, "debug", vbTextCompare) > 0)
-End Function
-
 Private Function GitDebug_BuildRunFolder(ByVal pipelineNome As String) As String
-    GitDebug_BuildRunFolder = Format$(Now, "yyyy-mmm-dd") & "-" & Format$(Now, "hhnn") & " - " & Git_SanitizePathPart(pipelineNome)
+    GitDebug_BuildRunFolder = Format$(Now, "yyyy-mmm-dd") & "-" & Format$(Now, "hhnn") & " - " & GitDebug_SanitizePathPart(pipelineNome)
 End Function
 
-Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByVal ghFolder As String) As Collection
+Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByVal ghFolder As String, ByVal cfg As Object) As Collection
     On Error GoTo EH
 
     Dim cfgBase As String
-    cfgBase = Trim$(GitCfg_Get("GH_BASE_PATH", "pipeliner_runs"))
-    If cfgBase <> "" Then ghFolder = cfgBase & "/" & ghFolder
+    cfgBase = Trim$(GH_Config_GetString(cfg, "base_path", "pipeliner_runs"))
 
-    Dim wsDebug As Worksheet: Set wsDebug = ThisWorkbook.Worksheets(SHEET_DEBUG)
-    Dim wsSeg As Worksheet: Set wsSeg = ThisWorkbook.Worksheets(SHEET_SEGUIMENTO)
+    Dim remoteFolder As String
+    If cfgBase <> "" Then
+        remoteFolder = cfgBase & "/" & ghFolder
+    Else
+        remoteFolder = ghFolder
+    End If
+
+    Dim wsDebug As Worksheet
+    Dim wsSeg As Worksheet
+    Set wsDebug = ThisWorkbook.Worksheets(SHEET_DEBUG)
+    Set wsSeg = ThisWorkbook.Worksheets(SHEET_SEGUIMENTO)
 
     Dim csvDebug As String
     csvDebug = SheetToCsv(wsDebug)
@@ -110,22 +102,29 @@ Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal
     txtPainel = BuildPainelPipelineInfo(pipelineIndex)
 
     Dim files As New Collection
-    files.Add GitFileItem(ghFolder & "/DEBUG.csv", csvDebug)
-    files.Add GitFileItem(ghFolder & "/catalogo_prompts_executadas.csv", csvCatalogo)
-    files.Add GitFileItem(ghFolder & "/Seguimento.csv", csvSeg)
-    files.Add GitFileItem(ghFolder & "/painel_pipeline.txt", txtPainel)
+    files.Add GitFileItem(remoteFolder & "/DEBUG.csv", csvDebug)
+    files.Add GitFileItem(remoteFolder & "/catalogo_prompts_executadas.csv", csvCatalogo)
+    files.Add GitFileItem(remoteFolder & "/Seguimento.csv", csvSeg)
+    files.Add GitFileItem(remoteFolder & "/painel_pipeline.txt", txtPainel)
 
     Set GitDebug_BuildFilesForUpload = files
     Exit Function
+
 EH:
     Set GitDebug_BuildFilesForUpload = Nothing
 End Function
 
 Private Function BuildPainelPipelineInfo(ByVal pipelineIndex As Long) As String
     On Error GoTo EH
-    Dim ws As Worksheet: Set ws = ThisWorkbook.Worksheets("PAINEL")
-    Dim colIniciar As Long: colIniciar = 2 + (pipelineIndex - 1) * 2
-    Dim colReg As Long: colReg = colIniciar + 1
+
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets("PAINEL")
+
+    Dim colIniciar As Long
+    colIniciar = 2 + (pipelineIndex - 1) * 2
+
+    Dim colReg As Long
+    colReg = colIniciar + 1
 
     Dim txt As String
     txt = "Pipeline Index: " & CStr(pipelineIndex) & vbCrLf
@@ -149,19 +148,28 @@ Private Function BuildPainelPipelineInfo(ByVal pipelineIndex As Long) As String
 
     BuildPainelPipelineInfo = txt
     Exit Function
+
 EH:
     BuildPainelPipelineInfo = ""
 End Function
 
 Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelineNome As String) As String
-    Dim d As Object: Set d = CreateObject("Scripting.Dictionary")
+    Dim d As Object
+    Set d = CreateObject("Scripting.Dictionary")
     d.CompareMode = 1
 
-    Dim hMap As Object: Set hMap = HeaderMap(wsSeg)
-    Dim cPipe As Long: cPipe = MapGet(hMap, "pipeline_name")
-    Dim cPid As Long: cPid = MapGet(hMap, "Prompt ID")
+    Dim hMap As Object
+    Set hMap = HeaderMap(wsSeg)
 
-    Dim lastRow As Long: lastRow = wsSeg.Cells(wsSeg.Rows.Count, 1).End(xlUp).Row
+    Dim cPipe As Long
+    cPipe = MapGet(hMap, "pipeline_name")
+
+    Dim cPid As Long
+    cPid = MapGet(hMap, "Prompt ID")
+
+    Dim lastRow As Long
+    lastRow = wsSeg.Cells(wsSeg.Rows.Count, 1).End(xlUp).Row
+
     Dim r As Long
     For r = 2 To lastRow
         If Trim$(CStr(wsSeg.Cells(r, cPipe).Value)) = pipelineNome Then
@@ -195,11 +203,16 @@ Private Function PrefixFromId(ByVal promptId As String) As String
 End Function
 
 Private Function SheetToCsv(ByVal ws As Worksheet) As String
-    Dim lr As Long, lc As Long
+    Dim lr As Long
+    Dim lc As Long
     lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
     lc = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
 
-    Dim r As Long, c As Long, line As String, out As String
+    Dim r As Long
+    Dim c As Long
+    Dim line As String
+    Dim out As String
+
     For r = 1 To lr
         line = ""
         For c = 1 To lc
@@ -208,15 +221,19 @@ Private Function SheetToCsv(ByVal ws As Worksheet) As String
         Next c
         out = out & line & vbCrLf
     Next r
+
     SheetToCsv = out
 End Function
 
 Private Function CsvRow(ByVal vals As Variant) As String
-    Dim i As Long, s As String
+    Dim i As Long
+    Dim s As String
+
     For i = LBound(vals) To UBound(vals)
         If i > LBound(vals) Then s = s & ","
         s = s & CsvEscape(CStr(vals(i)))
     Next i
+
     CsvRow = s
 End Function
 
@@ -226,283 +243,35 @@ Private Function CsvEscape(ByVal s As String) As String
 End Function
 
 Private Function GitFileItem(ByVal path As String, ByVal content As String) As Object
-    Dim d As Object: Set d = CreateObject("Scripting.Dictionary")
+    Dim d As Object
+    Set d = CreateObject("Scripting.Dictionary")
     d("path") = path
     d("content") = content
     Set GitFileItem = d
 End Function
 
-Private Function GitData_CommitFiles(ByVal owner As String, ByVal repo As String, ByVal branch As String, ByVal token As String, ByVal files As Collection, ByVal pipelineNome As String) As GH_CommitOrchestratorResult
-    On Error GoTo EH
-
-    Dim summary As GH_CommitOrchestratorResult
-    Dim apiBase As String: apiBase = GitCfg_Get("GH_API_BASE", "https://api.github.com")
-    Dim headRefUrl As String
-    headRefUrl = apiBase & "/repos/" & owner & "/" & repo & "/git/refs/heads/" & branch
-
-    Dim retryOnConflict As Boolean
-    retryOnConflict = GitCfg_GetBool("GH_RETRY_ON_CONFLICT", True)
-
-    Dim maxRetries As Long
-    maxRetries = GitCfg_GetLong("GH_MAX_RETRIES", 3)
-    If maxRetries < 1 Then maxRetries = 1
-
-    Dim attempt As Long
-    For attempt = 1 To maxRetries
-        summary.attemptCount = attempt
-
-        Dim headResult As GH_HttpCallResult
-        headResult = Git_Http("GET", headRefUrl, token, "", "GH_HEAD_READ")
-        If Not headResult.ok Then
-            summary.errorCode = "GH_HEAD_READ_FAIL"
-            summary.errorDetail = Git_HttpErrorDetail(headResult)
-            GoTo FailWithSummary
-        End If
-
-        Dim headSha As String: headSha = JsonPick(headResult.body, "sha")
-        If headSha = "" Then
-            summary.errorCode = "GH_HEAD_PARSE_FAIL"
-            summary.errorDetail = "HEAD sem sha no body."
-            GoTo FailWithSummary
-        End If
-
-        Dim commitBodyResult As GH_HttpCallResult
-        commitBodyResult = Git_Http("GET", apiBase & "/repos/" & owner & "/" & repo & "/git/commits/" & headSha, token, "", "GH_COMMIT_READ")
-        If Not commitBodyResult.ok Then
-            summary.errorCode = "GH_COMMIT_READ_FAIL"
-            summary.errorDetail = Git_HttpErrorDetail(commitBodyResult)
-            GoTo FailWithSummary
-        End If
-
-        Dim baseTreeSha As String: baseTreeSha = JsonPickTreeSha(commitBodyResult.body)
-        If baseTreeSha = "" Then baseTreeSha = JsonPick(commitBodyResult.body, "sha")
-        If baseTreeSha = "" Then
-            summary.errorCode = "GH_BASE_TREE_PARSE_FAIL"
-            summary.errorDetail = "Commit base sem tree sha."
-            GoTo FailWithSummary
-        End If
-
-        Dim treeItems As String
-        Dim i As Long
-        For i = 1 To files.Count
-            Dim f As Object: Set f = files(i)
-            Dim blobSha As String
-            blobSha = Git_CreateBlob(apiBase, owner, repo, token, CStr(f("content")), summary)
-            If blobSha = "" Then GoTo FailWithSummary
-            If treeItems <> "" Then treeItems = treeItems & ","
-            treeItems = treeItems & "{""path"":""" & Json_EscapeString(CStr(f("path"))) & """,""mode"":""100644"",""type"":""blob"",""sha"":""" & blobSha & """}"
-        Next i
-        Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_BLOBS_CREATED", "Blobs criados.", "n=" & CStr(files.Count) & " | attempt=" & CStr(attempt))
-
-        Dim treeReq As String
-        treeReq = "{""base_tree"":""" & baseTreeSha & """,""tree"": [" & treeItems & "]}"
-        Dim treeResp As GH_HttpCallResult
-        treeResp = Git_Http("POST", apiBase & "/repos/" & owner & "/" & repo & "/git/trees", token, treeReq, "GH_TREE_CREATE")
-        If Not treeResp.ok Then
-            summary.errorCode = "GH_TREE_CREATE_FAIL"
-            summary.errorDetail = Git_HttpErrorDetail(treeResp)
-            GoTo FailWithSummary
-        End If
-
-        Dim treeSha As String: treeSha = JsonPick(treeResp.body, "sha")
-        If treeSha = "" Then
-            summary.errorCode = "GH_TREE_PARSE_FAIL"
-            summary.errorDetail = "Tree sem sha no body."
-            GoTo FailWithSummary
-        End If
-
-        Dim commitMsg As String
-        commitMsg = Replace(GitCfg_Get("GH_COMMIT_MESSAGE_TEMPLATE", "PIPELINER run {{RUN_ID}}"), "{{RUN_ID}}", Format$(Now, "yyyymmdd_hhnnss"))
-
-        Dim newCommitReq As String
-        newCommitReq = "{""message"":""" & Json_EscapeString(commitMsg) & """,""tree"":""" & treeSha & """,""parents"": [""" & headSha & """]}"
-        Dim newCommitResp As GH_HttpCallResult
-        newCommitResp = Git_Http("POST", apiBase & "/repos/" & owner & "/" & repo & "/git/commits", token, newCommitReq, "GH_COMMIT_CREATE")
-        If Not newCommitResp.ok Then
-            summary.errorCode = "GH_COMMIT_CREATE_FAIL"
-            summary.errorDetail = Git_HttpErrorDetail(newCommitResp)
-            GoTo FailWithSummary
-        End If
-
-        Dim newCommitSha As String: newCommitSha = JsonPick(newCommitResp.body, "sha")
-        If newCommitSha = "" Then
-            summary.errorCode = "GH_COMMIT_PARSE_FAIL"
-            summary.errorDetail = "Commit novo sem sha no body."
-            GoTo FailWithSummary
-        End If
-
-        Dim updReq As String
-        updReq = "{""sha"":""" & newCommitSha & """,""force"":" & LCase$(GitCfg_Get("GH_FORCE_UPDATE", "false")) & "}"
-        Dim patchResp As GH_HttpCallResult
-        patchResp = Git_Http("PATCH", headRefUrl, token, updReq, "GH_REF_UPDATE")
-
-        If patchResp.ok Then
-            summary.ok = True
-            summary.commitSha = newCommitSha
-            summary.errorCode = ""
-            summary.errorDetail = ""
-            Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_REF_UPDATED", "HEAD atualizado no GitHub.", "attempt=" & CStr(attempt) & " | sha=" & Left$(newCommitSha, 10))
-            GitData_CommitFiles = summary
-            Exit Function
-        End If
-
-        If patchResp.status = 409 Then
-            Call Debug_Registar(0, pipelineNome, "ALERTA", "", "GH_REF_CONFLICT", "Conflito ao atualizar ref da branch.", "attempt=" & CStr(attempt) & " | " & Git_HttpErrorDetail(patchResp))
-            If retryOnConflict And attempt < maxRetries Then
-                Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_RETRY_ATTEMPT", "Retry de commit após conflito de concorrência.", "attempt=" & CStr(attempt + 1) & " of " & CStr(maxRetries))
-                GoTo NextAttempt
-            End If
-            summary.errorCode = "GH_REF_CONFLICT"
-            summary.errorDetail = Git_HttpErrorDetail(patchResp)
-            GoTo FailWithSummary
-        End If
-
-        summary.errorCode = "GH_REF_UPDATE_FAIL"
-        summary.errorDetail = Git_HttpErrorDetail(patchResp)
-        GoTo FailWithSummary
-NextAttempt:
-    Next attempt
-
-    If summary.errorCode = "" Then
-        summary.errorCode = "GH_DONE_FAIL"
-        summary.errorDetail = "Tentativas esgotadas sem sucesso."
-    End If
-    GoTo FailWithSummary
-
-FailWithSummary:
-    summary.ok = False
-    If summary.errorCode = "" Then summary.errorCode = "GH_DONE_FAIL"
-    If summary.errorDetail = "" Then summary.errorDetail = "Falha não detalhada no fluxo GitHub."
-    GitData_CommitFiles = summary
-    Exit Function
-
-EH:
-    summary.ok = False
-    summary.errorCode = "GH_DONE_FAIL"
-    summary.errorDetail = "Exceção VBA: " & Err.Description
-    GitData_CommitFiles = summary
-End Function
-
-Private Function Git_CreateBlob(ByVal apiBase As String, ByVal owner As String, ByVal repo As String, ByVal token As String, ByVal content As String, ByRef summary As GH_CommitOrchestratorResult) As String
-    Dim req As String
-    req = "{""content"":""" & Json_EscapeString(content) & """,""encoding"":""utf-8""}"
-
-    Dim resp As GH_HttpCallResult
-    resp = Git_Http("POST", apiBase & "/repos/" & owner & "/" & repo & "/git/blobs", token, req, "GH_BLOB_CREATE")
-    If Not resp.ok Then
-        summary.errorCode = "GH_BLOB_CREATE_FAIL"
-        summary.errorDetail = Git_HttpErrorDetail(resp)
-        Git_CreateBlob = ""
-        Exit Function
-    End If
-
-    Git_CreateBlob = JsonPick(resp.body, "sha")
-    If Git_CreateBlob = "" Then
-        summary.errorCode = "GH_BLOB_PARSE_FAIL"
-        summary.errorDetail = "Blob sem sha no body."
-    End If
-End Function
-
-Private Function Git_Http(ByVal method As String, ByVal url As String, ByVal token As String, ByVal body As String, ByVal stepName As String) As GH_HttpCallResult
-    Dim result As GH_HttpCallResult
-    result = GH_HTTP_RequestJsonResult(method, url, token, body, stepName, GitCfg_Get("GH_USER_AGENT", "PIPELINER-VBA"))
-
-    If Not result.ok And Len(result.errorDetail) = 0 Then
-        result.errorDetail = "HTTP status=" & CStr(result.status)
-        If Len(result.body) > 0 Then result.errorDetail = result.errorDetail & " | body=" & Left$(result.body, 300)
-    End If
-
-    Git_Http = result
-End Function
-
-Private Function Git_HttpErrorDetail(ByRef callResult As GH_HttpCallResult) As String
-    Dim detail As String
-    detail = "step=" & callResult.stepName & " | status=" & CStr(callResult.status)
-    If Len(callResult.errorDetail) > 0 Then
-        detail = detail & " | err=" & callResult.errorDetail
-    End If
-    If Len(callResult.body) > 0 Then
-        detail = detail & " | body=" & Left$(Replace$(callResult.body, vbCrLf, " "), 300)
-    End If
-    Git_HttpErrorDetail = detail
-End Function
-
-Private Function GitCfg_GetBool(ByVal keyName As String, ByVal defaultValue As Boolean) As Boolean
-    Dim raw As String
-    raw = UCase$(Trim$(GitCfg_Get(keyName, IIf(defaultValue, "true", "false"))))
-    If raw = "TRUE" Or raw = "1" Or raw = "SIM" Or raw = "YES" Then
-        GitCfg_GetBool = True
-    ElseIf raw = "FALSE" Or raw = "0" Or raw = "NAO" Or raw = "NÃO" Or raw = "NO" Then
-        GitCfg_GetBool = False
-    Else
-        GitCfg_GetBool = defaultValue
-    End If
-End Function
-
-Private Function GitCfg_GetLong(ByVal keyName As String, ByVal defaultValue As Long) As Long
-    Dim raw As String
-    raw = Trim$(GitCfg_Get(keyName, CStr(defaultValue)))
-    If IsNumeric(raw) Then
-        GitCfg_GetLong = CLng(raw)
-    Else
-        GitCfg_GetLong = defaultValue
-    End If
-End Function
-
-Private Function JsonPickTreeSha(ByVal body As String) As String
-    Dim re As Object: Set re = CreateObject("VBScript.RegExp")
-    re.Global = False
-    re.IgnoreCase = True
-    re.Pattern = """tree""\s*:\s*\{\s*""sha""\s*:\s*""([^""]+)"""
-    If re.Test(body) Then JsonPickTreeSha = re.Execute(body)(0).SubMatches(0)
-End Function
-
-Private Function JsonPick(ByVal body As String, ByVal keyName As String) As String
-    Dim re As Object: Set re = CreateObject("VBScript.RegExp")
-    re.Global = False
-    re.IgnoreCase = True
-    re.Pattern = """" & keyName & """" & "\s*:\s*""([^""]+)"""
-    If re.Test(body) Then JsonPick = re.Execute(body)(0).SubMatches(0)
-End Function
-
-Private Function GitCfg_Get(ByVal keyName As String, ByVal defaultValue As String) As String
-    On Error GoTo Fallback
-    Dim ws As Worksheet: Set ws = ThisWorkbook.Worksheets(SHEET_CONFIG)
-    Dim lastRow As Long: lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    Dim i As Long
-    For i = 1 To lastRow
-        If StrComp(Trim$(CStr(ws.Cells(i, 1).Value)), keyName, vbTextCompare) = 0 Then
-            GitCfg_Get = Trim$(CStr(ws.Cells(i, 2).Value))
-            If GitCfg_Get = "" Then GitCfg_Get = defaultValue
-            Exit Function
-        End If
-    Next i
-Fallback:
-    GitCfg_Get = defaultValue
-End Function
-
-Private Function GitCfg_ResolveToken() As String
-    Dim envKey As String: envKey = GitCfg_Get("GH_TOKEN_ENV", "GITHUB_TOKEN")
-    Dim t As String
-    t = Trim$(CStr(Environ$(envKey)))
-    If t = "" Then
-        t = GitCfg_Get("GH_TOKEN_CONFIG", "")
-    End If
-    GitCfg_ResolveToken = t
-End Function
-
 Private Sub GitDebug_WriteLinkToSeguimento(ByVal pipelineNome As String, ByVal link As String)
     On Error Resume Next
-    Dim ws As Worksheet: Set ws = ThisWorkbook.Worksheets(SHEET_SEGUIMENTO)
-    Dim map As Object: Set map = HeaderMap(ws)
-    Dim cPipe As Long: cPipe = MapGet(map, "pipeline_name")
-    Dim cGit As Long: cGit = MapGet(map, "GIT_DEBUG")
+
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(SHEET_SEGUIMENTO)
+
+    Dim map As Object
+    Set map = HeaderMap(ws)
+
+    Dim cPipe As Long
+    cPipe = MapGet(map, "pipeline_name")
+
+    Dim cGit As Long
+    cGit = MapGet(map, "GIT_DEBUG")
     If cGit = 0 Then
         cGit = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column + 1
         ws.Cells(1, cGit).Value = "GIT_DEBUG"
     End If
 
-    Dim lr As Long: lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    Dim lr As Long
+    lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+
     Dim r As Long
     For r = 2 To lr
         If Trim$(CStr(ws.Cells(r, cPipe).Value)) = pipelineNome Then ws.Cells(r, cGit).Value = link
@@ -511,16 +280,27 @@ End Sub
 
 Private Sub GitDebug_WriteLinkToHistorico(ByVal pipelineNome As String, ByVal link As String)
     On Error Resume Next
-    Dim ws As Worksheet: Set ws = ThisWorkbook.Worksheets(SHEET_HIST)
-    Dim map As Object: Set map = HeaderMap(ws)
-    Dim cPipe As Long: cPipe = MapGet(map, "Nome do Pipeline")
-    Dim cGit As Long: cGit = MapGet(map, "GIT_DEBUG")
+
+    Dim ws As Worksheet
+    Set ws = GitDebug_GetHistoricoSheet()
+    If ws Is Nothing Then Exit Sub
+
+    Dim map As Object
+    Set map = HeaderMap(ws)
+
+    Dim cPipe As Long
+    cPipe = MapGet(map, "Nome do Pipeline")
+
+    Dim cGit As Long
+    cGit = MapGet(map, "GIT_DEBUG")
     If cGit = 0 Then
         cGit = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column + 1
         ws.Cells(1, cGit).Value = "GIT_DEBUG"
     End If
 
-    Dim lr As Long: lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    Dim lr As Long
+    lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+
     Dim r As Long
     For r = 2 To lr
         If Trim$(CStr(ws.Cells(r, cPipe).Value)) = pipelineNome And Trim$(CStr(ws.Cells(r, cGit).Value)) = "" Then
@@ -529,22 +309,39 @@ Private Sub GitDebug_WriteLinkToHistorico(ByVal pipelineNome As String, ByVal li
     Next r
 End Sub
 
+
+Private Function GitDebug_GetHistoricoSheet() As Worksheet
+    On Error Resume Next
+    Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets("HISTÃ“RICO")
+    If GitDebug_GetHistoricoSheet Is Nothing Then Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets(SHEET_HIST)
+    On Error GoTo 0
+End Function
+
 Private Function HeaderMap(ByVal ws As Worksheet) As Object
-    Dim d As Object: Set d = CreateObject("Scripting.Dictionary")
+    Dim d As Object
+    Set d = CreateObject("Scripting.Dictionary")
     d.CompareMode = 1
-    Dim lc As Long: lc = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+
+    Dim lc As Long
+    lc = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+
     Dim c As Long
     For c = 1 To lc
         d(Trim$(CStr(ws.Cells(1, c).Value))) = c
     Next c
+
     Set HeaderMap = d
 End Function
 
-Private Function MapGet(ByVal d As Object, ByVal key As String) As Long
-    If d.exists(key) Then MapGet = CLng(d(key)) Else MapGet = 0
+Private Function MapGet(ByVal d As Object, ByVal keyName As String) As Long
+    If d.exists(keyName) Then
+        MapGet = CLng(d(keyName))
+    Else
+        MapGet = 0
+    End If
 End Function
 
-Private Function Git_SanitizePathPart(ByVal s As String) As String
+Private Function GitDebug_SanitizePathPart(ByVal s As String) As String
     Dim out As String
     out = Trim$(s)
     out = Replace(out, "\", "-")
@@ -557,39 +354,14 @@ Private Function Git_SanitizePathPart(ByVal s As String) As String
     out = Replace(out, ">", "-")
     out = Replace(out, "|", "-")
     If out = "" Then out = "pipeline"
-    Git_SanitizePathPart = out
-End Function
-
-Private Function Git_UrlEncodePath(ByVal p As String) As String
-    Dim parts() As String
-    parts = Split(p, "/")
-    Dim i As Long, out As String
-    For i = LBound(parts) To UBound(parts)
-        If i > LBound(parts) Then out = out & "/"
-        out = out & Git_UrlEncodeSegment(CStr(parts(i)))
-    Next i
-    Git_UrlEncodePath = out
-End Function
-
-Private Function Git_UrlEncodeSegment(ByVal s As String) As String
-    Dim i As Long, ch As String, code As Long, out As String
-    For i = 1 To Len(s)
-        ch = Mid$(s, i, 1)
-        code = AscW(ch)
-        If (code >= 48 And code <= 57) Or (code >= 65 And code <= 90) Or (code >= 97 And code <= 122) Or ch = "-" Or ch = "_" Or ch = "." Then
-            out = out & ch
-        Else
-            out = out & "%" & Right$("0" & Hex$(code), 2)
-        End If
-    Next i
-    Git_UrlEncodeSegment = out
+    GitDebug_SanitizePathPart = out
 End Function
 
 Public Sub GitDebug_Config_InstalarParametros(Optional ByVal sobrescreverValores As Boolean = False)
     On Error GoTo EH
 
     Dim ws As Worksheet
-    Set ws = ThisWorkbook.Worksheets(SHEET_CONFIG)
+    Set ws = ThisWorkbook.Worksheets("Config")
 
     Call GitDebug_Config_EnsureGuideHeaders(ws)
 

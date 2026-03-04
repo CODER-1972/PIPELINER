@@ -2,73 +2,61 @@ Attribute VB_Name = "M23_GH_HTTP"
 Option Explicit
 
 ' =============================================================================
-' MÃ³dulo: M23_GH_HTTP
-' PropÃ³sito:
-' - Encapsular chamadas HTTP para integraÃ§Ã£o GitHub da exportaÃ§Ã£o DEBUG.
-' - Aplicar fallback entre WinHTTP e MSXML com interface Ãºnica.
-' - Isolar detalhes de headers/autenticaÃ§Ã£o do orquestrador.
+' Modulo: M23_GH_HTTP
+' Proposito:
+' - Encapsular requests GitHub (GET/POST/PATCH) com headers canonicos.
+' - Isolar fallback de engine HTTP (WinHTTP -> MSXML) para portabilidade.
+' - Expor diagnostico minimo (status/erro/response) para fluxo de commit.
 '
-' AtualizaÃ§Ãµes:
-' - 2026-03-04 | Codex | Resultado HTTP estruturado para integraÃ§Ã£o GitHub
-'   - Adiciona GH_HTTP_RequestJsonResult com contrato GH_HttpCallResult.
-'   - MantÃ©m compatibilidade via wrapper GH_HTTP_RequestJson.
-' - 2026-03-04 | Codex | CriaÃ§Ã£o do mÃ³dulo HTTP GitHub
-'   - Adiciona request JSON com fallback de engine WinHTTP -> MSXML.
-'   - ExpÃµe status/response para logging e decisÃ£o no mÃ³dulo facade.
+' Atualizacoes:
+' - 2026-03-04 | Codex | Refactor HTTP para modulo dedicado
+'   - Move construcao de headers GitHub para helper canonico unico.
+'   - Implementa send JSON com fallback WinHTTP/MSXML e output padronizado.
+'   - Adiciona optional logging controlado por GH_LOG_HTTP.
 '
-' FunÃ§Ãµes e procedimentos:
-' - GH_HTTP_RequestJsonResult(method, url, token, body, stepName, userAgent) As GH_HttpCallResult
-'   - Executa chamada HTTP autenticada e devolve resultado estruturado.
-' - GH_HTTP_RequestJson(method, url, token, body, statusCode, responseText, errText, userAgent) As Boolean
-'   - Wrapper retrocompatÃ­vel baseado em status/response/erro por referÃªncia.
+' Funcoes e procedimentos:
+' - GH_HTTP_SendJson(method, url, cfg, body, statusCode, responseText, errText, pipelineNome) As Boolean
+'   - Executa request JSON autenticado e devolve sucesso por HTTP 2xx.
 ' =============================================================================
 
-Public Function GH_HTTP_RequestJsonResult( _
+Public Function GH_HTTP_SendJson( _
     ByVal method As String, _
     ByVal url As String, _
-    ByVal token As String, _
-    ByVal body As String, _
-    ByVal stepName As String, _
-    Optional ByVal userAgent As String = "PIPELINER-GitDebugExport") As GH_HttpCallResult
-
-    Dim result As GH_HttpCallResult
-    result.stepName = stepName
-
-    If GH_HTTP_RequestWithWinHttp(method, url, token, body, result, userAgent) Then
-        GH_HTTP_RequestJsonResult = result
-        Exit Function
-    End If
-
-    Call GH_HTTP_RequestWithMsxml(method, url, token, body, result, userAgent)
-    GH_HTTP_RequestJsonResult = result
-End Function
-
-Public Function GH_HTTP_RequestJson( _
-    ByVal method As String, _
-    ByVal url As String, _
-    ByVal token As String, _
+    ByVal cfg As Object, _
     ByVal body As String, _
     ByRef statusCode As Long, _
     ByRef responseText As String, _
     ByRef errText As String, _
-    Optional ByVal userAgent As String = "PIPELINER-GitDebugExport") As Boolean
+    Optional ByVal pipelineNome As String = "") As Boolean
 
-    Dim result As GH_HttpCallResult
-    result = GH_HTTP_RequestJsonResult(method, url, token, body, method & " " & url, userAgent)
+    statusCode = 0
+    responseText = ""
+    errText = ""
 
-    statusCode = result.status
-    responseText = result.body
-    errText = result.errorDetail
-    GH_HTTP_RequestJson = result.ok
+    If GH_HTTP_SendWithWinHttp(method, url, cfg, body, statusCode, responseText, errText) Then
+        GH_HTTP_SendJson = (statusCode >= 200 And statusCode < 300)
+        Call GH_HTTP_Log(method, url, statusCode, cfg, pipelineNome)
+        Exit Function
+    End If
+
+    If GH_HTTP_SendWithMsxml(method, url, cfg, body, statusCode, responseText, errText) Then
+        GH_HTTP_SendJson = (statusCode >= 200 And statusCode < 300)
+        Call GH_HTTP_Log(method, url, statusCode, cfg, pipelineNome)
+        Exit Function
+    End If
+
+    Call GH_HTTP_LogFailure(method, url, errText, cfg, pipelineNome)
+    GH_HTTP_SendJson = False
 End Function
 
-Private Function GH_HTTP_RequestWithWinHttp( _
+Private Function GH_HTTP_SendWithWinHttp( _
     ByVal method As String, _
     ByVal url As String, _
-    ByVal token As String, _
+    ByVal cfg As Object, _
     ByVal body As String, _
-    ByRef result As GH_HttpCallResult, _
-    ByVal userAgent As String) As Boolean
+    ByRef statusCode As Long, _
+    ByRef responseText As String, _
+    ByRef errText As String) As Boolean
 
     On Error GoTo EH
 
@@ -76,29 +64,32 @@ Private Function GH_HTTP_RequestWithWinHttp( _
     Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
 
     http.Open method, url, False
-    Call GH_HTTP_ApplyHeaders(http, token, userAgent)
-    http.Send body
+    Call GH_HTTP_ApplyGitHubHeaders(http, cfg)
 
-    result.status = CLng(http.Status)
-    result.body = CStr(http.ResponseText)
-    result.ok = (result.status >= 200 And result.status < 300)
-    GH_HTTP_RequestWithWinHttp = True
+    If body <> "" Then
+        http.Send body
+    Else
+        http.Send
+    End If
+
+    statusCode = CLng(http.Status)
+    responseText = CStr(http.ResponseText)
+    GH_HTTP_SendWithWinHttp = True
     Exit Function
+
 EH:
-    result.ok = False
-    result.status = 0
-    result.body = ""
-    result.errorDetail = "WINHTTP: " & Err.Description
-    GH_HTTP_RequestWithWinHttp = False
+    errText = "WINHTTP: " & Err.Description
+    GH_HTTP_SendWithWinHttp = False
 End Function
 
-Private Function GH_HTTP_RequestWithMsxml( _
+Private Function GH_HTTP_SendWithMsxml( _
     ByVal method As String, _
     ByVal url As String, _
-    ByVal token As String, _
+    ByVal cfg As Object, _
     ByVal body As String, _
-    ByRef result As GH_HttpCallResult, _
-    ByVal userAgent As String) As Boolean
+    ByRef statusCode As Long, _
+    ByRef responseText As String, _
+    ByRef errText As String) As Boolean
 
     On Error GoTo EH
 
@@ -106,27 +97,39 @@ Private Function GH_HTTP_RequestWithMsxml( _
     Set http = CreateObject("MSXML2.XMLHTTP")
 
     http.Open method, url, False
-    Call GH_HTTP_ApplyHeaders(http, token, userAgent)
-    http.Send body
+    Call GH_HTTP_ApplyGitHubHeaders(http, cfg)
 
-    result.status = CLng(http.Status)
-    result.body = CStr(http.responseText)
-    result.ok = (result.status >= 200 And result.status < 300)
-    GH_HTTP_RequestWithMsxml = True
+    If body <> "" Then
+        http.Send body
+    Else
+        http.Send
+    End If
+
+    statusCode = CLng(http.Status)
+    responseText = CStr(http.responseText)
+    GH_HTTP_SendWithMsxml = True
     Exit Function
+
 EH:
-    result.ok = False
-    result.status = 0
-    result.body = ""
-    If Len(result.errorDetail) > 0 Then result.errorDetail = result.errorDetail & " | "
-    result.errorDetail = result.errorDetail & "MSXML: " & Err.Description
-    GH_HTTP_RequestWithMsxml = False
+    If errText <> "" Then errText = errText & " | "
+    errText = errText & "MSXML: " & Err.Description
+    GH_HTTP_SendWithMsxml = False
 End Function
 
-Private Sub GH_HTTP_ApplyHeaders(ByVal http As Object, ByVal token As String, ByVal userAgent As String)
+Private Sub GH_HTTP_ApplyGitHubHeaders(ByVal http As Object, ByVal cfg As Object)
+    http.setRequestHeader "Authorization", "Bearer " & GH_Config_GetString(cfg, "token")
     http.setRequestHeader "Accept", "application/vnd.github+json"
-    http.setRequestHeader "X-GitHub-Api-Version", "2022-11-28"
-    http.setRequestHeader "Authorization", "Bearer " & token
-    http.setRequestHeader "User-Agent", userAgent
+    http.setRequestHeader "X-GitHub-Api-Version", GH_Config_GetString(cfg, "api_version", "2022-11-28")
+    http.setRequestHeader "User-Agent", GH_Config_GetString(cfg, "user_agent", "PIPELINER-VBA")
     http.setRequestHeader "Content-Type", "application/json"
+End Sub
+
+Private Sub GH_HTTP_Log(ByVal method As String, ByVal url As String, ByVal statusCode As Long, ByVal cfg As Object, ByVal pipelineNome As String)
+    If Not GH_Config_GetBoolean(cfg, "log_http", False) Then Exit Sub
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_HTTP, method & " " & url, "http_status=" & CStr(statusCode))
+End Sub
+
+Private Sub GH_HTTP_LogFailure(ByVal method As String, ByVal url As String, ByVal errText As String, ByVal cfg As Object, ByVal pipelineNome As String)
+    If Not GH_Config_GetBoolean(cfg, "log_http", False) Then Exit Sub
+    Call GH_LogWarn(0, pipelineNome, GH_EVT_HTTP_FAIL, method & " " & url, errText)
 End Sub
