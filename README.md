@@ -65,6 +65,14 @@ Inclui módulos que:
 - persistem auditoria por passo;
 - resolvem encadeamento (`Next PROMPT`) até `STOP`.
 
+Também inclui um fluxo opcional de exportação dos logs `DEBUG`/`Seguimento` para GitHub, orquestrado por `M21_GitDebugExport` com separação por responsabilidades:
+
+- `M22_GH_Config`: leitura de `GIT_DEBUG_*` na folha `Config`;
+- `M23_GH_HTTP`: cliente HTTP com fallback WinHTTP/MSXML;
+- `M24_GH_Blob`: encoding UTF-8/Base64 e escaping JSON;
+- `M25_GH_TreeCommit`: composição de endpoint/payload de commit no GitHub;
+- `M26_GH_Logger`: logging funcional dedicado no `DEBUG`.
+
 ---
 
 ## 3. Estrutura funcional do workbook
