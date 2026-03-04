@@ -8,6 +8,9 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no histórico de ficheiros.
 '
 ' Atualizações:
+' - 2026-03-04 | Codex | Normalização robusta de auto_save (aliases além de sim/não)
+'   - Reconhece aliases case-insensitive para NO/YES (false/true, off/on, 0/1, etc.) sem quebrar valores históricos.
+'   - Mantém retrocompatibilidade: valores não reconhecidos continuam a comportar-se como ativo (auto-save ligado).
 ' - 2026-03-04 | Codex | Consistencia de marcadores afirmativos CI
 '   - Alinha CI_IsAffirmativeMarker com o contrato ci_csv_v1 (aceita SIM/TRUE/YES/OK/1/Y/S).
 '   - Evita divergencia entre M10_CI_PROOF_SUMMARY e validacao de contrato no M19.
@@ -351,7 +354,7 @@ Public Function FileOutput_ProcessAfterResponse( _
     End If
     Dim aAuto As String
     aAuto = LCase$(Trim$(autoSave))
-    If aAuto = "no" Or aAuto = "nao" Or aAuto = "não" Then
+    If FileOutput_IsAutoSaveDisabled(aAuto) Then
         FileOutput_ProcessAfterResponse = "[FILE OUTPUT] auto_save=Não (config) - raw guardado: " & rawPath
         Exit Function
     End If
@@ -374,6 +377,24 @@ End Function
 ' ============================================================
 ' Implementação - METADATA (manifest JSON)
 ' ============================================================
+Private Function FileOutput_IsAutoSaveDisabled(ByVal autoSaveRaw As String) As Boolean
+    Dim v As String
+    v = LCase$(Trim$(CStr(autoSaveRaw)))
+    If v = "" Then Exit Function
+
+    Select Case v
+        Case "no", "nao", "não", "false", "falso", "off", "0", "disabled", "desativado", "desactivado"
+            FileOutput_IsAutoSaveDisabled = True
+            Exit Function
+        Case "sim", "yes", "true", "verdadeiro", "on", "1", "enabled", "ativo", "activo"
+            FileOutput_IsAutoSaveDisabled = False
+            Exit Function
+    End Select
+
+    ' Retrocompatibilidade: valor nao reconhecido mantem auto-save ativo.
+    FileOutput_IsAutoSaveDisabled = False
+End Function
+
 Private Function Process_Metadata( _
     ByVal runFolder As String, _
     ByVal rawFolder As String, _
