@@ -9,14 +9,39 @@ Option Explicit
 ' - Isolar detalhes de headers/autenticaÃ§Ã£o do orquestrador.
 '
 ' AtualizaÃ§Ãµes:
+' - 2026-03-04 | Codex | Resultado HTTP estruturado para integraÃ§Ã£o GitHub
+'   - Adiciona GH_HTTP_RequestJsonResult com contrato GH_HttpCallResult.
+'   - MantÃ©m compatibilidade via wrapper GH_HTTP_RequestJson.
 ' - 2026-03-04 | Codex | CriaÃ§Ã£o do mÃ³dulo HTTP GitHub
 '   - Adiciona request JSON com fallback de engine WinHTTP -> MSXML.
 '   - ExpÃµe status/response para logging e decisÃ£o no mÃ³dulo facade.
 '
 ' FunÃ§Ãµes e procedimentos:
+' - GH_HTTP_RequestJsonResult(method, url, token, body, stepName, userAgent) As GH_HttpCallResult
+'   - Executa chamada HTTP autenticada e devolve resultado estruturado.
 ' - GH_HTTP_RequestJson(method, url, token, body, statusCode, responseText, errText, userAgent) As Boolean
-'   - Executa chamada HTTP autenticada para API GitHub e devolve sucesso/falha.
+'   - Wrapper retrocompatÃ­vel baseado em status/response/erro por referÃªncia.
 ' =============================================================================
+
+Public Function GH_HTTP_RequestJsonResult( _
+    ByVal method As String, _
+    ByVal url As String, _
+    ByVal token As String, _
+    ByVal body As String, _
+    ByVal stepName As String, _
+    Optional ByVal userAgent As String = "PIPELINER-GitDebugExport") As GH_HttpCallResult
+
+    Dim result As GH_HttpCallResult
+    result.stepName = stepName
+
+    If GH_HTTP_RequestWithWinHttp(method, url, token, body, result, userAgent) Then
+        GH_HTTP_RequestJsonResult = result
+        Exit Function
+    End If
+
+    Call GH_HTTP_RequestWithMsxml(method, url, token, body, result, userAgent)
+    GH_HTTP_RequestJsonResult = result
+End Function
 
 Public Function GH_HTTP_RequestJson( _
     ByVal method As String, _
@@ -28,21 +53,13 @@ Public Function GH_HTTP_RequestJson( _
     ByRef errText As String, _
     Optional ByVal userAgent As String = "PIPELINER-GitDebugExport") As Boolean
 
-    statusCode = 0
-    responseText = ""
-    errText = ""
+    Dim result As GH_HttpCallResult
+    result = GH_HTTP_RequestJsonResult(method, url, token, body, method & " " & url, userAgent)
 
-    If GH_HTTP_RequestWithWinHttp(method, url, token, body, statusCode, responseText, errText, userAgent) Then
-        GH_HTTP_RequestJson = (statusCode >= 200 And statusCode < 300)
-        Exit Function
-    End If
-
-    If GH_HTTP_RequestWithMsxml(method, url, token, body, statusCode, responseText, errText, userAgent) Then
-        GH_HTTP_RequestJson = (statusCode >= 200 And statusCode < 300)
-        Exit Function
-    End If
-
-    GH_HTTP_RequestJson = False
+    statusCode = result.status
+    responseText = result.body
+    errText = result.errorDetail
+    GH_HTTP_RequestJson = result.ok
 End Function
 
 Private Function GH_HTTP_RequestWithWinHttp( _
@@ -50,9 +67,7 @@ Private Function GH_HTTP_RequestWithWinHttp( _
     ByVal url As String, _
     ByVal token As String, _
     ByVal body As String, _
-    ByRef statusCode As Long, _
-    ByRef responseText As String, _
-    ByRef errText As String, _
+    ByRef result As GH_HttpCallResult, _
     ByVal userAgent As String) As Boolean
 
     On Error GoTo EH
@@ -64,12 +79,16 @@ Private Function GH_HTTP_RequestWithWinHttp( _
     Call GH_HTTP_ApplyHeaders(http, token, userAgent)
     http.Send body
 
-    statusCode = CLng(http.Status)
-    responseText = CStr(http.ResponseText)
+    result.status = CLng(http.Status)
+    result.body = CStr(http.ResponseText)
+    result.ok = (result.status >= 200 And result.status < 300)
     GH_HTTP_RequestWithWinHttp = True
     Exit Function
 EH:
-    errText = "WINHTTP: " & Err.Description
+    result.ok = False
+    result.status = 0
+    result.body = ""
+    result.errorDetail = "WINHTTP: " & Err.Description
     GH_HTTP_RequestWithWinHttp = False
 End Function
 
@@ -78,9 +97,7 @@ Private Function GH_HTTP_RequestWithMsxml( _
     ByVal url As String, _
     ByVal token As String, _
     ByVal body As String, _
-    ByRef statusCode As Long, _
-    ByRef responseText As String, _
-    ByRef errText As String, _
+    ByRef result As GH_HttpCallResult, _
     ByVal userAgent As String) As Boolean
 
     On Error GoTo EH
@@ -92,13 +109,17 @@ Private Function GH_HTTP_RequestWithMsxml( _
     Call GH_HTTP_ApplyHeaders(http, token, userAgent)
     http.Send body
 
-    statusCode = CLng(http.Status)
-    responseText = CStr(http.responseText)
+    result.status = CLng(http.Status)
+    result.body = CStr(http.responseText)
+    result.ok = (result.status >= 200 And result.status < 300)
     GH_HTTP_RequestWithMsxml = True
     Exit Function
 EH:
-    If Len(errText) > 0 Then errText = errText & " | "
-    errText = errText & "MSXML: " & Err.Description
+    result.ok = False
+    result.status = 0
+    result.body = ""
+    If Len(result.errorDetail) > 0 Then result.errorDetail = result.errorDetail & " | "
+    result.errorDetail = result.errorDetail & "MSXML: " & Err.Description
     GH_HTTP_RequestWithMsxml = False
 End Function
 

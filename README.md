@@ -113,7 +113,9 @@ Também suporta exportação opcional de debug para GitHub (Git Data API) no fim
 - atualização da coluna `GIT_DEBUG` nas folhas `Seguimento` e `HISTÓRICO` com o link da pasta remota.
 - macro `GitDebug_Config_InstalarParametros` para preencher/atualizar na folha `Config` as chaves `GH_*` com `default`, explicação pedagógica (coluna C) e valores/intervalos possíveis (coluna E), sem forçar overwrite dos valores atuais por defeito.
 
-Configuração recomendada (folha `Config`, formato Key/Value): `GH_OWNER`, `GH_REPO`, `GH_BRANCH`, `GH_API_BASE`, `GH_TOKEN_ENV`, `GH_TOKEN_CONFIG`, `GH_COMMIT_MESSAGE_TEMPLATE`, `GH_BASE_PATH`, `GH_API_VERSION`, `GH_USER_AGENT`.
+Configuração recomendada (folha `Config`, formato Key/Value): `GH_OWNER`, `GH_REPO`, `GH_BRANCH`, `GH_API_BASE`, `GH_TOKEN_ENV`, `GH_TOKEN_CONFIG`, `GH_COMMIT_MESSAGE_TEMPLATE`, `GH_BASE_PATH`, `GH_API_VERSION`, `GH_USER_AGENT`, `GH_RETRY_ON_CONFLICT`, `GH_MAX_RETRIES`.
+
+No update de `PATCH /git/refs/heads/{branch}`, conflitos HTTP `409` são tratados explicitamente como concorrência: quando `GH_RETRY_ON_CONFLICT=true`, o fluxo reinicia desde a leitura de HEAD até ao limite de `GH_MAX_RETRIES`, registando eventos canónicos `GH_REF_CONFLICT`, `GH_RETRY_ATTEMPT`, `GH_REF_UPDATED` e `GH_DONE_FAIL`.
 
 ### Quadro resumido `GH_*` (defaults e valores permitidos)
 
