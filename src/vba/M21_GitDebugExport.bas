@@ -9,6 +9,10 @@ Option Explicit
 ' - Registar o link da pasta remota em Seguimento/HISTORICO na coluna GIT_DEBUG.
 '
 ' Atualizacoes:
+' - 2026-03-04 | Codex | Retry com conflito 409 e resumo para orquestrador
+'   - Introduz contrato estruturado de HTTP/resultado final (ok/status/body/errorDetail/stepName).
+'   - Implementa retry configurável (GH_RETRY_ON_CONFLICT/GH_MAX_RETRIES) desde leitura de HEAD.
+'   - Regista eventos canónicos GH_REF_CONFLICT, GH_RETRY_ATTEMPT, GH_REF_UPDATED e GH_DONE_FAIL.
 ' - 2026-03-04 | Codex | Macro de instalacao guiada dos parametros GH_* no Config
 '   - Adiciona rotina para criar/atualizar chaves GH_* com default, explicacao pedagogica e valores possiveis.
 '   - Mantem retrocompatibilidade (nao sobrescreve valores existentes por defeito).
@@ -54,9 +58,12 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     Set files = GitDebug_BuildFilesForUpload(pipelineIndex, pipelineNome, ghFolder)
     If files Is Nothing Or files.Count = 0 Then Exit Sub
 
-    Dim commitSha As String
-    commitSha = GitData_CommitFiles(owner, repo, branch, token, files, pipelineNome)
-    If Trim$(commitSha) = "" Then Exit Sub
+    Dim commitSummary As GH_CommitOrchestratorResult
+    commitSummary = GitData_CommitFiles(owner, repo, branch, token, files, pipelineNome)
+    If Not commitSummary.ok Then
+        Call Debug_Registar(0, pipelineNome, "ERRO", "", "GH_DONE_FAIL", "Falha no auto-upload de debug.", "code=" & commitSummary.errorCode & " | detail=" & commitSummary.errorDetail)
+        Exit Sub
+    End If
 
     Dim webUrl As String
     webUrl = "https://github.com/" & owner & "/" & repo & "/tree/" & Git_UrlEncodeSegment(branch) & "/" & Git_UrlEncodePath(ghFolder)
@@ -64,7 +71,7 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     Call GitDebug_WriteLinkToSeguimento(pipelineNome, webUrl)
     Call GitDebug_WriteLinkToHistorico(pipelineNome, webUrl)
 
-    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_REF_UPDATED", "Debug export publicado no GitHub.", webUrl)
+    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_REF_UPDATED", "Debug export publicado no GitHub.", "attempts=" & CStr(commitSummary.attemptCount) & " | " & webUrl)
     Exit Sub
 EH:
     Call Debug_Registar(0, pipelineNome, "ERRO", "", "GH_UPLOAD", "Falha no auto-upload de debug: " & Err.Description, "Validar parâmetros GH_* e conectividade com api.github.com.")
@@ -225,90 +232,221 @@ Private Function GitFileItem(ByVal path As String, ByVal content As String) As O
     Set GitFileItem = d
 End Function
 
-Private Function GitData_CommitFiles(ByVal owner As String, ByVal repo As String, ByVal branch As String, ByVal token As String, ByVal files As Collection, ByVal pipelineNome As String) As String
+Private Function GitData_CommitFiles(ByVal owner As String, ByVal repo As String, ByVal branch As String, ByVal token As String, ByVal files As Collection, ByVal pipelineNome As String) As GH_CommitOrchestratorResult
     On Error GoTo EH
 
+    Dim summary As GH_CommitOrchestratorResult
     Dim apiBase As String: apiBase = GitCfg_Get("GH_API_BASE", "https://api.github.com")
     Dim headRefUrl As String
-    headRefUrl = apiBase & "/repos/" & owner & "/" & repo & "/git/ref/heads/" & branch
+    headRefUrl = apiBase & "/repos/" & owner & "/" & repo & "/git/refs/heads/" & branch
 
-    Dim refBody As String
-    refBody = Git_Http("GET", headRefUrl, token, "")
-    Dim headSha As String: headSha = JsonPick(refBody, "sha")
-    If headSha = "" Then Exit Function
-    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_REF_OK", "HEAD obtido.", "sha=" & Left$(headSha, 10))
+    Dim retryOnConflict As Boolean
+    retryOnConflict = GitCfg_GetBool("GH_RETRY_ON_CONFLICT", True)
 
-    Dim commitBody As String
-    commitBody = Git_Http("GET", apiBase & "/repos/" & owner & "/" & repo & "/git/commits/" & headSha, token, "")
-    Dim baseTreeSha As String: baseTreeSha = JsonPickTreeSha(commitBody)
-    If baseTreeSha = "" Then baseTreeSha = JsonPick(commitBody, "sha")
+    Dim maxRetries As Long
+    maxRetries = GitCfg_GetLong("GH_MAX_RETRIES", 3)
+    If maxRetries < 1 Then maxRetries = 1
 
-    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_BASE_TREE_OK", "Base tree resolvida.", "tree_sha=" & Left$(baseTreeSha, 10))
+    Dim attempt As Long
+    For attempt = 1 To maxRetries
+        summary.attemptCount = attempt
 
-    Dim treeItems As String
-    Dim i As Long
-    For i = 1 To files.Count
-        Dim f As Object: Set f = files(i)
-        Dim blobSha As String
-        blobSha = Git_CreateBlob(apiBase, owner, repo, token, CStr(f("content")))
-        If blobSha = "" Then Exit Function
-        If treeItems <> "" Then treeItems = treeItems & ","
-        treeItems = treeItems & "{""path"":""" & Json_EscapeString(CStr(f("path")) ) & """,""mode"":""100644"",""type"":""blob"",""sha"":""" & blobSha & """}"
-    Next i
-    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_BLOBS_CREATED", "Blobs criados.", "n=" & CStr(files.Count))
+        Dim headResult As GH_HttpCallResult
+        headResult = Git_Http("GET", headRefUrl, token, "", "GH_HEAD_READ")
+        If Not headResult.ok Then
+            summary.errorCode = "GH_HEAD_READ_FAIL"
+            summary.errorDetail = Git_HttpErrorDetail(headResult)
+            GoTo FailWithSummary
+        End If
 
-    Dim treeReq As String
-    treeReq = "{""base_tree"":""" & baseTreeSha & """,""tree"": [" & treeItems & "]}"
-    Dim treeResp As String
-    treeResp = Git_Http("POST", apiBase & "/repos/" & owner & "/" & repo & "/git/trees", token, treeReq)
-    Dim treeSha As String: treeSha = JsonPick(treeResp, "sha")
-    If treeSha = "" Then Exit Function
-    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_TREE_CREATED", "Tree criada.", "sha=" & Left$(treeSha, 10))
+        Dim headSha As String: headSha = JsonPick(headResult.body, "sha")
+        If headSha = "" Then
+            summary.errorCode = "GH_HEAD_PARSE_FAIL"
+            summary.errorDetail = "HEAD sem sha no body."
+            GoTo FailWithSummary
+        End If
 
-    Dim commitMsg As String
-    commitMsg = Replace(GitCfg_Get("GH_COMMIT_MESSAGE_TEMPLATE", "PIPELINER run {{RUN_ID}}"), "{{RUN_ID}}", Format$(Now, "yyyymmdd_hhnnss"))
+        Dim commitBodyResult As GH_HttpCallResult
+        commitBodyResult = Git_Http("GET", apiBase & "/repos/" & owner & "/" & repo & "/git/commits/" & headSha, token, "", "GH_COMMIT_READ")
+        If Not commitBodyResult.ok Then
+            summary.errorCode = "GH_COMMIT_READ_FAIL"
+            summary.errorDetail = Git_HttpErrorDetail(commitBodyResult)
+            GoTo FailWithSummary
+        End If
 
-    Dim newCommitReq As String
-    newCommitReq = "{""message"":""" & Json_EscapeString(commitMsg) & """,""tree"":""" & treeSha & """,""parents"": [""" & headSha & """]}"
-    Dim newCommitResp As String
-    newCommitResp = Git_Http("POST", apiBase & "/repos/" & owner & "/" & repo & "/git/commits", token, newCommitReq)
-    Dim newCommitSha As String: newCommitSha = JsonPick(newCommitResp, "sha")
-    If newCommitSha = "" Then Exit Function
-    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_COMMIT_CREATED", "Commit criado.", "sha=" & Left$(newCommitSha, 10))
+        Dim baseTreeSha As String: baseTreeSha = JsonPickTreeSha(commitBodyResult.body)
+        If baseTreeSha = "" Then baseTreeSha = JsonPick(commitBodyResult.body, "sha")
+        If baseTreeSha = "" Then
+            summary.errorCode = "GH_BASE_TREE_PARSE_FAIL"
+            summary.errorDetail = "Commit base sem tree sha."
+            GoTo FailWithSummary
+        End If
 
-    Dim updReq As String
-    updReq = "{""sha"":""" & newCommitSha & """,""force"":" & LCase$(GitCfg_Get("GH_FORCE_UPDATE", "false")) & "}"
-    Call Git_Http("PATCH", headRefUrl, token, updReq)
+        Dim treeItems As String
+        Dim i As Long
+        For i = 1 To files.Count
+            Dim f As Object: Set f = files(i)
+            Dim blobSha As String
+            blobSha = Git_CreateBlob(apiBase, owner, repo, token, CStr(f("content")), summary)
+            If blobSha = "" Then GoTo FailWithSummary
+            If treeItems <> "" Then treeItems = treeItems & ","
+            treeItems = treeItems & "{""path"":""" & Json_EscapeString(CStr(f("path"))) & """,""mode"":""100644"",""type"":""blob"",""sha"":""" & blobSha & """}"
+        Next i
+        Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_BLOBS_CREATED", "Blobs criados.", "n=" & CStr(files.Count) & " | attempt=" & CStr(attempt))
 
-    GitData_CommitFiles = newCommitSha
+        Dim treeReq As String
+        treeReq = "{""base_tree"":""" & baseTreeSha & """,""tree"": [" & treeItems & "]}"
+        Dim treeResp As GH_HttpCallResult
+        treeResp = Git_Http("POST", apiBase & "/repos/" & owner & "/" & repo & "/git/trees", token, treeReq, "GH_TREE_CREATE")
+        If Not treeResp.ok Then
+            summary.errorCode = "GH_TREE_CREATE_FAIL"
+            summary.errorDetail = Git_HttpErrorDetail(treeResp)
+            GoTo FailWithSummary
+        End If
+
+        Dim treeSha As String: treeSha = JsonPick(treeResp.body, "sha")
+        If treeSha = "" Then
+            summary.errorCode = "GH_TREE_PARSE_FAIL"
+            summary.errorDetail = "Tree sem sha no body."
+            GoTo FailWithSummary
+        End If
+
+        Dim commitMsg As String
+        commitMsg = Replace(GitCfg_Get("GH_COMMIT_MESSAGE_TEMPLATE", "PIPELINER run {{RUN_ID}}"), "{{RUN_ID}}", Format$(Now, "yyyymmdd_hhnnss"))
+
+        Dim newCommitReq As String
+        newCommitReq = "{""message"":""" & Json_EscapeString(commitMsg) & """,""tree"":""" & treeSha & """,""parents"": [""" & headSha & """]}"
+        Dim newCommitResp As GH_HttpCallResult
+        newCommitResp = Git_Http("POST", apiBase & "/repos/" & owner & "/" & repo & "/git/commits", token, newCommitReq, "GH_COMMIT_CREATE")
+        If Not newCommitResp.ok Then
+            summary.errorCode = "GH_COMMIT_CREATE_FAIL"
+            summary.errorDetail = Git_HttpErrorDetail(newCommitResp)
+            GoTo FailWithSummary
+        End If
+
+        Dim newCommitSha As String: newCommitSha = JsonPick(newCommitResp.body, "sha")
+        If newCommitSha = "" Then
+            summary.errorCode = "GH_COMMIT_PARSE_FAIL"
+            summary.errorDetail = "Commit novo sem sha no body."
+            GoTo FailWithSummary
+        End If
+
+        Dim updReq As String
+        updReq = "{""sha"":""" & newCommitSha & """,""force"":" & LCase$(GitCfg_Get("GH_FORCE_UPDATE", "false")) & "}"
+        Dim patchResp As GH_HttpCallResult
+        patchResp = Git_Http("PATCH", headRefUrl, token, updReq, "GH_REF_UPDATE")
+
+        If patchResp.ok Then
+            summary.ok = True
+            summary.commitSha = newCommitSha
+            summary.errorCode = ""
+            summary.errorDetail = ""
+            Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_REF_UPDATED", "HEAD atualizado no GitHub.", "attempt=" & CStr(attempt) & " | sha=" & Left$(newCommitSha, 10))
+            GitData_CommitFiles = summary
+            Exit Function
+        End If
+
+        If patchResp.status = 409 Then
+            Call Debug_Registar(0, pipelineNome, "ALERTA", "", "GH_REF_CONFLICT", "Conflito ao atualizar ref da branch.", "attempt=" & CStr(attempt) & " | " & Git_HttpErrorDetail(patchResp))
+            If retryOnConflict And attempt < maxRetries Then
+                Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_RETRY_ATTEMPT", "Retry de commit após conflito de concorrência.", "attempt=" & CStr(attempt + 1) & " of " & CStr(maxRetries))
+                GoTo NextAttempt
+            End If
+            summary.errorCode = "GH_REF_CONFLICT"
+            summary.errorDetail = Git_HttpErrorDetail(patchResp)
+            GoTo FailWithSummary
+        End If
+
+        summary.errorCode = "GH_REF_UPDATE_FAIL"
+        summary.errorDetail = Git_HttpErrorDetail(patchResp)
+        GoTo FailWithSummary
+NextAttempt:
+    Next attempt
+
+    If summary.errorCode = "" Then
+        summary.errorCode = "GH_DONE_FAIL"
+        summary.errorDetail = "Tentativas esgotadas sem sucesso."
+    End If
+    GoTo FailWithSummary
+
+FailWithSummary:
+    summary.ok = False
+    If summary.errorCode = "" Then summary.errorCode = "GH_DONE_FAIL"
+    If summary.errorDetail = "" Then summary.errorDetail = "Falha não detalhada no fluxo GitHub."
+    GitData_CommitFiles = summary
     Exit Function
+
 EH:
-    GitData_CommitFiles = ""
+    summary.ok = False
+    summary.errorCode = "GH_DONE_FAIL"
+    summary.errorDetail = "Exceção VBA: " & Err.Description
+    GitData_CommitFiles = summary
 End Function
 
-Private Function Git_CreateBlob(ByVal apiBase As String, ByVal owner As String, ByVal repo As String, ByVal token As String, ByVal content As String) As String
+Private Function Git_CreateBlob(ByVal apiBase As String, ByVal owner As String, ByVal repo As String, ByVal token As String, ByVal content As String, ByRef summary As GH_CommitOrchestratorResult) As String
     Dim req As String
     req = "{""content"":""" & Json_EscapeString(content) & """,""encoding"":""utf-8""}"
-    Dim resp As String
-    resp = Git_Http("POST", apiBase & "/repos/" & owner & "/" & repo & "/git/blobs", token, req)
-    Git_CreateBlob = JsonPick(resp, "sha")
-End Function
 
-Private Function Git_Http(ByVal method As String, ByVal url As String, ByVal token As String, ByVal body As String) As String
-    Dim http As Object: Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
-    http.Open method, url, False
-    http.SetRequestHeader "Authorization", "Bearer " & token
-    http.SetRequestHeader "Accept", "application/vnd.github+json"
-    http.SetRequestHeader "X-GitHub-Api-Version", GitCfg_Get("GH_API_VERSION", "2022-11-28")
-    http.SetRequestHeader "User-Agent", GitCfg_Get("GH_USER_AGENT", "PIPELINER-VBA")
-    If body <> "" Then
-        http.SetRequestHeader "Content-Type", "application/json"
-        http.Send body
-    Else
-        http.Send
+    Dim resp As GH_HttpCallResult
+    resp = Git_Http("POST", apiBase & "/repos/" & owner & "/" & repo & "/git/blobs", token, req, "GH_BLOB_CREATE")
+    If Not resp.ok Then
+        summary.errorCode = "GH_BLOB_CREATE_FAIL"
+        summary.errorDetail = Git_HttpErrorDetail(resp)
+        Git_CreateBlob = ""
+        Exit Function
     End If
 
-    Git_Http = CStr(http.ResponseText)
+    Git_CreateBlob = JsonPick(resp.body, "sha")
+    If Git_CreateBlob = "" Then
+        summary.errorCode = "GH_BLOB_PARSE_FAIL"
+        summary.errorDetail = "Blob sem sha no body."
+    End If
+End Function
+
+Private Function Git_Http(ByVal method As String, ByVal url As String, ByVal token As String, ByVal body As String, ByVal stepName As String) As GH_HttpCallResult
+    Dim result As GH_HttpCallResult
+    result = GH_HTTP_RequestJsonResult(method, url, token, body, stepName, GitCfg_Get("GH_USER_AGENT", "PIPELINER-VBA"))
+
+    If Not result.ok And Len(result.errorDetail) = 0 Then
+        result.errorDetail = "HTTP status=" & CStr(result.status)
+        If Len(result.body) > 0 Then result.errorDetail = result.errorDetail & " | body=" & Left$(result.body, 300)
+    End If
+
+    Git_Http = result
+End Function
+
+Private Function Git_HttpErrorDetail(ByRef callResult As GH_HttpCallResult) As String
+    Dim detail As String
+    detail = "step=" & callResult.stepName & " | status=" & CStr(callResult.status)
+    If Len(callResult.errorDetail) > 0 Then
+        detail = detail & " | err=" & callResult.errorDetail
+    End If
+    If Len(callResult.body) > 0 Then
+        detail = detail & " | body=" & Left$(Replace$(callResult.body, vbCrLf, " "), 300)
+    End If
+    Git_HttpErrorDetail = detail
+End Function
+
+Private Function GitCfg_GetBool(ByVal keyName As String, ByVal defaultValue As Boolean) As Boolean
+    Dim raw As String
+    raw = UCase$(Trim$(GitCfg_Get(keyName, IIf(defaultValue, "true", "false"))))
+    If raw = "TRUE" Or raw = "1" Or raw = "SIM" Or raw = "YES" Then
+        GitCfg_GetBool = True
+    ElseIf raw = "FALSE" Or raw = "0" Or raw = "NAO" Or raw = "NÃO" Or raw = "NO" Then
+        GitCfg_GetBool = False
+    Else
+        GitCfg_GetBool = defaultValue
+    End If
+End Function
+
+Private Function GitCfg_GetLong(ByVal keyName As String, ByVal defaultValue As Long) As Long
+    Dim raw As String
+    raw = Trim$(GitCfg_Get(keyName, CStr(defaultValue)))
+    If IsNumeric(raw) Then
+        GitCfg_GetLong = CLng(raw)
+    Else
+        GitCfg_GetLong = defaultValue
+    End If
 End Function
 
 Private Function JsonPickTreeSha(ByVal body As String) As String
@@ -539,7 +677,7 @@ Private Function GitDebug_Config_Definitions() As Collection
     Call GitDebug_Config_Add(defs, "GH_LOG_FOLDER", "logs", "Subpasta para logs complementares (quando aplicavel).", "path relativo")
 
     Call GitDebug_Config_Add(defs, "GH_RETRY_ON_CONFLICT", "true", "Se true, tenta novamente quando o HEAD muda durante commit.", "true | false")
-    Call GitDebug_Config_Add(defs, "GH_MAX_RETRIES", "3", "Numero maximo de retries em conflito de ref.", "0..10")
+    Call GitDebug_Config_Add(defs, "GH_MAX_RETRIES", "3", "Número máximo de tentativas em conflito 409 ao atualizar refs.", "inteiro >= 1")
     Call GitDebug_Config_Add(defs, "GH_FORCE_UPDATE", "false", "Se true, faz update forcado da ref (nao recomendado).", "true | false")
 
     Call GitDebug_Config_Add(defs, "GH_DEBUG_MODE", "true", "Liga registos de troubleshooting GH_* no DEBUG.", "true | false")
