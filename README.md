@@ -62,8 +62,10 @@ Inclui módulos que:
 - convertem configurações amigáveis para payloads API;
 - gerem anexos e uploads;
 - executam chamadas API;
+- criam blobs GitHub para conteúdos versionáveis (payload `utf-8` para texto e `base64` para binário, com limite `GH_MAX_FILE_MB` e logging canónico `GH_BLOB_OK`/`GH_BLOB_TOO_LARGE`);
 - persistem auditoria por passo;
-- resolvem encadeamento (`Next PROMPT`) até `STOP`.
+- resolvem encadeamento (`Next PROMPT`) até `STOP`;
+- incluem utilitários HTTP dedicados a integrações GitHub (`M23_GH_HTTP`) com timeout configurável, headers padrão (`Authorization`, `Accept`, `X-GitHub-Api-Version`, `User-Agent`) e logging estruturado de falhas via `M26_GH_Logger`.
 
 Também inclui um fluxo opcional de exportação dos logs `DEBUG`/`Seguimento` para GitHub, orquestrado por `M21_GitDebugExport` com separação por responsabilidades:
 
