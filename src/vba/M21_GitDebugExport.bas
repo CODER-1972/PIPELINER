@@ -9,10 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
-' - 2026-03-04 | Codex | Refactor para arquitetura M22..M26 mantendo facade M21
-'   - PipelineGitDebug_ExportIfEnabled passa a delegar GH_* em modulos dedicados.
-'   - Remove implementacao HTTP/blob/tree do facade e preserva chamadas existentes de M07.
-'   - Mantem macro de instalacao guiada dos parametros GH_* no Config.
+' - 2026-03-04 | Codex | Endurece instalacao de parametros GH_* na folha Config
+'   - Garante cabecalhos Key/Value/Explicacao/Default/Valores na linha 8 e dados apenas em linhas >= 9.
+'   - Mantem politica de overwrite seletivo em B:E e regista falhas no DEBUG com codigo estavel.
 ' - 2026-03-04 | Codex | Macro de instalacao guiada dos parametros GH_* no Config
 '   - Adiciona rotina para criar/atualizar chaves GH_* com default e explicacoes.
 '
@@ -25,7 +24,9 @@ Option Explicit
 
 Private Const SHEET_DEBUG As String = "DEBUG"
 Private Const SHEET_SEGUIMENTO As String = "Seguimento"
-Private Const SHEET_HIST As String = "HISTÃ“RICO"
+Private Const SHEET_HIST As String = "HISTÓRICO"
+Private Const GH_CONFIG_HEADER_ROW As Long = 8
+Private Const GH_CONFIG_FIRST_DATA_ROW As Long = 9
 
 Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByVal painelAutoSave As String)
     On Error GoTo EH
@@ -250,8 +251,99 @@ Private Function GitFileItem(ByVal path As String, ByVal content As String) As O
     Set GitFileItem = d
 End Function
 
-Private Sub GitDebug_WriteLinkToSeguimento(ByVal pipelineNome As String, ByVal link As String)
-    On Error Resume Next
+Private Function GitData_CommitFiles(ByVal owner As String, ByVal repo As String, ByVal branch As String, ByVal token As String, ByVal files As Collection, ByVal pipelineNome As String) As String
+    On Error GoTo EH
+
+    Dim apiBase As String: apiBase = GitCfg_Get("GH_API_BASE", "https://api.github.com")
+    Dim headRefUrl As String
+    headRefUrl = apiBase & "/repos/" & owner & "/" & repo & "/git/ref/heads/" & branch
+
+    Dim refBody As String
+    refBody = Git_Http("GET", headRefUrl, token, "")
+    Dim headSha As String: headSha = JsonPick(refBody, "sha")
+    If headSha = "" Then Exit Function
+    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_REF_OK", "HEAD obtido.", "sha=" & Left$(headSha, 10))
+
+    Dim commitBody As String
+    commitBody = Git_Http("GET", apiBase & "/repos/" & owner & "/" & repo & "/git/commits/" & headSha, token, "")
+    Dim baseTreeSha As String: baseTreeSha = JsonPickTreeSha(commitBody)
+    If baseTreeSha = "" Then baseTreeSha = JsonPick(commitBody, "sha")
+
+    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_BASE_TREE_OK", "Base tree resolvida.", "tree_sha=" & Left$(baseTreeSha, 10))
+
+    Dim treeItems As String
+    Dim i As Long
+    For i = 1 To files.Count
+        Dim f As Object: Set f = files(i)
+        Dim blobSha As String
+        blobSha = Git_CreateBlob(apiBase, owner, repo, token, CStr(f("content")))
+        If blobSha = "" Then Exit Function
+        If treeItems <> "" Then treeItems = treeItems & ","
+        treeItems = treeItems & "{""path"":""" & Json_EscapeString(CStr(f("path")) ) & """,""mode"":""100644"",""type"":""blob"",""sha"":""" & blobSha & """}"
+    Next i
+    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_BLOBS_CREATED", "Blobs criados.", "n=" & CStr(files.Count))
+
+    Dim treeReq As String
+    treeReq = "{""base_tree"":""" & baseTreeSha & """,""tree"": [" & treeItems & "]}"
+    Dim treeResp As String
+    treeResp = Git_Http("POST", apiBase & "/repos/" & owner & "/" & repo & "/git/trees", token, treeReq)
+    Dim treeSha As String: treeSha = JsonPick(treeResp, "sha")
+    If treeSha = "" Then Exit Function
+    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_TREE_CREATED", "Tree criada.", "sha=" & Left$(treeSha, 10))
+
+    Dim commitMsg As String
+    commitMsg = Replace(GitCfg_Get("GH_COMMIT_MESSAGE_TEMPLATE", "PIPELINER run {{RUN_ID}}"), "{{RUN_ID}}", Format$(Now, "yyyymmdd_hhnnss"))
+
+    Dim newCommitReq As String
+    newCommitReq = "{""message"":""" & Json_EscapeString(commitMsg) & """,""tree"":""" & treeSha & """,""parents"": [""" & headSha & """]}"
+    Dim newCommitResp As String
+    newCommitResp = Git_Http("POST", apiBase & "/repos/" & owner & "/" & repo & "/git/commits", token, newCommitReq)
+    Dim newCommitSha As String: newCommitSha = JsonPick(newCommitResp, "sha")
+    If newCommitSha = "" Then Exit Function
+    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_COMMIT_CREATED", "Commit criado.", "sha=" & Left$(newCommitSha, 10))
+
+    Dim updReq As String
+    updReq = "{""sha"":""" & newCommitSha & """,""force"":" & LCase$(GitCfg_Get("GH_FORCE_UPDATE", "false")) & "}"
+    Call Git_Http("PATCH", headRefUrl, token, updReq)
+
+    GitData_CommitFiles = newCommitSha
+    Exit Function
+EH:
+    GitData_CommitFiles = ""
+End Function
+
+Private Function Git_CreateBlob(ByVal apiBase As String, ByVal owner As String, ByVal repo As String, ByVal token As String, ByVal content As String) As String
+    Dim req As String
+    req = "{""content"":""" & Json_EscapeString(content) & """,""encoding"":""utf-8""}"
+    Dim resp As String
+    resp = Git_Http("POST", apiBase & "/repos/" & owner & "/" & repo & "/git/blobs", token, req)
+    Git_CreateBlob = JsonPick(resp, "sha")
+End Function
+
+Private Function Git_Http(ByVal method As String, ByVal url As String, ByVal token As String, ByVal body As String) As String
+    Dim http As Object: Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+    http.Open method, url, False
+    http.SetRequestHeader "Authorization", "Bearer " & token
+    http.SetRequestHeader "Accept", GitCfg_Get("GH_ACCEPT_HEADER", "application/vnd.github+json")
+    http.SetRequestHeader "X-GitHub-Api-Version", GitCfg_Get("GH_API_VERSION", "2022-11-28")
+    http.SetRequestHeader "User-Agent", GitCfg_Get("GH_USER_AGENT", "PIPELINER-VBA")
+    If body <> "" Then
+        http.SetRequestHeader "Content-Type", "application/json"
+        http.Send body
+    Else
+        http.Send
+    End If
+
+    Git_Http = CStr(http.ResponseText)
+End Function
+
+Private Function JsonPickTreeSha(ByVal body As String) As String
+    Dim re As Object: Set re = CreateObject("VBScript.RegExp")
+    re.Global = False
+    re.IgnoreCase = True
+    re.Pattern = """tree""\s*:\s*\{\s*""sha""\s*:\s*""([^""]+)"""
+    If re.Test(body) Then JsonPickTreeSha = re.Execute(body)(0).SubMatches(0)
+End Function
 
     Dim ws As Worksheet
     Set ws = ThisWorkbook.Worksheets(SHEET_SEGUIMENTO)
@@ -409,15 +501,16 @@ Public Sub GitDebug_Config_InstalarParametros(Optional ByVal sobrescreverValores
     Exit Sub
 
 EH:
+    Call Debug_Registar(0, "", "ERRO", "", "GH_CONFIG_INSTALL_FAIL", "Falha ao instalar parametros GH_* no Config.", "err=" & CStr(Err.Number) & " | " & Left$(Err.Description, 180))
     MsgBox "Erro em GitDebug_Config_InstalarParametros: " & Err.Description, vbExclamation
 End Sub
 
 Private Sub GitDebug_Config_EnsureGuideHeaders(ByVal ws As Worksheet)
-    If Trim$(CStr(ws.Cells(1, 1).Value)) = "" Then ws.Cells(1, 1).Value = "Key"
-    If Trim$(CStr(ws.Cells(1, 2).Value)) = "" Then ws.Cells(1, 2).Value = "Value"
-    If Trim$(CStr(ws.Cells(1, 3).Value)) = "" Then ws.Cells(1, 3).Value = "Explicacao (leigos)"
-    If Trim$(CStr(ws.Cells(1, 4).Value)) = "" Then ws.Cells(1, 4).Value = "Default"
-    If Trim$(CStr(ws.Cells(1, 5).Value)) = "" Then ws.Cells(1, 5).Value = "Valores possiveis / intervalo"
+    ws.Cells(GH_CONFIG_HEADER_ROW, 1).Value = "Key"
+    ws.Cells(GH_CONFIG_HEADER_ROW, 2).Value = "Value"
+    ws.Cells(GH_CONFIG_HEADER_ROW, 3).Value = "Explicacao (leigos)"
+    ws.Cells(GH_CONFIG_HEADER_ROW, 4).Value = "Default"
+    ws.Cells(GH_CONFIG_HEADER_ROW, 5).Value = "Valores possiveis / intervalo"
 End Sub
 
 Private Function GitDebug_Config_Definitions() As Collection
@@ -457,7 +550,9 @@ Private Function GitDebug_Config_Definitions() As Collection
     Call GitDebug_Config_Add(defs, "GH_LOG_BLOB_SHA", "true", "Se true, mostra SHA curto dos blobs criados no DEBUG.", "true | false")
 
     Call GitDebug_Config_Add(defs, "GH_API_VERSION", "2022-11-28", "Versao da API GitHub enviada em header.", "YYYY-MM-DD")
+    Call GitDebug_Config_Add(defs, "GH_ACCEPT_HEADER", "application/vnd.github+json", "Header Accept enviado para a API GitHub.", "media type HTTP valido")
     Call GitDebug_Config_Add(defs, "GH_USER_AGENT", "PIPELINER-VBA", "User-Agent usado nas chamadas a API.", "texto sem vazio")
+    Call GitDebug_Config_Add(defs, "GH_HEADERS_EXTRA_JSON", "", "Headers extra opcionais em JSON simples (ex.: {""X-Trace"":""abc""}).", "JSON objeto ou vazio")
 
     Set GitDebug_Config_Definitions = defs
 End Function
@@ -475,9 +570,13 @@ End Sub
 Private Function GitDebug_Config_FindKeyRow(ByVal ws As Worksheet, ByVal keyName As String) As Long
     Dim lr As Long
     lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    If lr < GH_CONFIG_FIRST_DATA_ROW Then
+        GitDebug_Config_FindKeyRow = 0
+        Exit Function
+    End If
 
     Dim r As Long
-    For r = 1 To lr
+    For r = GH_CONFIG_FIRST_DATA_ROW To lr
         If StrComp(Trim$(CStr(ws.Cells(r, 1).Value)), keyName, vbTextCompare) = 0 Then
             GitDebug_Config_FindKeyRow = r
             Exit Function
@@ -490,6 +589,6 @@ End Function
 Private Function GitDebug_Config_NextRow(ByVal ws As Worksheet) As Long
     Dim lr As Long
     lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    If lr < 9 Then lr = 8
+    If lr < GH_CONFIG_FIRST_DATA_ROW Then lr = GH_CONFIG_HEADER_ROW
     GitDebug_Config_NextRow = lr + 1
 End Function

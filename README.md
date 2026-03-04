@@ -112,6 +112,8 @@ Também suporta exportação opcional de debug para GitHub (Git Data API) no fim
 - publicação de `DEBUG.csv`, `catalogo_prompts_executadas.csv`, `Seguimento.csv` e `painel_pipeline.txt`;
 - atualização da coluna `GIT_DEBUG` nas folhas `Seguimento` e `HISTÓRICO` com o link da pasta remota.
 - macro `GitDebug_Config_InstalarParametros` para preencher/atualizar na folha `Config` as chaves `GH_*` com `default`, explicação pedagógica (coluna C) e valores/intervalos possíveis (coluna E), sem forçar overwrite dos valores atuais por defeito.
+- a macro fixa os cabeçalhos `Key | Value | Explicacao (leigos) | Default | Valores possiveis / intervalo` na linha 8 e escreve os parâmetros `GH_*` apenas a partir da linha 9 (evitando conflito com `Config!B1:B7`).
+- quando `sobrescreverValores=False`, só preenche células vazias nas colunas B:E; quando `sobrescreverValores=True`, reescreve B:E com defaults/documentação atuais.
 
 Configuração recomendada (folha `Config`, formato Key/Value): `GH_OWNER`, `GH_REPO`, `GH_BRANCH`, `GH_API_BASE`, `GH_TOKEN_ENV`, `GH_TOKEN_CONFIG`, `GH_COMMIT_MESSAGE_TEMPLATE`, `GH_BASE_PATH`, `GH_API_VERSION`, `GH_USER_AGENT`, `GH_RETRY_ON_CONFLICT`, `GH_MAX_RETRIES`.
 
