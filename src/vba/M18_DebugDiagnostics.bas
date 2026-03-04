@@ -2,27 +2,27 @@ Attribute VB_Name = "M18_DebugDiagnostics"
 Option Explicit
 
 ' =============================================================================
-' Módulo: M18_DebugDiagnostics
-' Propósito:
-' - Produzir diagnóstico avançado em relatório paralelo DEBUG_DIAG sem quebrar DEBUG legado.
-' - Ler níveis de diagnóstico (BASE/DIAG/TRACE), classificar causa provável e gerar bundle opcional.
+' Modulo: M18_DebugDiagnostics
+' Proposito:
+' - Produzir diagnostico avancado em relatorio paralelo DEBUG_DIAG sem quebrar DEBUG legado.
+' - Ler niveis de diagnostico (BASE/DIAG/TRACE), classificar causa provavel e gerar bundle opcional.
 '
-' Atualizações:
-' - 2026-03-04 | Codex | Bundle passa a incluir evidência PROVA_CI isolada por passo
-'   - Escreve `step<passo>_PROVA_CI.txt` nos modos local/zip/local_and_zip para suporte rápido.
-'   - Centraliza escrita de artefactos de bundle em helper único para reduzir divergência entre modos.
+' Atualizacoes:
+' - 2026-03-04 | Codex | Bundle passa a incluir evidencia PROVA_CI isolada por passo
+'   - Escreve `step<passo>_PROVA_CI.txt` nos modos local/zip/local_and_zip para suporte rapido.
+'   - Centraliza escrita de artefactos de bundle em helper unico para reduzir divergencia entre modos.
 ' - 2026-03-01 | Codex | Introduz DEBUG_SCHEMA_VERSION=2 com DEBUG_LEVEL/DEBUG_BUNDLE
 '   - Cria escrita aditiva em DEBUG_DIAG com campos de fingerprint, FILES, CI/container e contrato EXECUTE.
-'   - Implementa classificador simples de causa raiz com confidence e ação sugerida.
-'   - Adiciona bundle opcional por execução com payload/response/extratos sem segredos.
+'   - Implementa classificador simples de causa raiz com confidence e acao sugerida.
+'   - Adiciona bundle opcional por execucao com payload/response/extratos sem segredos.
 '
-' Funções e procedimentos:
+' Funcoes e procedimentos:
 ' - DebugDiag_RecordStep(...)
 '   - Regista uma linha em DEBUG_DIAG (apenas quando DEBUG_LEVEL>=DIAG).
 ' - DebugDiag_ClassifyForSelfTest(...)
 '   - Exponibiliza classificador para SelfTests idempotentes.
 ' - DebugDiag_WriteBundleFiles(...)
-'   - Escreve artefactos de bundle (incluindo PROVA_CI isolado) para análise de suporte.
+'   - Escreve artefactos de bundle (incluindo PROVA_CI isolado) para analise de suporte.
 ' =============================================================================
 
 Private Const CFG_DEBUG_LEVEL As String = "DEBUG_LEVEL"
@@ -191,8 +191,8 @@ Private Sub DebugDiag_ClassifyCore( _
     ByRef outCode As String, ByRef outSummary As String, ByRef outFix As String, ByRef outConfidence As Long)
 
     outCode = ""
-    outSummary = "Sem anomalia crítica detetada no classificador mínimo."
-    outFix = "Sem ação imediata."
+    outSummary = "Sem anomalia critica detetada no classificador minimo."
+    outFix = "Sem acao imediata."
     outConfidence = 35
 
     If InStr(1, filesOpsResumo, "PATH_TOO_LONG", vbTextCompare) > 0 Or InStr(1, rawJson, "PATH_TOO_LONG", vbTextCompare) > 0 Then
@@ -205,16 +205,16 @@ Private Sub DebugDiag_ClassifyCore( _
 
     If InStr(1, filesOpsResumo, "CONFIG_PARSE", vbTextCompare) > 0 Or InStr(1, filesOpsResumo, "config extra", vbTextCompare) > 0 And InStr(1, filesOpsResumo, "ignorada", vbTextCompare) > 0 Then
         outCode = "RC_CONFIG_PARSE_ERROR"
-        outSummary = "Config extra com parse inválido afetou o modo efetivo."
-        outFix = "Normalizar Config extra para uma linha por chave:valor e evitar literais ambíguos."
+        outSummary = "Config extra com parse invalido afetou o modo efetivo."
+        outFix = "Normalizar Config extra para uma linha por chave:valor e evitar literais ambiguos."
         outConfidence = 80
         Exit Sub
     End If
 
     If LCase$(Trim$(processMode)) = "code_interpreter" And UCase$(Trim$(ciObserved)) <> "SIM" And InStr(1, rawJson, "code_interpreter_call", vbTextCompare) = 0 Then
         outCode = "RC_NO_CI_CALL"
-        outSummary = "O passo esperava CI mas a resposta não trouxe code_interpreter_call."
-        outFix = "Forçar process_mode: code_interpreter e validar tool_choice/intenção explícita no Config extra."
+        outSummary = "O passo esperava CI mas a resposta nao trouxe code_interpreter_call."
+        outFix = "Forcar process_mode: code_interpreter e validar tool_choice/intencao explicita no Config extra."
         outConfidence = 90
         Exit Sub
     End If
@@ -222,15 +222,15 @@ Private Sub DebugDiag_ClassifyCore( _
     If CLng(Val(containerTotal)) = 1 And DebugDiag_ContainerLooksOnlyInput(containerFiles) Then
         outCode = "RC_ONLY_INPUTS_IN_CONTAINER"
         outSummary = "Fallback do container devolveu apenas ficheiro de input."
-        outFix = "Reforçar contrato de output (manifest/nomes esperados) e padrão forte de seleção."
+        outFix = "Reforcar contrato de output (manifest/nomes esperados) e padrao forte de selecao."
         outConfidence = 88
         Exit Sub
     End If
 
     If InStr(1, rawJson, "M10_CI_NO_CITATION", vbTextCompare) > 0 And DebugDiag_ContainerLooksOnlyInput(containerFiles) Then
         outCode = "RC_NO_CITATION_FALLBACK_GRABBED_INPUT"
-        outSummary = "Sem citation; fallback escolheu input por ausência de artefacto novo."
-        outFix = "Pedir output determinístico + EXECUTE explícito e validar container_file_citation."
+        outSummary = "Sem citation; fallback escolheu input por ausencia de artefacto novo."
+        outFix = "Pedir output deterministico + EXECUTE explicito e validar container_file_citation."
         outConfidence = 84
         Exit Sub
     End If
@@ -246,23 +246,23 @@ Private Sub DebugDiag_ClassifyCore( _
     If executeCount = 0 And DebugDiag_PromptRequiresExecute(promptText) Then
         outCode = "RC_EXECUTE_MISSING"
         outSummary = "Contrato pede EXECUTE mas nenhuma diretiva foi detetada no output."
-        outFix = "Exigir linha EXECUTE única e validável (ex.: EXECUTE: LOAD_CSV <basename.csv>)."
+        outFix = "Exigir linha EXECUTE unica e validavel (ex.: EXECUTE: LOAD_CSV <basename.csv>)."
         outConfidence = 87
         Exit Sub
     End If
 
     If InStr(1, LCase$(filesOpsResumo), "nome", vbTextCompare) > 0 And InStr(1, LCase$(filesOpsResumo), "mismatch", vbTextCompare) > 0 Then
         outCode = "RC_FILENAME_MISMATCH"
-        outSummary = "Artefactos gerados com nome fora do padrão esperado."
-        outFix = "Alinhar naming no prompt/manifest e regex de seleção de output."
+        outSummary = "Artefactos gerados com nome fora do padrao esperado."
+        outFix = "Alinhar naming no prompt/manifest e regex de selecao de output."
         outConfidence = 72
         Exit Sub
     End If
 
     If InStr(1, LCase$(filesOpsResumo), "0 ficheiro", vbTextCompare) > 0 And LCase$(Trim$(processMode)) = "code_interpreter" Then
         outCode = "RC_NO_OUTPUT_FILES"
-        outSummary = "Passo CI terminou sem artefactos de output elegíveis."
-        outFix = "Pedir explicitamente gravação de ficheiros e validar citações/container list."
+        outSummary = "Passo CI terminou sem artefactos de output elegiveis."
+        outFix = "Pedir explicitamente gravacao de ficheiros e validar citacoes/container list."
         outConfidence = 65
         Exit Sub
     End If
@@ -367,7 +367,7 @@ Private Sub DebugDiag_ReadContainerSignals(ByVal passo As Long, ByVal promptId A
                     Dim p As String
                     p = CStr(ws.Cells(r, map("problema")).Value)
                     outTotal = DebugDiag_KeyValueFromText(p, "total")
-                    outEligible = DebugDiag_KeyValueFromText(p, "elegíveis")
+                    outEligible = DebugDiag_KeyValueFromText(p, "elegiveis")
                     If outEligible = "" Then outEligible = DebugDiag_KeyValueFromText(p, "elegiveis")
                     outMatched = DebugDiag_KeyValueFromText(p, "matched")
                     outFiles = DebugDiag_Preview(p, 400)
