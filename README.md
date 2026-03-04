@@ -62,6 +62,7 @@ Inclui módulos que:
 - convertem configurações amigáveis para payloads API;
 - gerem anexos e uploads;
 - executam chamadas API;
+- criam blobs GitHub para conteúdos versionáveis (payload `utf-8` para texto e `base64` para binário, com limite `GH_MAX_FILE_MB` e logging canónico `GH_BLOB_OK`/`GH_BLOB_TOO_LARGE`);
 - persistem auditoria por passo;
 - resolvem encadeamento (`Next PROMPT`) até `STOP`.
 
