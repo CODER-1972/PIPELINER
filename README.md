@@ -623,6 +623,8 @@ auto_save: Sim
 overwrite_mode: suffix
 ```
 
+`auto_save` é interpretado de forma case-insensitive e aceita aliases comuns. Exemplos equivalentes a **desligado**: `Não`, `no`, `false`, `off`, `0`, `disabled`. Valores **ligados**: `Sim`, `yes`, `true`, `on`, `1`, `enabled`. Também aceita texto livre com palavras adicionais (ex.: `sim, todos`, `não, debug`) e decide por presença de tokens reconhecidos. Para compatibilidade retroativa, valores sem tokens reconhecidos continuam a ser tratados como ligado.
+
 Opcional (recomendado para reduzir falsos positivos no fallback por listagem de container):
 
 ```text
