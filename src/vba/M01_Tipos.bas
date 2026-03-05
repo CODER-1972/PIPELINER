@@ -43,3 +43,19 @@ Public Type ApiResultado
     rawResponseJson As String
     Erro As String
 End Type
+
+Public Type GH_HttpCallResult
+    ok As Boolean
+    status As Long
+    body As String
+    errorDetail As String
+    stepName As String
+End Type
+
+Public Type GH_CommitOrchestratorResult
+    ok As Boolean
+    commitSha As String
+    attemptCount As Long
+    errorCode As String
+    errorDetail As String
+End Type

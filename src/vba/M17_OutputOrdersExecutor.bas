@@ -42,6 +42,7 @@ Option Explicit
 ' - EnsureFolder(folderPath): cria pasta local para fixtures temporarias dos selftests.
 ' - WriteTextUTF8(filePath, txt): escreve ficheiros UTF-8 usados nos selftests.
 ' - BuildFileNotFoundContext(...): agrega contexto operacional para troubleshooting em OUTPUT_EXECUTE_FILE_NOT_FOUND.
+' - Nz(v, [fallback]): normaliza Null/Error/Empty para String em helpers internos de diagnÃ³stico.
 ' =============================================================================
 
 Private Const OUTPUT_ORDERS_MAX As Long = 3
@@ -269,7 +270,11 @@ Private Function OutputOrders_NormalizeM10Context(ByVal m10Context As String) As
     OutputOrders_NormalizeM10Context = t
 End Function
 
-Public Function ParseExecuteDirectives(ByVal outputText As String) As Collection
+Public Function ParseExecuteDirectives( _
+    ByVal outputText As String, _
+    Optional ByRef validDirectiveCount As Long = 0, _
+    Optional ByRef codeBlockDirectiveCount As Long = 0 _
+) As Collection
     Dim out As New Collection
     Dim lines() As String
     lines = Split(Replace(outputText, vbCrLf, vbLf), vbLf)
@@ -492,7 +497,7 @@ Private Function ExtractHintsFromOutputText(ByVal outputText As String) As Strin
     re.IgnoreCase = True
     re.Pattern = "(?:sandbox:/mnt/data/)?([A-Za-z0-9_\-\.]+\.(csv|tsv|txt|json|xlsx|pdf))"
 
-    Set matches = re.Execute(Nz(outputText))
+    Set matches = re.Execute(NzLocal(outputText))
     For Each m In matches
         Dim fn As String
         fn = Trim$(CStr(m.SubMatches(0)))
@@ -539,7 +544,7 @@ Private Function SummarizeDownloadedFiles(ByVal downloadedFiles As Variant) As S
 
     Dim token As Variant
     Dim norm As String
-    norm = Replace(Replace(Nz(CStr(downloadedFiles)), ";", "|"), vbCrLf, "|")
+    norm = Replace(Replace(NzLocal(CStr(downloadedFiles)), ";", "|"), vbCrLf, "|")
     For Each token In Split(norm, "|")
         Dim t As String
         t = Trim$(CStr(token))
@@ -592,9 +597,19 @@ EH:
     SummarizeOutputFolder = "(erro ao listar)"
 End Function
 
+Private Function Nz(ByVal v As Variant, Optional ByVal fallback As String = "") As String
+    If IsError(v) Then
+        Nz = fallback
+    ElseIf IsNull(v) Or IsEmpty(v) Then
+        Nz = fallback
+    Else
+        Nz = CStr(v)
+    End If
+End Function
+
 Private Function HasCiSignalsWithoutArtifact(ByVal outputText As String) As Boolean
     Dim t As String
-    t = LCase$(Nz(outputText))
+    t = LCase$(NzLocal(outputText))
     If t = "" Then Exit Function
 
     HasCiSignalsWithoutArtifact = _
@@ -608,6 +623,16 @@ Private Function HasCiSignalsWithoutArtifact(ByVal outputText As String) As Bool
         (InStr(1, t, "prova_ci_start", vbTextCompare) > 0)
 End Function
 
+
+Private Function NzLocal(ByVal v As Variant, Optional ByVal fallback As String = "") As String
+    If IsError(v) Then
+        NzLocal = fallback
+    ElseIf IsNull(v) Or IsEmpty(v) Then
+        NzLocal = fallback
+    Else
+        NzLocal = CStr(v)
+    End If
+End Function
 
 Public Sub PrecheckCsv_BomAndCrLf(ByVal csvPath As String, ByRef bomPass As Boolean, ByRef crlfPass As Boolean, ByRef colsHint As Long)
     bomPass = CsvHasUtf8Bom(csvPath)
