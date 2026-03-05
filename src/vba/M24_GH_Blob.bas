@@ -2,6 +2,26 @@ Attribute VB_Name = "M24_GH_Blob"
 Option Explicit
 
 ' =============================================================================
+' MÃ³dulo: M24_GH_Blob
+' PropÃ³sito:
+' - Fornecer utilitÃ¡rios de conteÃºdo (blob) para exportaÃ§Ã£o GitHub.
+' - Codificar texto UTF-8 para Base64, compatÃ­vel com endpoint /contents.
+' - Escapar strings JSON de forma consistente entre mÃ³dulos.
+'
+' AtualizaÃ§Ãµes:
+' - 2026-03-05 | Codex | Hardening do escaping JSON
+'   - Substitui escape de aspas por construÃ§Ã£o explÃ­cita com Chr$(34) para reduzir ambiguidades no VBE.
+' - 2026-03-04 | Codex | CriaÃ§Ã£o do mÃ³dulo de blobs GitHub
+'   - Adiciona encoding UTF-8 + Base64 via ADODB.Stream/MSXML bin.base64.
+'   - Adiciona helper de escaping JSON para payloads robustos.
+'
+' FunÃ§Ãµes e procedimentos:
+' - GH_Blob_Base64FromText(text) As String
+'   - Converte texto Unicode para UTF-8 e codifica em Base64.
+' - GH_Blob_JsonEscape(value) As String
+'   - Escapa aspas, barras e control chars para uso seguro em JSON.
+' =============================================================================
+
 ' Modulo: M24_GH_Blob
 ' Proposito:
 ' - Encapsular criacao de blobs GitHub e regras de encoding/tamanho.
@@ -118,7 +138,7 @@ Public Function GH_Blob_JsonEscape(ByVal value As String) As String
     Dim s As String
     s = value
     s = Replace$(s, "\", "\\")
-    s = Replace$(s, """", Chr$(92) & """")
+    s = Replace$(s, Chr$(34), "\" & Chr$(34))
     s = Replace$(s, vbCrLf, "\n")
     s = Replace$(s, vbCr, "\n")
     s = Replace$(s, vbLf, "\n")
@@ -142,31 +162,4 @@ Private Function GH_Blob_Base64FromBytes(ByRef bytes() As Byte) As String
     Exit Function
 EH:
     GH_Blob_Base64FromBytes = ""
-End Function
-
-Private Function GH_Blob_Utf8ByteLength(ByVal text As String) As Long
-    On Error GoTo Fallback
-    Dim b64 As String
-    b64 = GH_Blob_Base64FromText(text)
-    If b64 = "" Then
-        GH_Blob_Utf8ByteLength = LenB(text)
-    Else
-        GH_Blob_Utf8ByteLength = ((Len(b64) * 3) \ 4)
-    End If
-    Exit Function
-Fallback:
-    GH_Blob_Utf8ByteLength = LenB(text)
-End Function
-
-Private Function GH_Blob_IsLikelyBinary(ByVal filePath As String, ByVal content As String) As Boolean
-    Dim ext As String
-    ext = LCase$(Mid$(filePath, InStrRev(filePath, ".") + 1))
-
-    Select Case ext
-        Case "png", "jpg", "jpeg", "gif", "webp", "pdf", "zip", "doc", "docx", "xls", "xlsx", "xlsm", "ppt", "pptx"
-            GH_Blob_IsLikelyBinary = True
-            Exit Function
-    End Select
-
-    GH_Blob_IsLikelyBinary = (InStr(1, content, Chr$(0), vbBinaryCompare) > 0)
 End Function

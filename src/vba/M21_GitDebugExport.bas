@@ -2,593 +2,585 @@ Attribute VB_Name = "M21_GitDebugExport"
 Option Explicit
 
 ' =============================================================================
-' Modulo: M21_GitDebugExport
-' Proposito:
-' - Manter facade/entrypoint de compatibilidade para exportacao Git debug.
-' - Gerar artefactos DEBUG/Seguimento/catalogo/painel para upload.
-' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
+' MÃ³dulo: M21_GitDebugExport
+' PropÃ³sito:
+' - Orquestrar exportaÃ§Ã£o opcional dos logs DEBUG/Seguimento/CatÃ¡logo para GitHub.
+' - Manter a assinatura pÃºblica estÃ¡vel para chamadas de outros mÃ³dulos.
+' - Produzir bundle por run com observabilidade e manifesto de execuÃ§Ã£o.
 '
-' Atualizacoes:
-' - 2026-03-04 | Codex | Endurece instalacao de parametros GH_* na folha Config
-'   - Garante cabecalhos Key/Value/Explicacao/Default/Valores na linha 8 e dados apenas em linhas >= 9.
-'   - Mantem politica de overwrite seletivo em B:E e regista falhas no DEBUG com codigo estavel.
-' - 2026-03-04 | Codex | Macro de instalacao guiada dos parametros GH_* no Config
-'   - Adiciona rotina para criar/atualizar chaves GH_* com default e explicacoes.
+' AtualizaÃ§Ãµes:
+' - 2026-03-05 | Codex | Hardening e observabilidade (PR2)
+'   - Adiciona telemetria por etapa e sanitizaÃ§Ã£o bÃ¡sica de dados sensÃ­veis.
+'   - Adiciona `manifest.json` com estado por artefacto e parÃ¢metros de execuÃ§Ã£o.
+'   - Integra timeout/retry/backoff configurÃ¡veis do mÃ³dulo HTTP.
+' - 2026-03-05 | Codex | CorreÃ§Ã£o funcional crÃ­tica e estrutura por pasta em logs
+'   - Passa a exportar trÃªs ficheiros (catalogo/debug/seguimento) por execuÃ§Ã£o.
+'   - Cria pasta lÃ³gica em `logs/` no formato `YYYY-MM-SS - HHMM - [pipeline]`.
+'   - Adiciona leitura de SHA atual no GitHub para suportar update idempotente em `/contents`.
+' - 2026-03-04 | Codex | RefatoraÃ§Ã£o para facade de alto nÃ­vel
+'   - Preserva entry point pÃºblico PipelineGitDebug_ExportIfEnabled.
+'   - Move leitura de config, HTTP, blob/base64 e logging para mÃ³dulos M22-M26.
 '
-' Funcoes e procedimentos:
-' - PipelineGitDebug_ExportIfEnabled(pipelineIndex As Long, pipelineNome As String, painelAutoSave As String)
-'   - Entry point chamado no fim da pipeline para export opcional de debug para GitHub.
-' - GitDebug_Config_InstalarParametros(Optional sobrescreverValores As Boolean = False)
-'   - Preenche/atualiza chaves GH_* na folha Config sem quebra de retrocompatibilidade.
+' FunÃ§Ãµes e procedimentos:
+' - PipelineGitDebug_ExportIfEnabled(Optional pipelineIndex As Long = 0) (Sub)
+'   - Entry point pÃºblico; avalia enable/config e executa exportaÃ§Ã£o para GitHub.
+' - M21_ExportRunBundle(cfg As Object, pipelineIndex As Long, pipelineName As String) As Boolean
+'   - Publica bundle (catÃ¡logo, DEBUG, Seguimento e manifesto) em `logs/<run>/`.
+' - M21_CatalogosDosPromptsDoDebug() As String
+'   - Resolve blocos de catÃ¡logo para os Prompt IDs encontrados na folha DEBUG.
+' - GitDebugExport_SelfTest_Basico() (Sub)
+'   - Valida naming/sanitizaÃ§Ã£o de pasta de run e regista PASS/FAIL no DEBUG.
 ' =============================================================================
 
-Private Const SHEET_DEBUG As String = "DEBUG"
-Private Const SHEET_SEGUIMENTO As String = "Seguimento"
-Private Const SHEET_HIST As String = "HISTÓRICO"
-Private Const GH_CONFIG_HEADER_ROW As Long = 8
-Private Const GH_CONFIG_FIRST_DATA_ROW As Long = 9
-
-Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByVal painelAutoSave As String)
+Public Sub PipelineGitDebug_ExportIfEnabled(Optional ByVal pipelineIndex As Long = 0)
     On Error GoTo EH
 
     Dim cfg As Object
-    Set cfg = GH_Config_Load(painelAutoSave)
+    Set cfg = GH_Config_Load()
 
-    If Not GH_Config_GetBoolean(cfg, "enabled", False) Then Exit Sub
+    If Not GH_Config_IsEnabled(cfg) Then Exit Sub
 
-    Dim reason As String
-    If Not GH_Config_Validate(cfg, reason) Then
-        Call GH_LogWarn(0, pipelineNome, GH_EVT_CONFIG, "Configuracao GitHub invalida.", reason)
+    Dim invalidReason As String
+    If Not GH_Config_Validate(cfg, invalidReason) Then
+        Call GH_LogWarn(0, "DEBUG", "GIT_DEBUG_EXPORT_DISABLED", invalidReason, _
+                        "Preencha as chaves GIT_DEBUG_* na folha Config ou desative a feature.")
         Exit Sub
     End If
 
-    Dim ghFolder As String
-    ghFolder = GitDebug_BuildRunFolder(pipelineNome)
+    Dim pipelineName As String
+    pipelineName = M21_ReadPipelineName(pipelineIndex)
 
-    Dim files As Collection
-    Set files = GitDebug_BuildFilesForUpload(pipelineIndex, pipelineNome, ghFolder, cfg)
-    If files Is Nothing Or files.Count = 0 Then Exit Sub
+    Call M21_LogStage("start", "pipeline=" & pipelineName)
 
-    Dim commitSha As String
-    If Not GH_TreeCommit_CommitFiles(cfg, files, pipelineNome, commitSha, reason) Then
-        Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD, "Falha no auto-upload de debug.", reason)
-        Exit Sub
+    If M21_ExportRunBundle(cfg, pipelineIndex, pipelineName) Then
+        Call GH_LogInfo(0, "DEBUG", "GIT_DEBUG_EXPORT_OK", _
+                        "Bundle de exportaÃ§Ã£o GitHub concluÃ­do.", _
+                        "Verifique a pasta da run em logs/<YYYY-MM-SS - HHMM - [pipeline]>.")
+        Call M21_LogStage("done", "pipeline=" & pipelineName)
     End If
 
-    Dim webUrl As String
-    webUrl = GH_TreeCommit_BuildWebFolderUrl(cfg, GH_Config_GetString(cfg, "base_path", "pipeliner_runs") & "/" & ghFolder)
-
-    Call GitDebug_WriteLinkToSeguimento(pipelineNome, webUrl)
-    Call GitDebug_WriteLinkToHistorico(pipelineNome, webUrl)
-
-    Call GH_LogInfo(0, pipelineNome, GH_EVT_REF_UPDATED, "Debug export publicado no GitHub.", webUrl)
     Exit Sub
-
 EH:
-    Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD, "Falha no auto-upload de debug: " & Err.Description, "Validar parametros GH_* e conectividade com api.github.com.")
+    Call GH_LogError(0, "DEBUG", "GIT_DEBUG_EXPORT_EXCEPTION", _
+                     "Erro inesperado no export GitHub: " & Err.Description, _
+                     "Revise as configuraÃ§Ãµes GIT_DEBUG_* e o estado das folhas DEBUG/Seguimento.")
 End Sub
 
-Private Function GitDebug_BuildRunFolder(ByVal pipelineNome As String) As String
-    GitDebug_BuildRunFolder = Format$(Now, "yyyy-mmm-dd") & "-" & Format$(Now, "hhnn") & " - " & GitDebug_SanitizePathPart(pipelineNome)
+Private Function M21_ExportRunBundle(ByVal cfg As Object, ByVal pipelineIndex As Long, ByVal pipelineName As String) As Boolean
+    Dim catalogoTxt As String
+    Dim debugTxt As String
+    Dim seguimentoTxt As String
+
+    Call M21_LogStage("collect_catalog", "")
+    catalogoTxt = M21_SanitizeForExport(M21_CatalogosDosPromptsDoDebug())
+
+    Call M21_LogStage("collect_debug", "")
+    debugTxt = M21_SanitizeForExport(M21_SheetAsTsv("DEBUG"))
+
+    Call M21_LogStage("collect_seguimento", "")
+    seguimentoTxt = M21_SanitizeForExport(M21_SheetAsTsv("Seguimento"))
+
+    If Len(catalogoTxt) = 0 Then catalogoTxt = "[Sem conteÃºdo de catÃ¡logo para exportar.]"
+    If Len(debugTxt) = 0 Then debugTxt = "[Folha DEBUG sem conteÃºdo.]"
+    If Len(seguimentoTxt) = 0 Then seguimentoTxt = "[Folha Seguimento sem conteÃºdo.]"
+
+    Dim rootLogsPath As String
+    rootLogsPath = M21_ResolveLogsRootPath(GH_Config_GetString(cfg, "path"))
+
+    Dim runFolder As String
+    runFolder = M21_BuildRunFolderName(pipelineName)
+
+    Dim bundleBasePath As String
+    bundleBasePath = rootLogsPath & "/" & runFolder
+
+    Dim httpTimeoutMs As Long
+    Dim httpMaxRetries As Long
+    Dim httpBackoffMs As Long
+    httpTimeoutMs = GH_Config_GetLong(cfg, "http_timeout_ms", 30000)
+    httpMaxRetries = GH_Config_GetLong(cfg, "http_max_retries", 2)
+    httpBackoffMs = GH_Config_GetLong(cfg, "http_backoff_ms", 800)
+
+    Dim resultCatalogo As Object
+    Dim resultDebug As Object
+    Dim resultSeguimento As Object
+
+    Set resultCatalogo = M21_UploadTextFile(cfg, bundleBasePath & "/catalogo_prompts.tsv", catalogoTxt, pipelineIndex, httpTimeoutMs, httpMaxRetries, httpBackoffMs)
+    Set resultDebug = M21_UploadTextFile(cfg, bundleBasePath & "/debug.tsv", debugTxt, pipelineIndex, httpTimeoutMs, httpMaxRetries, httpBackoffMs)
+    Set resultSeguimento = M21_UploadTextFile(cfg, bundleBasePath & "/seguimento.tsv", seguimentoTxt, pipelineIndex, httpTimeoutMs, httpMaxRetries, httpBackoffMs)
+
+    Dim manifestJson As String
+    manifestJson = M21_BuildManifestJson(pipelineIndex, pipelineName, bundleBasePath, resultCatalogo, resultDebug, resultSeguimento, httpTimeoutMs, httpMaxRetries, httpBackoffMs)
+
+    Dim resultManifest As Object
+    Set resultManifest = M21_UploadTextFile(cfg, bundleBasePath & "/manifest.json", manifestJson, pipelineIndex, httpTimeoutMs, httpMaxRetries, httpBackoffMs)
+
+    M21_ExportRunBundle = (CBool(resultCatalogo("ok")) And CBool(resultDebug("ok")) And CBool(resultSeguimento("ok")) And CBool(resultManifest("ok")))
 End Function
 
-Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByVal ghFolder As String, ByVal cfg As Object) As Collection
-    On Error GoTo EH
+Private Function M21_UploadTextFile( _
+    ByVal cfg As Object, _
+    ByVal repoPath As String, _
+    ByVal fileContent As String, _
+    ByVal pipelineIndex As Long, _
+    ByVal timeoutMs As Long, _
+    ByVal maxRetries As Long, _
+    ByVal backoffMs As Long) As Object
 
-    Dim cfgBase As String
-    cfgBase = Trim$(GH_Config_GetString(cfg, "base_path", "pipeliner_runs"))
+    Dim result As Object
+    Set result = CreateObject("Scripting.Dictionary")
+    result.CompareMode = vbTextCompare
+    result("path") = repoPath
+    result("ok") = False
+    result("status") = 0
+    result("attempts") = 0
 
-    Dim remoteFolder As String
-    If cfgBase <> "" Then
-        remoteFolder = cfgBase & "/" & ghFolder
+    Dim url As String
+    url = GH_TreeCommit_ContentsUrl( _
+            GH_Config_GetString(cfg, "base_url"), _
+            GH_Config_GetString(cfg, "owner"), _
+            GH_Config_GetString(cfg, "repo"), _
+            repoPath)
+
+    Call M21_LogStage("get_sha", "path=" & repoPath)
+    Dim existingSha As String
+    existingSha = M21_GetRemoteSha(url, cfg, timeoutMs, maxRetries, backoffMs)
+
+    Dim payload As String
+    payload = GH_TreeCommit_BuildContentsPayload( _
+                GH_TreeCommit_DefaultMessage(pipelineIndex), _
+                GH_Config_GetString(cfg, "branch"), _
+                GH_Blob_Base64FromText(fileContent), _
+                existingSha)
+
+    Dim statusCode As Long
+    Dim responseText As String
+    Dim errText As String
+    Dim ok As Boolean
+    Dim attemptsUsed As Long
+
+    Call M21_LogStage("put_start", "path=" & repoPath & "|has_sha=" & IIf(existingSha <> "", "SIM", "NAO"))
+    ok = GH_HTTP_RequestJson("PUT", url, GH_Config_GetString(cfg, "token"), payload, _
+                             statusCode, responseText, errText, GH_Config_GetString(cfg, "user_agent"), _
+                             timeoutMs, maxRetries, backoffMs, attemptsUsed)
+
+    result("ok") = ok
+    result("status") = statusCode
+    result("attempts") = attemptsUsed
+
+    If ok Then
+        Call GH_LogInfo(0, "DEBUG", "GIT_DEBUG_EXPORT_FILE_OK", _
+                        "Ficheiro exportado: " & repoPath & " (HTTP " & CStr(statusCode) & ", attempts=" & CStr(attemptsUsed) & ").", "")
     Else
-        remoteFolder = ghFolder
+        Call GH_LogError(0, "DEBUG", "GIT_DEBUG_EXPORT_FILE_FAIL", _
+                         "Falha ao exportar " & repoPath & " (HTTP " & CStr(statusCode) & ", attempts=" & CStr(attemptsUsed) & "). " & _
+                         M21_LeftSafe(responseText, 220), _
+                         "Valide token/permissÃµes, branch e path do repositÃ³rio.")
+        If Len(errText) > 0 Then
+            Call GH_LogWarn(0, "DEBUG", "GIT_DEBUG_EXPORT_ENGINE", errText, _
+                            "Confirme suporte WinHTTP/MSXML no host Office.")
+        End If
     End If
 
-    Dim wsDebug As Worksheet
-    Dim wsSeg As Worksheet
-    Set wsDebug = ThisWorkbook.Worksheets(SHEET_DEBUG)
-    Set wsSeg = ThisWorkbook.Worksheets(SHEET_SEGUIMENTO)
-
-    Dim csvDebug As String
-    csvDebug = SheetToCsv(wsDebug)
-
-    Dim csvSeg As String
-    csvSeg = SheetToCsv(wsSeg)
-
-    Dim csvCatalogo As String
-    csvCatalogo = BuildExecutedCatalogCsv(wsSeg, pipelineNome)
-
-    Dim txtPainel As String
-    txtPainel = BuildPainelPipelineInfo(pipelineIndex)
-
-    Dim files As New Collection
-    files.Add GitFileItem(remoteFolder & "/DEBUG.csv", csvDebug)
-    files.Add GitFileItem(remoteFolder & "/catalogo_prompts_executadas.csv", csvCatalogo)
-    files.Add GitFileItem(remoteFolder & "/Seguimento.csv", csvSeg)
-    files.Add GitFileItem(remoteFolder & "/painel_pipeline.txt", txtPainel)
-
-    Set GitDebug_BuildFilesForUpload = files
-    Exit Function
-
-EH:
-    Set GitDebug_BuildFilesForUpload = Nothing
+    Set M21_UploadTextFile = result
 End Function
 
-Private Function BuildPainelPipelineInfo(ByVal pipelineIndex As Long) As String
+Private Function M21_GetRemoteSha( _
+    ByVal contentsUrl As String, _
+    ByVal cfg As Object, _
+    ByVal timeoutMs As Long, _
+    ByVal maxRetries As Long, _
+    ByVal backoffMs As Long) As String
+
+    Dim statusCode As Long
+    Dim responseText As String
+    Dim errText As String
+    Dim ok As Boolean
+    Dim attemptsUsed As Long
+
+    ok = GH_HTTP_RequestJson("GET", contentsUrl, GH_Config_GetString(cfg, "token"), "", _
+                             statusCode, responseText, errText, GH_Config_GetString(cfg, "user_agent"), _
+                             timeoutMs, maxRetries, backoffMs, attemptsUsed)
+
+    If ok Then
+        M21_GetRemoteSha = M21_ExtractJsonStringValue(responseText, "sha")
+    Else
+        M21_GetRemoteSha = ""
+    End If
+End Function
+
+Private Function M21_BuildManifestJson( _
+    ByVal pipelineIndex As Long, _
+    ByVal pipelineName As String, _
+    ByVal runPath As String, _
+    ByVal resultCatalogo As Object, _
+    ByVal resultDebug As Object, _
+    ByVal resultSeguimento As Object, _
+    ByVal timeoutMs As Long, _
+    ByVal maxRetries As Long, _
+    ByVal backoffMs As Long) As String
+
+    Dim successAll As Boolean
+    successAll = CBool(resultCatalogo("ok")) And CBool(resultDebug("ok")) And CBool(resultSeguimento("ok"))
+
+    Dim json As String
+    json = "{" & _
+           """pipeline_index"":" & CStr(pipelineIndex) & "," & _
+           """pipeline_name"":""" & GH_Blob_JsonEscape(pipelineName) & """," & _
+           """run_path"":""" & GH_Blob_JsonEscape(runPath) & """," & _
+           """generated_at"":""" & GH_Blob_JsonEscape(Format$(Now, "yyyy-mm-dd hh:nn:ss")) & """," & _
+           """http_timeout_ms"":" & CStr(timeoutMs) & "," & _
+           """http_max_retries"":" & CStr(maxRetries) & "," & _
+           """http_backoff_ms"":" & CStr(backoffMs) & "," & _
+           """success_all"":" & LCase$(CStr(successAll)) & "," & _
+           """artifacts"": [" & _
+           M21_BuildManifestArtifactJson(resultCatalogo) & "," & _
+           M21_BuildManifestArtifactJson(resultDebug) & "," & _
+           M21_BuildManifestArtifactJson(resultSeguimento) & "]" & _
+           "}"
+
+    M21_BuildManifestJson = json
+End Function
+
+Private Function M21_BuildManifestArtifactJson(ByVal resultItem As Object) As String
+    M21_BuildManifestArtifactJson = "{" & _
+        """path"":""" & GH_Blob_JsonEscape(CStr(resultItem("path"))) & """," & _
+        """ok"":" & LCase$(CStr(CBool(resultItem("ok")))) & "," & _
+        """http_status"":" & CStr(CLng(resultItem("status"))) & "," & _
+        """attempts"":" & CStr(CLng(resultItem("attempts"))) & _
+        "}"
+End Function
+
+Private Sub M21_LogStage(ByVal stageName As String, ByVal contextText As String)
+    Dim fullMsg As String
+    fullMsg = "stage=" & stageName
+    If Len(contextText) > 0 Then fullMsg = fullMsg & "|" & contextText
+    Call GH_LogInfo(0, "DEBUG", "GH_EXPORT_STAGE", fullMsg, "")
+End Sub
+
+Private Function M21_SanitizeForExport(ByVal textIn As String) As String
+    Dim s As String
+    s = textIn
+
+    s = M21_MaskAroundToken(s, "bearer ")
+    s = M21_MaskAroundToken(s, "api_key")
+    s = M21_MaskAroundToken(s, "token")
+    s = M21_MaskAroundToken(s, "authorization")
+
+    If Len(s) > 2000000 Then
+        s = Left$(s, 2000000) & vbCrLf & "[TRUNCATED_FOR_EXPORT]"
+    End If
+
+    M21_SanitizeForExport = s
+End Function
+
+Private Function M21_MaskAroundToken(ByVal src As String, ByVal marker As String) As String
+    Dim work As String
+    work = src
+
+    Dim pos As Long
+    pos = InStr(1, LCase$(work), LCase$(marker), vbTextCompare)
+
+    Do While pos > 0
+        Dim startMask As Long
+        startMask = pos + Len(marker)
+
+        Dim endMask As Long
+        endMask = InStr(startMask, work, vbCrLf)
+        If endMask = 0 Then endMask = Len(work) + 1
+
+        work = Left$(work, startMask - 1) & " ***" & Mid$(work, endMask)
+        pos = InStr(startMask + 4, LCase$(work), LCase$(marker), vbTextCompare)
+    Loop
+
+    M21_MaskAroundToken = work
+End Function
+
+Public Sub GitDebugExport_SelfTest_Basico()
     On Error GoTo EH
 
-    Dim ws As Worksheet
-    Set ws = ThisWorkbook.Worksheets("PAINEL")
+    Dim f As String
+    f = M21_BuildRunFolderName("Pipe: Test/Name")
+
+    If InStr(1, f, "[") > 0 And InStr(1, f, "]") > 0 And InStr(1, f, "/") = 0 Then
+        Call GH_LogInfo(0, "SELFTEST", "GH_EXPORT_SELFTEST", "PASS: naming/sanitize bÃ¡sico", "")
+    Else
+        Call GH_LogError(0, "SELFTEST", "GH_EXPORT_SELFTEST", "FAIL: naming/sanitize bÃ¡sico", "")
+    End If
+    Exit Sub
+EH:
+    Call GH_LogError(0, "SELFTEST", "GH_EXPORT_SELFTEST", "FAIL com exceÃ§Ã£o: " & Err.Description, "")
+End Sub
+
+Private Function M21_ExtractJsonStringValue(ByVal json As String, ByVal key As String) As String
+    Dim marker As String
+    marker = """" & key & """:"""
+
+    Dim p As Long
+    p = InStr(1, json, marker, vbTextCompare)
+    If p <= 0 Then
+        M21_ExtractJsonStringValue = ""
+        Exit Function
+    End If
+
+    Dim startPos As Long
+    startPos = p + Len(marker)
+
+    Dim i As Long
+    Dim ch As String
+    Dim out As String
+
+    For i = startPos To Len(json)
+        ch = Mid$(json, i, 1)
+        If ch = """" Then
+            If Mid$(json, i - 1, 1) <> "\" Then Exit For
+        End If
+        out = out & ch
+    Next i
+
+    M21_ExtractJsonStringValue = Replace$(out, "\" & Chr$(34), Chr$(34))
+End Function
+
+Private Function M21_ResolveLogsRootPath(ByVal configuredPath As String) As String
+    Dim p As String
+    p = Trim$(configuredPath)
+
+    If p = "" Then
+        M21_ResolveLogsRootPath = "logs"
+        Exit Function
+    End If
+
+    If Right$(p, 1) = "/" Then p = Left$(p, Len(p) - 1)
+
+    Dim slashPos As Long
+    slashPos = InStrRev(p, "/")
+
+    If InStrRev(p, ".") > slashPos And slashPos > 0 Then
+        M21_ResolveLogsRootPath = Left$(p, slashPos - 1)
+    ElseIf LCase$(Left$(p, 4)) <> "logs" Then
+        M21_ResolveLogsRootPath = "logs"
+    Else
+        M21_ResolveLogsRootPath = p
+    End If
+
+    If Len(Trim$(M21_ResolveLogsRootPath)) = 0 Then M21_ResolveLogsRootPath = "logs"
+End Function
+
+Private Function M21_BuildRunFolderName(ByVal pipelineName As String) As String
+    Dim prefix As String
+    prefix = Format$(Now, "yyyy-mm-ss - hhnn")
+    M21_BuildRunFolderName = prefix & " - [" & M21_SanitizePathPart(pipelineName) & "]"
+End Function
+
+Private Function M21_ReadPipelineName(ByVal pipelineIndex As Long) As String
+    On Error GoTo Fallback
+
+    If pipelineIndex <= 0 Then GoTo Fallback
+
+    Dim wsPainel As Worksheet
+    Set wsPainel = ThisWorkbook.Worksheets("PAINEL")
 
     Dim colIniciar As Long
     colIniciar = 2 + (pipelineIndex - 1) * 2
 
-    Dim colReg As Long
-    colReg = colIniciar + 1
+    Dim nome As String
+    nome = Trim$(CStr(wsPainel.Cells(1, colIniciar).Value))
+    If nome = "" Then GoTo Fallback
 
-    Dim txt As String
-    txt = "Pipeline Index: " & CStr(pipelineIndex) & vbCrLf
-    txt = txt & "Nome: " & CStr(ws.Cells(1, colIniciar).Value) & vbCrLf
-    txt = txt & "INPUT Folder: " & CStr(ws.Cells(2, colIniciar).Value) & vbCrLf
-    txt = txt & "OUTPUT Folder: " & CStr(ws.Cells(3, colIniciar).Value) & vbCrLf
-    txt = txt & "Auto-guardar ficheiros: " & CStr(ws.Cells(4, colIniciar).Value) & vbCrLf
-    txt = txt & "Max Steps: " & CStr(ws.Cells(5, colIniciar).Value) & vbCrLf
-    txt = txt & "Max Repetitions: " & CStr(ws.Cells(6, colIniciar).Value) & vbCrLf
-    txt = txt & "Primeiros IDs (INICIAR):" & vbCrLf
-
-    Dim r As Long
-    For r = 10 To 20
-        txt = txt & "- " & CStr(ws.Cells(r, colIniciar).Value) & vbCrLf
-    Next r
-
-    txt = txt & "Primeiros IDs (REGISTAR):" & vbCrLf
-    For r = 10 To 20
-        txt = txt & "- " & CStr(ws.Cells(r, colReg).Value) & vbCrLf
-    Next r
-
-    BuildPainelPipelineInfo = txt
+    M21_ReadPipelineName = nome
     Exit Function
-
-EH:
-    BuildPainelPipelineInfo = ""
+Fallback:
+    M21_ReadPipelineName = "Pipeline_" & Format$(pipelineIndex, "00")
 End Function
 
-Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelineNome As String) As String
-    Dim d As Object
-    Set d = CreateObject("Scripting.Dictionary")
-    d.CompareMode = 1
-
-    Dim hMap As Object
-    Set hMap = HeaderMap(wsSeg)
-
-    Dim cPipe As Long
-    cPipe = MapGet(hMap, "pipeline_name")
-
-    Dim cPid As Long
-    cPid = MapGet(hMap, "Prompt ID")
-
-    Dim lastRow As Long
-    lastRow = wsSeg.Cells(wsSeg.Rows.Count, 1).End(xlUp).Row
-
-    Dim r As Long
-    For r = 2 To lastRow
-        If Trim$(CStr(wsSeg.Cells(r, cPipe).Value)) = pipelineNome Then
-            Dim pid As String
-            pid = Trim$(CStr(wsSeg.Cells(r, cPid).Value))
-            If pid <> "" And UCase$(pid) <> "STOP" Then d(pid) = 1
-        End If
-    Next r
-
-    Dim out As String
-    out = "prompt_id,catalogo,nome_curto,nome_descritivo,modelo,modos,storage" & vbCrLf
-
-    Dim k As Variant
-    For Each k In d.Keys
-        Dim p As PromptDefinicao
-        p = Catalogo_ObterPromptPorID(CStr(k))
-        out = out & CsvRow(Array(p.Id, PrefixFromId(p.Id), p.NomeCurto, p.NomeDescritivo, p.modelo, p.modos, p.storage)) & vbCrLf
-    Next k
-
-    BuildExecutedCatalogCsv = out
-End Function
-
-Private Function PrefixFromId(ByVal promptId As String) As String
-    Dim p As Long
-    p = InStr(1, promptId, "/")
-    If p > 1 Then
-        PrefixFromId = Left$(promptId, p - 1)
-    Else
-        PrefixFromId = ""
-    End If
-End Function
-
-Private Function SheetToCsv(ByVal ws As Worksheet) As String
-    Dim lr As Long
-    Dim lc As Long
-    lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    lc = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
-
-    Dim r As Long
-    Dim c As Long
-    Dim line As String
-    Dim out As String
-
-    For r = 1 To lr
-        line = ""
-        For c = 1 To lc
-            If c > 1 Then line = line & ","
-            line = line & CsvEscape(CStr(ws.Cells(r, c).Value))
-        Next c
-        out = out & line & vbCrLf
-    Next r
-
-    SheetToCsv = out
-End Function
-
-Private Function CsvRow(ByVal vals As Variant) As String
-    Dim i As Long
-    Dim s As String
-
-    For i = LBound(vals) To UBound(vals)
-        If i > LBound(vals) Then s = s & ","
-        s = s & CsvEscape(CStr(vals(i)))
-    Next i
-
-    CsvRow = s
-End Function
-
-Private Function CsvEscape(ByVal s As String) As String
-    s = Replace(s, """", """""")
-    CsvEscape = """" & s & """"
-End Function
-
-Private Function GitFileItem(ByVal path As String, ByVal content As String) As Object
-    Dim d As Object
-    Set d = CreateObject("Scripting.Dictionary")
-    d("path") = path
-    d("content") = content
-    Set GitFileItem = d
-End Function
-
-Private Function GitData_CommitFiles(ByVal owner As String, ByVal repo As String, ByVal branch As String, ByVal token As String, ByVal files As Collection, ByVal pipelineNome As String) As String
-    On Error GoTo EH
-
-    Dim apiBase As String: apiBase = GitCfg_Get("GH_API_BASE", "https://api.github.com")
-    Dim headRefUrl As String
-    headRefUrl = apiBase & "/repos/" & owner & "/" & repo & "/git/ref/heads/" & branch
-
-    Dim refBody As String
-    refBody = Git_Http("GET", headRefUrl, token, "")
-    Dim headSha As String: headSha = JsonPick(refBody, "sha")
-    If headSha = "" Then Exit Function
-    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_REF_OK", "HEAD obtido.", "sha=" & Left$(headSha, 10))
-
-    Dim commitBody As String
-    commitBody = Git_Http("GET", apiBase & "/repos/" & owner & "/" & repo & "/git/commits/" & headSha, token, "")
-    Dim baseTreeSha As String: baseTreeSha = JsonPickTreeSha(commitBody)
-    If baseTreeSha = "" Then baseTreeSha = JsonPick(commitBody, "sha")
-
-    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_BASE_TREE_OK", "Base tree resolvida.", "tree_sha=" & Left$(baseTreeSha, 10))
-
-    Dim treeItems As String
-    Dim i As Long
-    For i = 1 To files.Count
-        Dim f As Object: Set f = files(i)
-        Dim blobSha As String
-        blobSha = Git_CreateBlob(apiBase, owner, repo, token, CStr(f("content")))
-        If blobSha = "" Then Exit Function
-        If treeItems <> "" Then treeItems = treeItems & ","
-        treeItems = treeItems & "{""path"":""" & Json_EscapeString(CStr(f("path")) ) & """,""mode"":""100644"",""type"":""blob"",""sha"":""" & blobSha & """}"
-    Next i
-    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_BLOBS_CREATED", "Blobs criados.", "n=" & CStr(files.Count))
-
-    Dim treeReq As String
-    treeReq = "{""base_tree"":""" & baseTreeSha & """,""tree"": [" & treeItems & "]}"
-    Dim treeResp As String
-    treeResp = Git_Http("POST", apiBase & "/repos/" & owner & "/" & repo & "/git/trees", token, treeReq)
-    Dim treeSha As String: treeSha = JsonPick(treeResp, "sha")
-    If treeSha = "" Then Exit Function
-    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_TREE_CREATED", "Tree criada.", "sha=" & Left$(treeSha, 10))
-
-    Dim commitMsg As String
-    commitMsg = Replace(GitCfg_Get("GH_COMMIT_MESSAGE_TEMPLATE", "PIPELINER run {{RUN_ID}}"), "{{RUN_ID}}", Format$(Now, "yyyymmdd_hhnnss"))
-
-    Dim newCommitReq As String
-    newCommitReq = "{""message"":""" & Json_EscapeString(commitMsg) & """,""tree"":""" & treeSha & """,""parents"": [""" & headSha & """]}"
-    Dim newCommitResp As String
-    newCommitResp = Git_Http("POST", apiBase & "/repos/" & owner & "/" & repo & "/git/commits", token, newCommitReq)
-    Dim newCommitSha As String: newCommitSha = JsonPick(newCommitResp, "sha")
-    If newCommitSha = "" Then Exit Function
-    Call Debug_Registar(0, pipelineNome, "INFO", "", "GH_COMMIT_CREATED", "Commit criado.", "sha=" & Left$(newCommitSha, 10))
-
-    Dim updReq As String
-    updReq = "{""sha"":""" & newCommitSha & """,""force"":" & LCase$(GitCfg_Get("GH_FORCE_UPDATE", "false")) & "}"
-    Call Git_Http("PATCH", headRefUrl, token, updReq)
-
-    GitData_CommitFiles = newCommitSha
-    Exit Function
-EH:
-    GitData_CommitFiles = ""
-End Function
-
-Private Function Git_CreateBlob(ByVal apiBase As String, ByVal owner As String, ByVal repo As String, ByVal token As String, ByVal content As String) As String
-    Dim req As String
-    req = "{""content"":""" & Json_EscapeString(content) & """,""encoding"":""utf-8""}"
-    Dim resp As String
-    resp = Git_Http("POST", apiBase & "/repos/" & owner & "/" & repo & "/git/blobs", token, req)
-    Git_CreateBlob = JsonPick(resp, "sha")
-End Function
-
-Private Function Git_Http(ByVal method As String, ByVal url As String, ByVal token As String, ByVal body As String) As String
-    Dim http As Object: Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
-    http.Open method, url, False
-    http.SetRequestHeader "Authorization", "Bearer " & token
-    http.SetRequestHeader "Accept", GitCfg_Get("GH_ACCEPT_HEADER", "application/vnd.github+json")
-    http.SetRequestHeader "X-GitHub-Api-Version", GitCfg_Get("GH_API_VERSION", "2022-11-28")
-    http.SetRequestHeader "User-Agent", GitCfg_Get("GH_USER_AGENT", "PIPELINER-VBA")
-    If body <> "" Then
-        http.SetRequestHeader "Content-Type", "application/json"
-        http.Send body
-    Else
-        http.Send
-    End If
-
-    Git_Http = CStr(http.ResponseText)
-End Function
-
-Private Function JsonPickTreeSha(ByVal body As String) As String
-    Dim re As Object: Set re = CreateObject("VBScript.RegExp")
-    re.Global = False
-    re.IgnoreCase = True
-    re.Pattern = """tree""\s*:\s*\{\s*""sha""\s*:\s*""([^""]+)"""
-    If re.Test(body) Then JsonPickTreeSha = re.Execute(body)(0).SubMatches(0)
-End Function
-
-    Dim ws As Worksheet
-    Set ws = ThisWorkbook.Worksheets(SHEET_SEGUIMENTO)
-
-    Dim map As Object
-    Set map = HeaderMap(ws)
-
-    Dim cPipe As Long
-    cPipe = MapGet(map, "pipeline_name")
-
-    Dim cGit As Long
-    cGit = MapGet(map, "GIT_DEBUG")
-    If cGit = 0 Then
-        cGit = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column + 1
-        ws.Cells(1, cGit).Value = "GIT_DEBUG"
-    End If
-
-    Dim lr As Long
-    lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-
-    Dim r As Long
-    For r = 2 To lr
-        If Trim$(CStr(ws.Cells(r, cPipe).Value)) = pipelineNome Then ws.Cells(r, cGit).Value = link
-    Next r
-End Sub
-
-Private Sub GitDebug_WriteLinkToHistorico(ByVal pipelineNome As String, ByVal link As String)
-    On Error Resume Next
-
-    Dim ws As Worksheet
-    Set ws = GitDebug_GetHistoricoSheet()
-    If ws Is Nothing Then Exit Sub
-
-    Dim map As Object
-    Set map = HeaderMap(ws)
-
-    Dim cPipe As Long
-    cPipe = MapGet(map, "Nome do Pipeline")
-
-    Dim cGit As Long
-    cGit = MapGet(map, "GIT_DEBUG")
-    If cGit = 0 Then
-        cGit = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column + 1
-        ws.Cells(1, cGit).Value = "GIT_DEBUG"
-    End If
-
-    Dim lr As Long
-    lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-
-    Dim r As Long
-    For r = 2 To lr
-        If Trim$(CStr(ws.Cells(r, cPipe).Value)) = pipelineNome And Trim$(CStr(ws.Cells(r, cGit).Value)) = "" Then
-            ws.Cells(r, cGit).Value = link
-        End If
-    Next r
-End Sub
-
-
-Private Function GitDebug_GetHistoricoSheet() As Worksheet
-    On Error Resume Next
-    Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets("HISTÃ“RICO")
-    If GitDebug_GetHistoricoSheet Is Nothing Then Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets(SHEET_HIST)
-    On Error GoTo 0
-End Function
-
-Private Function HeaderMap(ByVal ws As Worksheet) As Object
-    Dim d As Object
-    Set d = CreateObject("Scripting.Dictionary")
-    d.CompareMode = 1
-
-    Dim lc As Long
-    lc = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
-
-    Dim c As Long
-    For c = 1 To lc
-        d(Trim$(CStr(ws.Cells(1, c).Value))) = c
-    Next c
-
-    Set HeaderMap = d
-End Function
-
-Private Function MapGet(ByVal d As Object, ByVal keyName As String) As Long
-    If d.exists(keyName) Then
-        MapGet = CLng(d(keyName))
-    Else
-        MapGet = 0
-    End If
-End Function
-
-Private Function GitDebug_SanitizePathPart(ByVal s As String) As String
+Private Function M21_SanitizePathPart(ByVal s As String) As String
     Dim out As String
     out = Trim$(s)
-    out = Replace(out, "\", "-")
-    out = Replace(out, "/", "-")
-    out = Replace(out, ":", "-")
-    out = Replace(out, "*", "-")
-    out = Replace(out, "?", "-")
-    out = Replace(out, """", "-")
-    out = Replace(out, "<", "-")
-    out = Replace(out, ">", "-")
-    out = Replace(out, "|", "-")
-    If out = "" Then out = "pipeline"
-    GitDebug_SanitizePathPart = out
+    out = Replace$(out, "\", "_")
+    out = Replace$(out, "/", "_")
+    out = Replace$(out, ":", "_")
+    out = Replace$(out, "*", "_")
+    out = Replace$(out, "?", "_")
+    out = Replace$(out, """", "_")
+    out = Replace$(out, "<", "_")
+    out = Replace$(out, ">", "_")
+    out = Replace$(out, "|", "_")
+    If out = "" Then out = "Pipeline"
+    M21_SanitizePathPart = out
 End Function
 
-Public Sub GitDebug_Config_InstalarParametros(Optional ByVal sobrescreverValores As Boolean = False)
+Private Function M21_CatalogosDosPromptsDoDebug() As String
     On Error GoTo EH
 
-    Dim ws As Worksheet
-    Set ws = ThisWorkbook.Worksheets("Config")
+    Dim promptIds As Object
+    Set promptIds = M21_PromptIdsFromDebug()
 
-    Call GitDebug_Config_EnsureGuideHeaders(ws)
-
-    Dim defs As Collection
-    Set defs = GitDebug_Config_Definitions()
-
-    Dim i As Long
-    Dim createdCount As Long
-    Dim updatedCount As Long
-
-    For i = 1 To defs.Count
-        Dim d As Object
-        Set d = defs(i)
-
-        Dim rowKey As Long
-        rowKey = GitDebug_Config_FindKeyRow(ws, CStr(d("key")))
-
-        If rowKey = 0 Then
-            rowKey = GitDebug_Config_NextRow(ws)
-            ws.Cells(rowKey, 1).Value = CStr(d("key"))
-            createdCount = createdCount + 1
-        Else
-            updatedCount = updatedCount + 1
-        End If
-
-        If sobrescreverValores Or Trim$(CStr(ws.Cells(rowKey, 2).Value)) = "" Then
-            ws.Cells(rowKey, 2).Value = CStr(d("default"))
-        End If
-
-        If sobrescreverValores Or Trim$(CStr(ws.Cells(rowKey, 3).Value)) = "" Then
-            ws.Cells(rowKey, 3).Value = CStr(d("help"))
-        End If
-
-        If sobrescreverValores Or Trim$(CStr(ws.Cells(rowKey, 4).Value)) = "" Then
-            ws.Cells(rowKey, 4).Value = CStr(d("default"))
-        End If
-
-        If sobrescreverValores Or Trim$(CStr(ws.Cells(rowKey, 5).Value)) = "" Then
-            ws.Cells(rowKey, 5).Value = CStr(d("allowed"))
-        End If
-    Next i
-
-    MsgBox "Parametros GH_* preparados no Config." & vbCrLf & _
-           "Criados: " & CStr(createdCount) & " | Atualizados/validados: " & CStr(updatedCount), vbInformation
-    Exit Sub
-
-EH:
-    Call Debug_Registar(0, "", "ERRO", "", "GH_CONFIG_INSTALL_FAIL", "Falha ao instalar parametros GH_* no Config.", "err=" & CStr(Err.Number) & " | " & Left$(Err.Description, 180))
-    MsgBox "Erro em GitDebug_Config_InstalarParametros: " & Err.Description, vbExclamation
-End Sub
-
-Private Sub GitDebug_Config_EnsureGuideHeaders(ByVal ws As Worksheet)
-    ws.Cells(GH_CONFIG_HEADER_ROW, 1).Value = "Key"
-    ws.Cells(GH_CONFIG_HEADER_ROW, 2).Value = "Value"
-    ws.Cells(GH_CONFIG_HEADER_ROW, 3).Value = "Explicacao (leigos)"
-    ws.Cells(GH_CONFIG_HEADER_ROW, 4).Value = "Default"
-    ws.Cells(GH_CONFIG_HEADER_ROW, 5).Value = "Valores possiveis / intervalo"
-End Sub
-
-Private Function GitDebug_Config_Definitions() As Collection
-    Dim defs As New Collection
-
-    Call GitDebug_Config_Add(defs, "GH_UPLOAD_MODE", "tree_commit", "Modo global do upload para GitHub no PIPELINER.", "contents_api | tree_commit")
-    Call GitDebug_Config_Add(defs, "GH_OWNER", "cpsa-org", "Dono do repositorio (organizacao ou utilizador).", "texto nao vazio")
-    Call GitDebug_Config_Add(defs, "GH_REPO", "pipeliner-data", "Nome do repositorio onde guardar os debug runs.", "texto nao vazio")
-    Call GitDebug_Config_Add(defs, "GH_BRANCH", "main", "Branch alvo para criar commits de debug.", "branch existente")
-    Call GitDebug_Config_Add(defs, "GH_API_BASE", "https://api.github.com", "URL base da API GitHub (ou GitHub Enterprise).", "URL valida")
-
-    Call GitDebug_Config_Add(defs, "GH_AUTH_MODE", "PAT", "Modo de autenticacao. Hoje o fluxo usa token (PAT).", "PAT | GITHUB_APP")
-    Call GitDebug_Config_Add(defs, "GH_TOKEN_ENV", "GITHUB_TOKEN", "Nome da variavel de ambiente que guarda o token.", "nome de variavel de ambiente")
-    Call GitDebug_Config_Add(defs, "GH_TOKEN_CONFIG", "", "Fallback local para token quando ENV estiver vazio (evitar em producao).", "string vazia ou token")
-
-    Call GitDebug_Config_Add(defs, "GH_COMMIT_PREFIX", "PIPELINER", "Prefixo visual para identificar commits automaticos.", "texto curto")
-    Call GitDebug_Config_Add(defs, "GH_COMMIT_AUTHOR_NAME", "PIPELINER Bot", "Nome de autor para auditoria nos commits.", "texto")
-    Call GitDebug_Config_Add(defs, "GH_COMMIT_AUTHOR_EMAIL", "bot@cpsa.pt", "Email de autor para auditoria nos commits.", "email")
-    Call GitDebug_Config_Add(defs, "GH_COMMIT_MESSAGE_TEMPLATE", "PIPELINER run {{RUN_ID}}", "Template da mensagem de commit. {{RUN_ID}} e substituido no runtime.", "template com placeholders")
-
-    Call GitDebug_Config_Add(defs, "GH_BATCH_MODE", "tree_commit", "Modo de upload em batch para este modulo.", "tree_commit")
-    Call GitDebug_Config_Add(defs, "GH_MAX_FILES", "200", "Numero maximo de ficheiros por commit (protecao).", "1..1000")
-    Call GitDebug_Config_Add(defs, "GH_MAX_FILE_MB", "50", "Tamanho maximo por ficheiro (MB).", "1..200")
-    Call GitDebug_Config_Add(defs, "GH_ENCODING_TEXT", "utf-8", "Encoding dos ficheiros de texto enviados para blobs.", "utf-8")
-    Call GitDebug_Config_Add(defs, "GH_BINARY_MODE", "base64", "Encoding recomendado para ficheiros binarios.", "base64")
-
-    Call GitDebug_Config_Add(defs, "GH_BASE_PATH", "pipeliner_runs", "Pasta base no repo para agrupar execucoes.", "path relativo sem / inicial")
-    Call GitDebug_Config_Add(defs, "GH_RUN_FOLDER_TEMPLATE", "{{DATE}}/{{RUN_ID}}", "Template opcional da subpasta do run.", "ex.: {{DATE}}/{{RUN_ID}}")
-    Call GitDebug_Config_Add(defs, "GH_LOG_FOLDER", "logs", "Subpasta para logs complementares (quando aplicavel).", "path relativo")
-
-    Call GitDebug_Config_Add(defs, "GH_RETRY_ON_CONFLICT", "true", "Se true, tenta novamente quando o HEAD muda durante commit.", "true | false")
-    Call GitDebug_Config_Add(defs, "GH_MAX_RETRIES", "3", "Número máximo de tentativas em conflito 409 ao atualizar refs.", "inteiro >= 1")
-    Call GitDebug_Config_Add(defs, "GH_FORCE_UPDATE", "false", "Se true, faz update forcado da ref (nao recomendado).", "true | false")
-
-    Call GitDebug_Config_Add(defs, "GH_DEBUG_MODE", "true", "Liga registos de troubleshooting GH_* no DEBUG.", "true | false")
-    Call GitDebug_Config_Add(defs, "GH_LOG_HTTP", "false", "Se true, regista requests/responses HTTP resumidos no DEBUG.", "true | false")
-    Call GitDebug_Config_Add(defs, "GH_LOG_BLOB_SHA", "true", "Se true, mostra SHA curto dos blobs criados no DEBUG.", "true | false")
-
-    Call GitDebug_Config_Add(defs, "GH_API_VERSION", "2022-11-28", "Versao da API GitHub enviada em header.", "YYYY-MM-DD")
-    Call GitDebug_Config_Add(defs, "GH_ACCEPT_HEADER", "application/vnd.github+json", "Header Accept enviado para a API GitHub.", "media type HTTP valido")
-    Call GitDebug_Config_Add(defs, "GH_USER_AGENT", "PIPELINER-VBA", "User-Agent usado nas chamadas a API.", "texto sem vazio")
-    Call GitDebug_Config_Add(defs, "GH_HEADERS_EXTRA_JSON", "", "Headers extra opcionais em JSON simples (ex.: {""X-Trace"":""abc""}).", "JSON objeto ou vazio")
-
-    Set GitDebug_Config_Definitions = defs
-End Function
-
-Private Sub GitDebug_Config_Add(ByRef defs As Collection, ByVal keyName As String, ByVal defaultValue As String, ByVal helpText As String, ByVal allowed As String)
-    Dim d As Object
-    Set d = CreateObject("Scripting.Dictionary")
-    d("key") = keyName
-    d("default") = defaultValue
-    d("help") = helpText
-    d("allowed") = allowed
-    defs.Add d
-End Sub
-
-Private Function GitDebug_Config_FindKeyRow(ByVal ws As Worksheet, ByVal keyName As String) As Long
-    Dim lr As Long
-    lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    If lr < GH_CONFIG_FIRST_DATA_ROW Then
-        GitDebug_Config_FindKeyRow = 0
+    If promptIds.Count = 0 Then
+        M21_CatalogosDosPromptsDoDebug = "[Sem prompts encontrados no DEBUG.]"
         Exit Function
     End If
 
+    Dim sb As String
+    Dim promptId As Variant
+
+    For Each promptId In promptIds.Keys
+        sb = sb & M21_BlocosCatalogoPorPromptId(CStr(promptId)) & vbCrLf
+    Next promptId
+
+    M21_CatalogosDosPromptsDoDebug = Trim$(sb)
+    Exit Function
+EH:
+    M21_CatalogosDosPromptsDoDebug = "[Erro ao montar catÃ¡logos: " & Err.Description & "]"
+End Function
+
+Private Function M21_PromptIdsFromDebug() As Object
+    Dim dict As Object
+    Set dict = CreateObject("Scripting.Dictionary")
+    dict.CompareMode = vbTextCompare
+
+    Dim ws As Worksheet
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets("DEBUG")
+    On Error GoTo 0
+
+    If ws Is Nothing Then
+        Set M21_PromptIdsFromDebug = dict
+        Exit Function
+    End If
+
+    Dim colPrompt As Long
+    colPrompt = M21_FindColumn(ws, "Prompt ID")
+    If colPrompt = 0 Then
+        Set M21_PromptIdsFromDebug = dict
+        Exit Function
+    End If
+
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, colPrompt).End(xlUp).Row
+
     Dim r As Long
-    For r = GH_CONFIG_FIRST_DATA_ROW To lr
-        If StrComp(Trim$(CStr(ws.Cells(r, 1).Value)), keyName, vbTextCompare) = 0 Then
-            GitDebug_Config_FindKeyRow = r
-            Exit Function
+    Dim promptId As String
+    For r = 2 To lastRow
+        promptId = Trim$(CStr(ws.Cells(r, colPrompt).Value))
+        If promptId <> "" Then
+            If UCase$(promptId) <> "DEBUG" And UCase$(promptId) <> "SELFTEST" Then
+                dict(promptId) = True
+            End If
         End If
     Next r
 
-    GitDebug_Config_FindKeyRow = 0
+    Set M21_PromptIdsFromDebug = dict
 End Function
 
-Private Function GitDebug_Config_NextRow(ByVal ws As Worksheet) As Long
-    Dim lr As Long
-    lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    If lr < GH_CONFIG_FIRST_DATA_ROW Then lr = GH_CONFIG_HEADER_ROW
-    GitDebug_Config_NextRow = lr + 1
+Private Function M21_BlocosCatalogoPorPromptId(ByVal promptId As String) As String
+    On Error GoTo EH
+
+    Dim parts() As String
+    parts = Split(promptId, "/")
+
+    Dim sheetName As String
+    sheetName = Trim$(parts(0))
+    If sheetName = "" Then
+        M21_BlocosCatalogoPorPromptId = "[Prompt ID sem prefixo de folha: " & promptId & "]"
+        Exit Function
+    End If
+
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(sheetName)
+
+    Dim idCell As Range
+    Set idCell = ws.Columns(1).Find(What:=promptId, LookIn:=xlValues, LookAt:=xlWhole, _
+                                    SearchOrder:=xlByRows, SearchDirection:=xlNext, MatchCase:=False)
+
+    If idCell Is Nothing Then
+        M21_BlocosCatalogoPorPromptId = "[Prompt ID nÃ£o encontrado no catÃ¡logo " & sheetName & ": " & promptId & "]"
+        Exit Function
+    End If
+
+    Dim firstRow As Long
+    firstRow = idCell.Row
+
+    Dim blockRange As Range
+    Set blockRange = ws.Range(ws.Cells(firstRow, 1), ws.Cells(firstRow + 3, 11))
+
+    M21_BlocosCatalogoPorPromptId = "--- CatÃ¡logo " & sheetName & " | Prompt " & promptId & " ---" & vbCrLf & _
+                                    M21_RangeAsTsv(blockRange)
+    Exit Function
+EH:
+    M21_BlocosCatalogoPorPromptId = "[Erro ao ler catÃ¡logo de " & promptId & ": " & Err.Description & "]"
+End Function
+
+Private Function M21_SheetAsTsv(ByVal sheetName As String) As String
+    On Error GoTo EH
+
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(sheetName)
+
+    Dim lastCell As Range
+    Set lastCell = ws.Cells.Find(What:="*", After:=ws.Cells(1, 1), LookIn:=xlFormulas, LookAt:=xlPart, _
+                                 SearchOrder:=xlByRows, SearchDirection:=xlPrevious, MatchCase:=False)
+    If lastCell Is Nothing Then
+        M21_SheetAsTsv = ""
+        Exit Function
+    End If
+
+    Dim lastRow As Long
+    Dim lastCol As Long
+    lastRow = lastCell.Row
+
+    Set lastCell = ws.Cells.Find(What:="*", After:=ws.Cells(1, 1), LookIn:=xlFormulas, LookAt:=xlPart, _
+                                 SearchOrder:=xlByColumns, SearchDirection:=xlPrevious, MatchCase:=False)
+    lastCol = lastCell.Column
+
+    M21_SheetAsTsv = M21_RangeAsTsv(ws.Range(ws.Cells(1, 1), ws.Cells(lastRow, lastCol)))
+    Exit Function
+EH:
+    M21_SheetAsTsv = ""
+End Function
+
+Private Function M21_RangeAsTsv(ByVal rng As Range) As String
+    Dim data As Variant
+    data = rng.Value
+
+    Dim r As Long
+    Dim c As Long
+    Dim out As String
+
+    If IsArray(data) Then
+        For r = LBound(data, 1) To UBound(data, 1)
+            For c = LBound(data, 2) To UBound(data, 2)
+                out = out & Replace$(Replace$(CStr(data(r, c)), vbCrLf, " "), vbTab, " ")
+                If c < UBound(data, 2) Then out = out & vbTab
+            Next c
+            If r < UBound(data, 1) Then out = out & vbCrLf
+        Next r
+    Else
+        out = Replace$(Replace$(CStr(data), vbCrLf, " "), vbTab, " ")
+    End If
+
+    M21_RangeAsTsv = out
+End Function
+
+Private Function M21_FindColumn(ByVal ws As Worksheet, ByVal headerText As String) As Long
+    Dim lastCol As Long
+    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+
+    Dim c As Long
+    For c = 1 To lastCol
+        If Trim$(UCase$(CStr(ws.Cells(1, c).Value))) = Trim$(UCase$(headerText)) Then
+            M21_FindColumn = c
+            Exit Function
+        End If
+    Next c
+
+    M21_FindColumn = 0
+End Function
+
+Private Function M21_LeftSafe(ByVal text As String, ByVal maxLen As Long) As String
+    If maxLen <= 0 Then
+        M21_LeftSafe = ""
+    ElseIf Len(text) <= maxLen Then
+        M21_LeftSafe = text
+    Else
+        M21_LeftSafe = Left$(text, maxLen) & "..."
+    End If
 End Function

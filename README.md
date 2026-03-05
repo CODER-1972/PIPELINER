@@ -76,6 +76,17 @@ Também inclui um fluxo opcional de exportação dos logs `DEBUG`/`Seguimento` p
 - `M25_GH_TreeCommit`: fluxo `ref -> commit base -> blobs -> tree -> commit -> update ref`;
 - `M26_GH_Logger`: logging funcional dedicado no `DEBUG`.
 
+Também inclui um fluxo opcional de exportação dos logs `DEBUG`/`Seguimento` para GitHub, orquestrado por `M21_GitDebugExport` com separação por responsabilidades:
+
+- `M22_GH_Config`: leitura de `GIT_DEBUG_*` na folha `Config`;
+- `M23_GH_HTTP`: cliente HTTP com fallback WinHTTP/MSXML;
+- `M24_GH_Blob`: encoding UTF-8/Base64 e escaping JSON;
+- `M25_GH_TreeCommit`: composição de endpoint/payload de commit no GitHub (com URL encoding UTF-8 por segmento);
+- `M26_GH_Logger`: logging funcional dedicado no `DEBUG`.
+
+No modo atual de exportação GitHub, cada execução gera um bundle em `logs/<YYYY-MM-SS - HHMM - [nome da pipeline]>/` com três artefactos: `catalogo_prompts.tsv`, `debug.tsv` e `seguimento.tsv`.
+A exportação também publica `manifest.json` por run e aplica observabilidade por etapa (`GH_EXPORT_STAGE`), além de timeout/retry/backoff configuráveis por `GIT_DEBUG_HTTP_TIMEOUT_MS`, `GIT_DEBUG_HTTP_MAX_RETRIES` e `GIT_DEBUG_HTTP_BACKOFF_MS`.
+
 ---
 
 ## 3. Estrutura funcional do workbook
