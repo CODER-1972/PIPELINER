@@ -2,11 +2,15 @@ Attribute VB_Name = "M02_Logger_DEBUG_e_Seguimento"
 Option Explicit
 
 ' =============================================================================
-' Módulo: M02_Logger_DEBUG_e_Seguimento
-' Propósito:
+' Modulo: M02_Logger_DEBUG_e_Seguimento
+' Proposito:
 ' - Registar auditoria operacional nas folhas DEBUG e Seguimento.
-' - Manter escrita resiliente a reordenação de colunas e apoiar arquivamento/limpeza de logs.
+' - Manter escrita resiliente a reordenacao de colunas e apoiar arquivamento/limpeza de logs.
 '
+' Atualizacoes:
+' - 2026-03-03 | Codex | Mapeia trace padronizado de override de modo FILES
+'   - Inclui `FILES_MODE_OVERRIDE_TRACE` nas acoes deduzidas da coluna Funcionalidade.
+'   - Amplia extracao de contexto operacional com requested/resolved/raw_mode/effective_mode/reason.
 ' Atualizações:
 ' - 2026-03-04 | Codex | Coluna GIT_DEBUG no arquivamento Seguimento -> HISTORICO
 '   - Inclui GIT_DEBUG no conjunto canonico de headers e mapeamento por nome.
@@ -19,7 +23,7 @@ Option Explicit
 '   - Amplia extracao de contexto com pares chave=valor e chave:valor para diagnostico mais objetivo.
 ' - 2026-03-02 | Codex | Enriquecimento da coluna Funcionalidade com acao em curso por evento
 '   - Acrescenta segunda linha padrao "ACAO EM CURSO" com detalhe operacional por registo.
-'   - Aplica negrito apenas à linha de acao e tenta inferir detalhe especifico (ficheiro/etapa/endpoint).
+'   - Aplica negrito apenas a linha de acao e tenta inferir detalhe especifico (ficheiro/etapa/endpoint).
 ' - 2026-03-02 | Codex | Completa mapeamento da coluna Funcionalidade para eventos DEBUG sem contexto claro
 '   - Cobre codigos de CI/container (M10_* e M05_CI_*), catalogo/fluxo e sinalizacao INFO/ALERTA.
 '   - Reduz quedas para descricao generica em eventos de erro/alerta/info com parametro tecnico curto.
@@ -35,14 +39,14 @@ Option Explicit
 ' - 2026-03-02 | Codex | Formatacao visual automatica no DEBUG
 '   - Aplica negrito/cor por severidade (ERRO=vermelho, ALERTA=azul).
 '   - Destaca STEP_STAGE stage=step_completed em verde e mantem a ultima linha visivel/ativa.
-' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
-'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
-'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+' - 2026-02-12 | Codex | Implementacao do padrao de header obrigatorio
+'   - Adiciona proposito, historico de alteracoes e inventario de rotinas publicas.
+'   - Mantem documentacao tecnica do modulo alinhada com AGENTS.md.
 '
-' Funções e procedimentos (inventário público):
-' - Debug_Registar (Sub): rotina pública do módulo.
-' - Seguimento_Registar (Sub): rotina pública do módulo.
-' - Seguimento_ArquivarLimpar (Sub): rotina pública do módulo.
+' Funcoes e procedimentos (inventario publico):
+' - Debug_Registar (Sub): rotina publica do modulo.
+' - Seguimento_Registar (Sub): rotina publica do modulo.
+' - Seguimento_ArquivarLimpar (Sub): rotina publica do modulo.
 ' - Debug_GetRenderPauseSeconds (Function): helper de leitura da Config para pausa de render no DEBUG.
 ' - Debug_DeduzirFuncionalidade (Function): descreve em linguagem simples o processo associado ao parametro.
 ' - Debug_DeduzirAcaoEmCurso (Function): descreve de forma especifica a acao operacional corrente.
@@ -806,8 +810,6 @@ Public Sub Seguimento_Registar( _
         ws.Cells(linha, mapa("Config extra (amigável)")).value = prompt.ConfigExtra
     ElseIf mapa.exists("Config extra (amigavel)") Then
         ws.Cells(linha, mapa("Config extra (amigavel)")).value = prompt.ConfigExtra
-    ElseIf mapa.exists("Config extra (amigÃ¡vel)") Then
-        ws.Cells(linha, mapa("Config extra (amigÃ¡vel)")).value = prompt.ConfigExtra
     End If
     If mapa.exists("Config extra (JSON convertido)") Then ws.Cells(linha, mapa("Config extra (JSON convertido)")).value = auditJson
 
@@ -930,30 +932,30 @@ End Function
 
 
 ' =============================================================================
-' Seguimento_ArquivarLimpar (versão híbrida por HEADERS — alinhada aos teus nomes reais)
+' Seguimento_ArquivarLimpar (versao hibrida por HEADERS - alinhada aos teus nomes reais)
 '
 ' Seguimento (headers):
 '   Timestamp | Passo | Prompt ID | Texto da prompt | Modelo | Modos | Storage |
-'   Config extra (amigável) | Config extra (JSON convertido) | HTTP Status | Response ID |
+'   Config extra (amigavel) | Config extra (JSON convertido) | HTTP Status | Response ID |
 '   Output (texto) | pipeline_name | Next prompt decidido | files_used | files_ops_log |
 '   file_ids_used | captured_vars | captured_vars_meta | injected_vars
 '
-' HISTÓRICO (headers):
+' HISTORICO (headers):
 '   Timestamp | Nome do Pipeline | Passo | Prompt ID | Texto da prompt | Output (texto) |
-'   Modelo | Modos | Storage | Config extra (amigável) | Config extra (JSON convertido) |
+'   Modelo | Modos | Storage | Config extra (amigavel) | Config extra (JSON convertido) |
 '   HTTP Status | Response ID | Next prompt decidido | files_used | files_ops_log | file_ids_used |
 '   captured_vars | captured_vars_meta | injected_vars | GIT_DEBUG
 '
-' Mantém a lógica do original:
-' - Insere no topo (linha 2 do HISTÓRICO)
+' Mantem a logica do original:
+' - Insere no topo (linha 2 do HISTORICO)
 ' - Cria linha separadora preta (altura 6) abaixo do bloco novo
 ' - Limpa Seguimento (ClearContents + ClearComments)
-' - AutoFit às linhas do Seguimento
+' - AutoFit as linhas do Seguimento
 ' - Em erro: tenta Debug_Registar (se existir), e fallback MsgBox
 '
-' Implementação:
-' - Mapeia por nome de cabeçalho (case-insensitive; tolerante a acentos e espaços)
-' - Não depende de posições fixas nem de "20 colunas"
+' Implementacao:
+' - Mapeia por nome de cabecalho (case-insensitive; tolerante a acentos e espacos)
+' - Nao depende de posicoes fixas nem de "20 colunas"
 ' =============================================================================
 Public Sub Seguimento_ArquivarLimpar()
     On Error GoTo EH
@@ -966,7 +968,7 @@ Public Sub Seguimento_ArquivarLimpar()
     Set wsS = ThisWorkbook.Worksheets("Seguimento")
     Set wsH = ThisWorkbook.Worksheets("HISTÓRICO")
     
-    ' Ordem canónica no HISTÓRICO (exactamente como o teu cabeçalho)
+    ' Ordem canonica no HISTORICO (exactamente como o teu cabecalho)
     Dim histHeaders As Variant
     histHeaders = Array( _
         "Timestamp", _
@@ -992,8 +994,8 @@ Public Sub Seguimento_ArquivarLimpar()
         "GIT_DEBUG" _
     )
     
-    ' Mapeamento Seguimento -> Histórico por nome (sem taxonomias; só headers)
-    ' Nota: no Seguimento o pipeline chama-se pipeline_name; no Histórico chama-se Nome do Pipeline.
+    ' Mapeamento Seguimento -> Historico por nome (sem taxonomias; so headers)
+    ' Nota: no Seguimento o pipeline chama-se pipeline_name; no Historico chama-se Nome do Pipeline.
     Dim srcForHist As Object
     Set srcForHist = CreateObject("Scripting.Dictionary")
     srcForHist.CompareMode = 1 ' TextCompare
@@ -1025,7 +1027,7 @@ Public Sub Seguimento_ArquivarLimpar()
     Set mapS = HeaderMap_ByName(wsS)
     Set mapH = HeaderMap_ByName(wsH)
     
-    ' Garantir headers no HISTÓRICO (e, opcionalmente, no Seguimento para as 3 novas colunas)
+    ' Garantir headers no HISTORICO (e, opcionalmente, no Seguimento para as 3 novas colunas)
     EnsureHeader wsS, mapS, "captured_vars", AUTO_CREATE_MISSING_HEADERS
     EnsureHeader wsS, mapS, "captured_vars_meta", AUTO_CREATE_MISSING_HEADERS
     EnsureHeader wsS, mapS, "injected_vars", AUTO_CREATE_MISSING_HEADERS
@@ -1038,7 +1040,7 @@ Public Sub Seguimento_ArquivarLimpar()
     Next i
     Set mapH = HeaderMap_ByName(wsH)
     
-    ' Determinar a última linha com dados no Seguimento (usando colunas chave)
+    ' Determinar a ultima linha com dados no Seguimento (usando colunas chave)
     Dim lastRowS As Long
     lastRowS = LastDataRow_Seguimento(wsS, mapS)
     If lastRowS < 2 Then Exit Sub
@@ -1046,7 +1048,7 @@ Public Sub Seguimento_ArquivarLimpar()
     Dim nLin As Long
     nLin = lastRowS - 1 ' linhas 2..lastRowS
     
-    ' Inserir espaço no topo do HISTÓRICO: nLin + 1 (linha separadora)
+    ' Inserir espaco no topo do HISTORICO: nLin + 1 (linha separadora)
     wsH.rowS(HIST_TOP_ROW).Resize(nLin + 1).Insert Shift:=xlDown
     
     ' Copiar linha a linha / coluna a coluna (por headers)
@@ -1087,7 +1089,7 @@ Public Sub Seguimento_ArquivarLimpar()
         .Font.Color = vbWhite
     End With
     
-    ' Evitar wrap no bloco novo (mantém legibilidade)
+    ' Evitar wrap no bloco novo (mantem legibilidade)
     Dim firstDataRowH As Long, lastDataRowH As Long
     firstDataRowH = HIST_TOP_ROW
     lastDataRowH = HIST_TOP_ROW + nLin - 1
@@ -1100,7 +1102,7 @@ Public Sub Seguimento_ArquivarLimpar()
         End If
     Next c
     
-    ' Limpar Seguimento (dados + comentários) e AutoFit (como no original)
+    ' Limpar Seguimento (dados + comentarios) e AutoFit (como no original)
     Dim lastColS As Long
     lastColS = wsS.Cells(1, wsS.Columns.Count).End(xlToLeft).Column
     If lastColS < 1 Then lastColS = 1
@@ -1224,7 +1226,7 @@ End Sub
 ' ============================================================
 ' Seguimento - escrita segura (sem truncagem)
 '   - SAFE_LIMIT lido de Config (SEGUIMENTO_SAFE_LIMIT), default 32000
-'   - se exceder: guarda output completo em disco e divide por múltiplas linhas
+'   - se exceder: guarda output completo em disco e divide por multiplas linhas
 ' ============================================================
 
 Private Function Seguimento_GetSafeLimit() As Long
@@ -1248,7 +1250,7 @@ Private Function Seguimento_LerOutputFolderBase() As String
     On Error GoTo Falha
     Dim wsP As Worksheet
     Set wsP = ThisWorkbook.Worksheets("PAINEL")
-    ' Por compatibilidade: OUTPUT Folder está em B3 no layout observado
+    ' Por compatibilidade: OUTPUT Folder esta em B3 no layout observado
     Seguimento_LerOutputFolderBase = Trim$(CStr(wsP.Range("B3").value))
     If Right$(Seguimento_LerOutputFolderBase, 1) = "\" Then
         Seguimento_LerOutputFolderBase = Left$(Seguimento_LerOutputFolderBase, Len(Seguimento_LerOutputFolderBase) - 1)
@@ -1350,7 +1352,7 @@ Private Sub Seguimento_EscreverOutputSemTruncagem(ByVal ws As Worksheet, ByVal l
 
     Exit Sub
 Falha:
-    ' fallback: não truncar - escreve pelo menos a indicação de erro
+    ' fallback: nao truncar - escreve pelo menos a indicacao de erro
     On Error Resume Next
     ws.Cells(linhaBase, colOut).value = "[ERRO] Seguimento_EscreverOutputSemTruncagem falhou."
 End Sub

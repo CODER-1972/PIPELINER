@@ -2,24 +2,24 @@ Attribute VB_Name = "M06_Execucao_orq_alert_segui"
 Option Explicit
 
 ' =============================================================================
-' Módulo: M06_Execucao_orq_alert_segui
-' Propósito:
-' - Disponibilizar entry point simples para execução de prompt por ID em contexto local.
-' - Encaminhar execução para a orquestração principal preservando compatibilidade.
+' Modulo: M06_Execucao_orq_alert_segui
+' Proposito:
+' - Disponibilizar entry point simples para execucao de prompt por ID em contexto local.
+' - Encaminhar execucao para a orquestracao principal preservando compatibilidade.
 '
-' Atualizações:
-' - 2026-02-23 | Codex | Execução de Output Orders (EXECUTE: LOAD_CSV)
-'   - Executa parser/whitelist de ordens após File Output em respostas com sucesso.
-'   - Acrescenta logs de importação CSV em files_ops_log sem quebrar fluxo sem EXECUTE.
-' - 2026-02-16 | Codex | Resolução de API key com prioridade para OPENAI_API_KEY
+' Atualizacoes:
+' - 2026-02-23 | Codex | Execucao de Output Orders (EXECUTE: LOAD_CSV)
+'   - Executa parser/whitelist de ordens apos File Output em respostas com sucesso.
+'   - Acrescenta logs de importacao CSV em files_ops_log sem quebrar fluxo sem EXECUTE.
+' - 2026-02-16 | Codex | Resolucao de API key com prioridade para OPENAI_API_KEY
 '   - Usa resolver central (M14_ConfigApiKey) em vez de leitura direta de Config!B1.
 '   - Emite ALERTA/ERRO no DEBUG para origem/falhas de credencial sem expor segredos.
-' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
-'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
-'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+' - 2026-02-12 | Codex | Implementacao do padrao de header obrigatorio
+'   - Adiciona proposito, historico de alteracoes e inventario de rotinas publicas.
+'   - Mantem documentacao tecnica do modulo alinhada com AGENTS.md.
 '
-' Funções e procedimentos (inventário público):
-' - ExecutarPrompt_PorID (Sub): rotina pública do módulo.
+' Funcoes e procedimentos (inventario publico):
+' - ExecutarPrompt_PorID (Sub): rotina publica do modulo.
 ' =============================================================================
 
 
@@ -78,7 +78,7 @@ Public Sub ExecutarPrompt_PorID()
     Dim passo As Long
     passo = 1
 
-    ' Converter Config extra (amigável) -> JSON
+    ' Converter Config extra (amigavel) -> JSON
     Dim auditJson As String, inputJsonLiteral As String, extraFragment As String
     auditJson = ""
     inputJsonLiteral = ""

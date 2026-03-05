@@ -2,25 +2,25 @@ Attribute VB_Name = "M14_ConfigApiKey"
 Option Explicit
 
 ' =============================================================================
-' Módulo: M14_ConfigApiKey
-' Propósito:
-' - Resolver OPENAI_API_KEY com precedência segura (variável de ambiente antes de Config!B1).
-' - Fornecer diagnóstico sem exposição de segredos para consumo de DEBUG e self-tests.
+' Modulo: M14_ConfigApiKey
+' Proposito:
+' - Resolver OPENAI_API_KEY com precedencia segura (variavel de ambiente antes de Config!B1).
+' - Fornecer diagnostico sem exposicao de segredos para consumo de DEBUG e self-tests.
 '
-' Atualizações:
-' - 2026-02-16 | Codex | Correção de parsing da diretiva Environ em Config!B1
-'   - Remove comparação frágil que gerava Type mismatch ao interpretar `(Environ("OPENAI_API_KEY"))`.
-'   - Normaliza aspas e espaços antes da comparação, aceitando variações equivalentes da diretiva.
+' Atualizacoes:
+' - 2026-02-16 | Codex | Correcao de parsing da diretiva Environ em Config!B1
+'   - Remove comparacao fragil que gerava Type mismatch ao interpretar `(Environ("OPENAI_API_KEY"))`.
+'   - Normaliza aspas e espacos antes da comparacao, aceitando variacoes equivalentes da diretiva.
 ' - 2026-02-16 | Codex | Resolver de API key com prioridade para ambiente
 '   - Adiciona Config_ResolveOpenAIApiKey para uso transversal no motor.
-'   - Mantém fallback retrocompatível para Config!B1 sem obrigar alterações estruturais no Excel.
-'   - Expõe helper de self-test sem ler ambiente real.
+'   - Mantem fallback retrocompativel para Config!B1 sem obrigar alteracoes estruturais no Excel.
+'   - Expoe helper de self-test sem ler ambiente real.
 '
-' Funções e procedimentos:
+' Funcoes e procedimentos:
 ' - Config_ResolveOpenAIApiKey(ByRef outApiKey, ByRef outSource, ByRef outAlert, ByRef outError) As Boolean
-'   - Resolve key efetiva; não escreve logs diretamente.
+'   - Resolve key efetiva; nao escreve logs diretamente.
 ' - Config_SelfTest_ResolveOpenAIApiKey(ByVal envValue, ByVal configB1Value, ByRef outApiKey, ByRef outSource, ByRef outAlert, ByRef outError) As Boolean
-'   - Variante determinística para SelfTests.
+'   - Variante deterministica para SelfTests.
 ' =============================================================================
 
 Private Const CFG_SHEET As String = "Config"

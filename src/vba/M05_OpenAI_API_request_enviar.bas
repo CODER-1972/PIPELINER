@@ -2,12 +2,12 @@ Attribute VB_Name = "M05_OpenAI_API_request_enviar"
 Option Explicit
 
 ' =============================================================================
-' Módulo: M05_OpenAI_API_request_enviar
-' Propósito:
+' Modulo: M05_OpenAI_API_request_enviar
+' Proposito:
 ' - Construir e enviar pedidos para a Responses API com tratamento de retries/erros.
-' - Extrair campos úteis da resposta JSON para consumo da orquestração.
+' - Extrair campos uteis da resposta JSON para consumo da orquestracao.
 '
-' Atualizações:
+' Atualizacoes:
 ' - 2026-03-01 | Codex | Evita falso M05_CI_AUTO_SUPPRESS quando CI vem do modo efetivo
 '   - OpenAI_Executar passa a aceitar sinal opcional de intencao CI ja resolvida pelo orquestrador (File Output).
 '   - Regista M05_CI_INTENT_EVAL com origem da decisao (extra vs modo efetivo) para diagnostico mais objetivo.
@@ -16,7 +16,7 @@ Option Explicit
 '   - Regista alerta M05_CI_AUTO_SUPPRESS para troubleshooting quando Modos inclui Code Interpreter nestas condicoes.
 ' - 2026-02-28 | Codex | Diagnostico detalhado para context_length_exceeded (HTTP 400)
 '   - Regista evento dedicado `API_CONTEXT_LENGTH_EXCEEDED` com metrica de tamanho (payload/input/prompt), anexos e faixas de risco.
-'   - Emite mensagem didatica no DEBUG com ação recomendada (reduzir input, anexos text_embed ou max_output_tokens).
+'   - Emite mensagem didatica no DEBUG com acao recomendada (reduzir input, anexos text_embed ou max_output_tokens).
 ' - 2026-02-28 | Codex | Diagnostico operativo com contexto de rede e retry dirigido
 '   - Regista started_at/failed_at absolutos, contexto de rede do host e decisao automatica no evento M05_TIMEOUT_DECISION.
 '   - Adiciona retry unico para timeout em stage=Send com novo socket e registo de retry_outcome.
@@ -29,42 +29,42 @@ Option Explicit
 ' - 2026-02-28 | Codex | Preserva detalhes de erro no handler de timeout
 '   - Guarda Err.Number/Err.Description antes de logging para evitar perda de mensagem no resultado final.
 '   - Inclui diagnostico de timeout (tipo, elapsed e HTTP_TIMEOUT_*_MS) tambem em resultado.Erro no Seguimento.
-' - 2026-02-27 | Codex | Diagnóstico com fingerprint e distinção transporte vs contrato
+' - 2026-02-27 | Codex | Diagnostico com fingerprint e distincao transporte vs contrato
 '   - Adiciona fingerprint textual (FP=...) em M05_PAYLOAD_CHECK/M05_HTTP_TIMEOUTS/M05_HTTP_RESULT.
 '   - Torna mensagens de M05 mais explicativas para correlacionar facilmente com eventos M10 do mesmo passo.
-' - 2026-02-26 | Codex | Torna timeouts HTTP configuráveis via folha Config
+' - 2026-02-26 | Codex | Torna timeouts HTTP configuraveis via folha Config
 '   - Adiciona leitura tolerante das chaves HTTP_TIMEOUT_*_MS (com fallback seguro para defaults atuais).
-'   - Regista no DEBUG os timeouts efetivos aplicados e alerta quando houver valor inválido fora de intervalo.
+'   - Regista no DEBUG os timeouts efetivos aplicados e alerta quando houver valor invalido fora de intervalo.
 ' - 2026-02-17 | Codex | Remove gating de web_search por anexos
-'   - Garante que `Modos=Web search` injeta sempre `tools:[{"type":"web_search"}]` quando não existem tools explícitas no extra.
-'   - Elimina a dependência de configuração por anexos para evitar execuções sem acesso web neste cenário.
+'   - Garante que `Modos=Web search` injeta sempre `tools:[{"type":"web_search"}]` quando nao existem tools explicitas no extra.
+'   - Elimina a dependencia de configuracao por anexos para evitar execucoes sem acesso web neste cenario.
 ' - 2026-02-17 | Codex | Corrige literal de troubleshooting do preflight para compilar em VBA
-'   - Substitui montagem ambígua de escapes na mensagem do DEBUG por literal seguro com aspas duplicadas.
-'   - Mantém orientações de escapes JSON sem depender de barras invertidas como pseudo-escape de aspas no VBA.
+'   - Substitui montagem ambigua de escapes na mensagem do DEBUG por literal seguro com aspas duplicadas.
+'   - Mantem orientacoes de escapes JSON sem depender de barras invertidas como pseudo-escape de aspas no VBA.
 ' - 2026-02-17 | Codex | Preflight estrutural de JSON para reduzir 400 invalid_json
-'   - Adiciona verificação de aspas/chaves/arrays e deteção de vírgula final inválida (`,}`/`,]`).
-'   - Regista diagnóstico acionável no DEBUG antes do HTTP quando o payload não fecha estruturalmente.
-' - 2026-02-17 | Codex | Correção de sintaxe VBA em validação de JSON preflight
-'   - Corrige literais com aspas duplas em Select Case e comparações de string para evitar erro de compilação.
-'   - Mantém validação de escapes JSON com mensagem de diagnóstico preservada no DEBUG.
-' - 2026-02-17 | Codex | Validação preventiva para escape inválido com backslash no JSON
-'   - Adiciona deteção de sequências de escape inválidas (ex.: \x) em strings JSON no preflight.
-'   - Bloqueia envio com erro acionável no DEBUG e indica escapes válidos após \ (" \\ / b f n r t uXXXX).
-' - 2026-02-17 | Codex | Melhoria das sugestões de escaping no preflight de JSON
-'   - Detalha escape recomendado por carácter de controlo detectado (ex.: \n, \r, \t, \u00XX).
+'   - Adiciona verificacao de aspas/chaves/arrays e detecao de virgula final invalida (`,}`/`,]`).
+'   - Regista diagnostico acionavel no DEBUG antes do HTTP quando o payload nao fecha estruturalmente.
+' - 2026-02-17 | Codex | Correcao de sintaxe VBA em validacao de JSON preflight
+'   - Corrige literais com aspas duplas em Select Case e comparacoes de string para evitar erro de compilacao.
+'   - Mantem validacao de escapes JSON com mensagem de diagnostico preservada no DEBUG.
+' - 2026-02-17 | Codex | Validacao preventiva para escape invalido com backslash no JSON
+'   - Adiciona detecao de sequencias de escape invalidas (ex.: \x) em strings JSON no preflight.
+'   - Bloqueia envio com erro acionavel no DEBUG e indica escapes validos apos \ (" \\ / b f n r t uXXXX).
+' - 2026-02-17 | Codex | Melhoria das sugestoes de escaping no preflight de JSON
+'   - Detalha escape recomendado por caracter de controlo detectado (ex.: \n, \r, \t, \u00XX).
 '   - Expande mensagem de troubleshooting no DEBUG para reduzir tentativa/erro em invalid_json.
 ' - 2026-02-17 | Codex | Preflight de JSON para diagnosticar invalid_json antes do HTTP
-'   - Adiciona validação leve de controlo bruto em strings JSON (CR/LF/TAB não escapados).
-'   - Em caso de falha, bloqueia envio e regista snippet/contexto no DEBUG para correção rápida.
+'   - Adiciona validacao leve de controlo bruto em strings JSON (CR/LF/TAB nao escapados).
+'   - Em caso de falha, bloqueia envio e regista snippet/contexto no DEBUG para correcao rapida.
 ' - 2026-02-16 | Codex | Dump opcional do payload final para troubleshooting local
 '   - Adiciona escrita do JSON final em C:\Temp\payload.json antes do envio HTTP.
 '   - Regista INFO/ALERTA no DEBUG sem expor segredos.
-' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
-'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
-'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+' - 2026-02-12 | Codex | Implementacao do padrao de header obrigatorio
+'   - Adiciona proposito, historico de alteracoes e inventario de rotinas publicas.
+'   - Mantem documentacao tecnica do modulo alinhada com AGENTS.md.
 '
-' Funções e procedimentos (inventário público):
-' - OpenAI_Executar (Function): rotina pública do módulo.
+' Funcoes e procedimentos (inventario publico):
+' - OpenAI_Executar (Function): rotina publica do modulo.
 ' =============================================================================
 
 Private Const OPENAI_ENDPOINT As String = "https://api.openai.com/v1/responses"
@@ -373,7 +373,7 @@ Private Function NormalizarInputJsonLiteral(ByVal s As String) As String
         End If
     End If
 
-    ' Se vier como objeto único { ... }, embrulhar em array [ ... ]
+    ' Se vier como objeto unico { ... }, embrulhar em array [ ... ]
     If Left$(t, 1) = "{" And Json_LastNonWhitespaceChar(t) = "}" Then
         t = "[" & t & "]"
     End If
@@ -582,8 +582,8 @@ Private Function ExtraFragment_TemTools(ByVal extraFragmentSemInput As String) A
         Exit Function
     End If
 
-    ' Apenas considerar tools explícitas.
-    ' NOTA: tool_choice sozinho NÃO deve desactivar a auto-injecção de tools,
+    ' Apenas considerar tools explicitas.
+    ' NOTA: tool_choice sozinho NAO deve desactivar a auto-injeccao de tools,
     ' porque a API exige que o tool escolhido exista em "tools".
     If InStr(1, t, """tools""", vbTextCompare) > 0 Then
         ExtraFragment_TemTools = True
@@ -1662,7 +1662,7 @@ Private Sub M05_SleepSeconds(ByVal seconds As Long)
     Exit Sub
 
 EH:
-    ' Falha silenciosa: não bloquear o pipeline por causa do wait
+    ' Falha silenciosa: nao bloquear o pipeline por causa do wait
 End Sub
 
 Private Function M05_ExtrairReqIdDeTexto(ByVal s As String) As String

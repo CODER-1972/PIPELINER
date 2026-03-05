@@ -27,6 +27,7 @@ Template Excel + VBA para execução de pipelines de prompts com auditoria opera
 - [9. Logs, troubleshooting e validação operacional](#9-logs-troubleshooting-e-validação-operacional)
 - [10. Segurança e compatibilidade retroativa](#10-segurança-e-compatibilidade-retroativa)
 - [11. Guia rápido de operação](#11-guia-rápido-de-operação)
+- [12. Higiene de encoding (VBA + VBE)](#12-higiene-de-encoding-vba--vbe)
 
 ---
 
@@ -69,10 +70,10 @@ Inclui módulos que:
 
 Também inclui um fluxo opcional de exportação dos logs `DEBUG`/`Seguimento` para GitHub, orquestrado por `M21_GitDebugExport` com separação por responsabilidades:
 
-- `M22_GH_Config`: leitura de `GIT_DEBUG_*` na folha `Config`;
+- `M22_GH_Config`: leitura/normalização/validação de `GH_*` na folha `Config`;
 - `M23_GH_HTTP`: cliente HTTP com fallback WinHTTP/MSXML;
 - `M24_GH_Blob`: encoding UTF-8/Base64 e escaping JSON;
-- `M25_GH_TreeCommit`: composição de endpoint/payload de commit no GitHub;
+- `M25_GH_TreeCommit`: fluxo `ref -> commit base -> blobs -> tree -> commit -> update ref`;
 - `M26_GH_Logger`: logging funcional dedicado no `DEBUG`.
 
 ---
@@ -112,8 +113,38 @@ Também suporta exportação opcional de debug para GitHub (Git Data API) no fim
 - publicação de `DEBUG.csv`, `catalogo_prompts_executadas.csv`, `Seguimento.csv` e `painel_pipeline.txt`;
 - atualização da coluna `GIT_DEBUG` nas folhas `Seguimento` e `HISTÓRICO` com o link da pasta remota.
 - macro `GitDebug_Config_InstalarParametros` para preencher/atualizar na folha `Config` as chaves `GH_*` com `default`, explicação pedagógica (coluna C) e valores/intervalos possíveis (coluna E), sem forçar overwrite dos valores atuais por defeito.
+- a macro fixa os cabeçalhos `Key | Value | Explicacao (leigos) | Default | Valores possiveis / intervalo` na linha 8 e escreve os parâmetros `GH_*` apenas a partir da linha 9 (evitando conflito com `Config!B1:B7`).
+- quando `sobrescreverValores=False`, só preenche células vazias nas colunas B:E; quando `sobrescreverValores=True`, reescreve B:E com defaults/documentação atuais.
 
-Configuração recomendada (folha `Config`, formato Key/Value): `GH_OWNER`, `GH_REPO`, `GH_BRANCH`, `GH_API_BASE`, `GH_TOKEN_ENV`, `GH_TOKEN_CONFIG`, `GH_COMMIT_MESSAGE_TEMPLATE`, `GH_BASE_PATH`, `GH_API_VERSION`, `GH_USER_AGENT`.
+Configuração recomendada (folha `Config`, formato Key/Value): `GH_OWNER`, `GH_REPO`, `GH_BRANCH`, `GH_API_BASE`, `GH_TOKEN_ENV`, `GH_TOKEN_CONFIG`, `GH_COMMIT_MESSAGE_TEMPLATE`, `GH_BASE_PATH`, `GH_API_VERSION`, `GH_USER_AGENT`, `GH_RETRY_ON_CONFLICT`, `GH_MAX_RETRIES`.
+
+No update de `PATCH /git/refs/heads/{branch}`, conflitos HTTP `409` são tratados explicitamente como concorrência: quando `GH_RETRY_ON_CONFLICT=true`, o fluxo reinicia desde a leitura de HEAD até ao limite de `GH_MAX_RETRIES`, registando eventos canónicos `GH_REF_CONFLICT`, `GH_RETRY_ATTEMPT`, `GH_REF_UPDATED` e `GH_DONE_FAIL`.
+
+### Quadro resumido `GH_*` (defaults e valores permitidos)
+
+| Chave (`Config`) | Default | Valores permitidos / intervalo |
+|---|---|---|
+| `GH_OWNER` | `cpsa-org` | texto não vazio |
+| `GH_REPO` | `pipeliner-data` | texto não vazio |
+| `GH_BRANCH` | `main` | branch existente |
+| `GH_API_BASE` | `https://api.github.com` | URL válida |
+| `GH_TOKEN_ENV` | `GITHUB_TOKEN` | nome de variável de ambiente |
+| `GH_TOKEN_CONFIG` | vazio | vazio ou token |
+| `GH_COMMIT_MESSAGE_TEMPLATE` | `PIPELINER run {{RUN_ID}}` | template com placeholders |
+| `GH_BASE_PATH` | `pipeliner_runs` | path relativo sem `/` inicial |
+| `GH_API_VERSION` | `2022-11-28` | formato `YYYY-MM-DD` |
+| `GH_USER_AGENT` | `PIPELINER-VBA` | texto não vazio |
+| `GH_FORCE_UPDATE` | `false` | `true` ou `false` |
+| `GH_MAX_FILES` | `200` | `1..1000` |
+| `GH_MAX_FILE_MB` | `50` | `1..200` |
+| `GH_MAX_RETRIES` | `3` | `0..10` |
+
+Fallback de token (ordem exata):
+
+1. tenta ler `ENV(GH_TOKEN_ENV)` (por defeito: `ENV("GITHUB_TOKEN")`);
+2. se vazio, usa `GH_TOKEN_CONFIG` (fallback local no workbook).
+
+> **Segurança (produção):** evitar guardar token em claro no workbook. Preferir sempre variável de ambiente (`GH_TOKEN_ENV`) e deixar `GH_TOKEN_CONFIG` vazio, usando este último apenas para testes controlados.
 
 
 ## 3.3 Seguimento
@@ -947,3 +978,19 @@ A validação final UX/tempo deve ser executada no host Excel com workbook de re
 - confirmar no `DEBUG` os eventos `CONTRACT_PROVA_DIFF` e decisão tri-state final;
 - confirmar no bundle a presença de `step<passo>_PROVA_CI.txt`;
 - validar comportamento de gate quando `expected vs PROVA_CI` diverge.
+
+## 12. Higiene de encoding (VBA + VBE)
+
+Para evitar mojibake (`MÃ³dulo`, `ValidaÃ§Ã£o`, `nÃ£o`) sem quebrar compatibilidade com o VBE:
+
+- manter `.gitattributes` como fonte de verdade para módulos VBA (`working-tree-encoding=windows-1252` + `eol=crlf`);
+- editar módulos VBA com encoding **Windows-1252** (não salvar `.bas/.cls/.frm` em UTF-8 no working tree);
+- usar `python scripts/check_vba_encoding.py` antes de commit para validar:
+  - blob Git em UTF-8 válido;
+  - working tree em cp1252 + CRLF;
+  - deteção heurística de sequências de mojibake;
+- em CI, o workflow `.github/workflows/vba-encoding-check.yml` executa automaticamente a mesma validação em push/PR.
+
+Regra operacional rápida:
+- se um ficheiro parecer “corrompido” no terminal/editor, validar primeiro o encoding usado pela ferramenta antes de editar conteúdo textual.
+

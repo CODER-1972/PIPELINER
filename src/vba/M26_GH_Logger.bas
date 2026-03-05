@@ -2,129 +2,49 @@ Attribute VB_Name = "M26_GH_Logger"
 Option Explicit
 
 ' =============================================================================
-' MÃ³dulo: M26_GH_Logger
-' PropÃ³sito:
-' - Centralizar logs do fluxo GitHub com esquema canÃ³nico estÃ¡vel.
-' - Integrar registos GH na folha DEBUG reutilizando o logger existente (M02).
-' - Sanitizar conteÃºdo sensÃ­vel (tokens/segredos) antes de persistir em DEBUG.
+' Modulo: M26_GH_Logger
+' Proposito:
+' - Centralizar eventos/codigos canonicos GH_* para troubleshooting previsivel.
+' - Encapsular chamadas a Debug_Registar para reduzir duplicacao de boilerplate.
+' - Garantir mensagens curtas, sem segredos e com sugestoes acionaveis.
 '
-' AtualizaÃ§Ãµes:
-' - 2026-03-04 | Codex | CriaÃ§Ã£o do logger canÃ³nico para o fluxo GitHub
-'   - Adiciona API pÃºblica LogInfo/LogWarn/LogError/LogHttpFail.
-'   - Introduz cÃ³digos canÃ³nicos GH_* e normalizaÃ§Ã£o de aliases legados.
-'   - Garante sanitizaÃ§Ã£o de segredos antes de chamar Debug_Registar.
+' Atualizacoes:
+' - 2026-03-04 | Codex | Refactor de logging GitHub para modulo dedicado
+'   - Move codigos de eventos GH_* para constantes publicas reutilizaveis.
+'   - Mantem wrappers GH_LogInfo/GH_LogWarn/GH_LogError para padronizacao.
 '
-' FunÃ§Ãµes e procedimentos:
-' - LogInfo(...): regista evento GH com severidade INFO.
-' - LogWarn(...): regista evento GH com severidade ALERTA.
-' - LogError(...): regista evento GH com severidade ERRO.
-' - LogHttpFail(...): regista falha HTTP GH com severidade ERRO e contexto resumido.
+' Funcoes e procedimentos:
+' - GH_LogInfo(stepNo, pipelineNome, eventCode, message, suggestion) (Sub)
+'   - Regista evento INFO no DEBUG com codigo canonico.
+' - GH_LogWarn(stepNo, pipelineNome, eventCode, message, suggestion) (Sub)
+'   - Regista evento ALERTA no DEBUG com codigo canonico.
+' - GH_LogError(stepNo, pipelineNome, eventCode, message, suggestion) (Sub)
+'   - Regista evento ERRO no DEBUG com codigo canonico.
 ' =============================================================================
 
-Private Const GH_COMPONENT_DEFAULT As String = "GH_FLOW"
-Private Const GH_DEBUG_FEATURE As String = "IntegraÃ§Ã£o GitHub: configuraÃ§Ã£o, referÃªncia, Ã¡rvore e commit."
+Public Const GH_EVT_CONFIG As String = "GH_CONFIG"
+Public Const GH_EVT_UPLOAD As String = "GH_UPLOAD"
+Public Const GH_EVT_HTTP As String = "GH_HTTP"
+Public Const GH_EVT_HTTP_FAIL As String = "GH_HTTP_FAIL"
+Public Const GH_EVT_REF_OK As String = "GH_REF_OK"
+Public Const GH_EVT_BASE_TREE_OK As String = "GH_BASE_TREE_OK"
+Public Const GH_EVT_BLOB_OK As String = "GH_BLOB_OK"
+Public Const GH_EVT_BLOB_TOO_LARGE As String = "GH_BLOB_TOO_LARGE"
+Public Const GH_EVT_TREE_CREATED As String = "GH_TREE_CREATED"
+Public Const GH_EVT_COMMIT_CREATED As String = "GH_COMMIT_CREATED"
+Public Const GH_EVT_REF_UPDATED As String = "GH_REF_UPDATED"
+Public Const GH_EVT_MAX_FILES As String = "GH_MAX_FILES"
 
-' CÃ³digos canÃ³nicos (core)
-Public Const GH_CONFIG_OK As String = "GH_CONFIG_OK"
-Public Const GH_REF_OK As String = "GH_REF_OK"
-Public Const GH_TREE_OK As String = "GH_TREE_OK"
-Public Const GH_COMMIT_OK As String = "GH_COMMIT_OK"
-Public Const GH_DONE_OK As String = "GH_DONE_OK"
-Public Const GH_DONE_FAIL As String = "GH_DONE_FAIL"
-Public Const GH_HTTP_FAIL As String = "GH_HTTP_FAIL"
-Public Const GH_UNKNOWN As String = "GH_UNKNOWN"
-
-Public Sub LogInfo( _
-    ByVal pipelineName As String, _
-    ByVal runId As String, _
-    ByVal component As String, _
-    ByVal eventCode As String, _
-    ByVal details As String _
-)
-    GH_LogEvent pipelineName, runId, component, eventCode, "INFO", details, 0
+Public Sub GH_LogInfo(ByVal stepNo As Long, ByVal pipelineNome As String, ByVal eventCode As String, ByVal message As String, Optional ByVal suggestion As String = "")
+    Call Debug_Registar(stepNo, pipelineNome, "INFO", "", eventCode, message, suggestion)
 End Sub
 
-Public Sub LogWarn( _
-    ByVal pipelineName As String, _
-    ByVal runId As String, _
-    ByVal component As String, _
-    ByVal eventCode As String, _
-    ByVal details As String _
-)
-    GH_LogEvent pipelineName, runId, component, eventCode, "ALERTA", details, 0
+Public Sub GH_LogWarn(ByVal stepNo As Long, ByVal pipelineNome As String, ByVal eventCode As String, ByVal message As String, Optional ByVal suggestion As String = "")
+    Call Debug_Registar(stepNo, pipelineNome, "ALERTA", "", eventCode, message, suggestion)
 End Sub
 
-Public Sub LogError( _
-    ByVal pipelineName As String, _
-    ByVal runId As String, _
-    ByVal component As String, _
-    ByVal eventCode As String, _
-    ByVal details As String _
-)
-    GH_LogEvent pipelineName, runId, component, eventCode, "ERRO", details, 0
-End Sub
-
-Public Sub LogHttpFail( _
-    ByVal pipelineName As String, _
-    ByVal runId As String, _
-    ByVal component As String, _
-    ByVal eventCode As String, _
-    ByVal httpStatus As Long, _
-    ByVal endpoint As String, _
-    ByVal details As String _
-)
-    Dim msg As String
-    msg = "http_status=" & CStr(httpStatus) & " | endpoint=" & GH_SafeText(endpoint)
-    If Trim$(details) <> "" Then msg = msg & " | " & GH_SafeText(details)
-
-    GH_LogEvent pipelineName, runId, component, eventCode, "ERRO", msg, httpStatus
-End Sub
-
-Private Sub GH_LogEvent( _
-    ByVal pipelineName As String, _
-    ByVal runId As String, _
-    ByVal component As String, _
-    ByVal eventCode As String, _
-    ByVal severity As String, _
-    ByVal details As String, _
-    ByVal httpStatus As Long _
-)
-    On Error GoTo Fim
-
-    Dim ts As String
-    ts = Format$(Now, "yyyy-mm-dd hh:nn:ss")
-
-    Dim sev As String
-    sev = GH_NormalizeSeverity(severity)
-
-    Dim code As String
-    code = GH_NormalizeEventCode(eventCode)
-
-    Dim compSafe As String
-    compSafe = Trim$(component)
-    If compSafe = "" Then compSafe = GH_COMPONENT_DEFAULT
-    compSafe = GH_SafeText(compSafe)
-
-    Dim detailSafe As String
-    detailSafe = GH_SafeText(details)
-
-    Dim problema As String
-    problema = "details=" & detailSafe
-
-    Dim sugestao As String
-    sugestao = "timestamp=" & ts & _
-               " | pipeline_name=" & GH_SafeText(pipelineName) & _
-               " | run_id=" & GH_SafeText(runId) & _
-               " | component=" & compSafe & _
-               " | event_code=" & code & _
-               " | severity=" & sev
-
-    If httpStatus > 0 Then sugestao = sugestao & " | http_status=" & CStr(httpStatus)
-
-    Debug_Registar 0, GH_SafePromptId(runId), sev, "", code, problema, sugestao, GH_DEBUG_FEATURE
-
-Fim:
-    On Error GoTo 0
+Public Sub GH_LogError(ByVal stepNo As Long, ByVal pipelineNome As String, ByVal eventCode As String, ByVal message As String, Optional ByVal suggestion As String = "")
+    Call Debug_Registar(stepNo, pipelineNome, "ERRO", "", eventCode, message, suggestion)
 End Sub
 
 Private Function GH_NormalizeEventCode(ByVal eventCode As String) As String
