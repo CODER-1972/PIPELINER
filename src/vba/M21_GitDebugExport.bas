@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-05 | Codex | Corrige fallback de nome de folha Historico para evitar dependencia de acentos
+'   - Define constante SHEET_HIST em ASCII (HISTORICO) para robustez entre encodings/editores.
+'   - Mantem tentativa alternativa com nome acentuado via ChrW no resolvedor de folha.
 ' - 2026-03-04 | Codex | Endurece instalacao de parametros GH_* na folha Config
 '   - Garante cabecalhos Key/Value/Explicacao/Default/Valores na linha 8 e dados apenas em linhas >= 9.
 '   - Mantem politica de overwrite seletivo em B:E e regista falhas no DEBUG com codigo estavel.
@@ -24,7 +27,7 @@ Option Explicit
 
 Private Const SHEET_DEBUG As String = "DEBUG"
 Private Const SHEET_SEGUIMENTO As String = "Seguimento"
-Private Const SHEET_HIST As String = "HISTÓRICO"
+Private Const SHEET_HIST As String = "HISTORICO"
 Private Const GH_CONFIG_HEADER_ROW As Long = 8
 Private Const GH_CONFIG_FIRST_DATA_ROW As Long = 9
 
@@ -404,8 +407,8 @@ End Sub
 
 Private Function GitDebug_GetHistoricoSheet() As Worksheet
     On Error Resume Next
-    Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets("HISTÃ“RICO")
-    If GitDebug_GetHistoricoSheet Is Nothing Then Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets(SHEET_HIST)
+    Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets(SHEET_HIST)
+    If GitDebug_GetHistoricoSheet Is Nothing Then Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets("HIST" & ChrW$(&HD3) & "RICO")
     On Error GoTo 0
 End Function
 
