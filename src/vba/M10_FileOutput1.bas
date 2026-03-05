@@ -8,6 +8,9 @@ Option Explicit
 ' - Suportar cadeia output->input e escrita de eventos de output no historico de ficheiros.
 '
 ' Atualizações:
+' - 2026-03-05 | Codex | auto_save com texto livre (tokens mistos)
+'   - Trata valores com palavras adicionais (ex.: "sim, todos", "não, debug") mantendo decisão por tokens reconhecidos.
+'   - Em conflito, privilegia token afirmativo para evitar desativação acidental; sem tokens, mantém fallback ligado.
 ' - 2026-03-04 | Codex | Normalização robusta de auto_save (aliases além de sim/não)
 '   - Reconhece aliases case-insensitive para NO/YES (false/true, off/on, 0/1, etc.) sem quebrar valores históricos.
 '   - Mantém retrocompatibilidade: valores não reconhecidos continuam a comportar-se como ativo (auto-save ligado).
@@ -378,21 +381,54 @@ End Function
 ' Implementacao - METADATA (manifest JSON)
 ' ============================================================
 Private Function FileOutput_IsAutoSaveDisabled(ByVal autoSaveRaw As String) As Boolean
-    Dim v As String
-    v = LCase$(Trim$(CStr(autoSaveRaw)))
-    If v = "" Then Exit Function
+    Dim rawTxt As String
+    rawTxt = LCase$(Trim$(CStr(autoSaveRaw)))
+    If rawTxt = "" Then Exit Function
 
-    Select Case v
-        Case "no", "nao", "não", "false", "falso", "off", "0", "disabled", "desativado", "desactivado"
-            FileOutput_IsAutoSaveDisabled = True
-            Exit Function
-        Case "sim", "yes", "true", "verdadeiro", "on", "1", "enabled", "ativo", "activo"
-            FileOutput_IsAutoSaveDisabled = False
-            Exit Function
-    End Select
+    Dim normalized As String
+    normalized = " " & rawTxt & " "
+    normalized = Replace(normalized, vbTab, " ")
+    normalized = Replace(normalized, vbCr, " ")
+    normalized = Replace(normalized, vbLf, " ")
+    normalized = Replace(normalized, ",", " ")
+    normalized = Replace(normalized, ";", " ")
+    normalized = Replace(normalized, "|", " ")
+    normalized = Replace(normalized, "(", " ")
+    normalized = Replace(normalized, ")", " ")
+    normalized = Replace(normalized, "[", " ")
+    normalized = Replace(normalized, "]", " ")
+
+    Do While InStr(1, normalized, "  ", vbBinaryCompare) > 0
+        normalized = Replace(normalized, "  ", " ")
+    Loop
+
+    Dim hasYes As Boolean
+    Dim hasNo As Boolean
+    hasYes = FileOutput_HasAnyToken(normalized, " sim ", " yes ", " true ", " verdadeiro ", " on ", " 1 ", " enabled ", " ativo ", " activo ")
+    hasNo = FileOutput_HasAnyToken(normalized, " nao ", " não ", " no ", " false ", " falso ", " off ", " 0 ", " disabled ", " desativado ", " desactivado ")
+
+    If hasYes Then
+        FileOutput_IsAutoSaveDisabled = False
+        Exit Function
+    End If
+
+    If hasNo Then
+        FileOutput_IsAutoSaveDisabled = True
+        Exit Function
+    End If
 
     ' Retrocompatibilidade: valor nao reconhecido mantem auto-save ativo.
     FileOutput_IsAutoSaveDisabled = False
+End Function
+
+Private Function FileOutput_HasAnyToken(ByVal hay As String, ParamArray tokens() As Variant) As Boolean
+    Dim i As Long
+    For i = LBound(tokens) To UBound(tokens)
+        If InStr(1, hay, CStr(tokens(i)), vbTextCompare) > 0 Then
+            FileOutput_HasAnyToken = True
+            Exit Function
+        End If
+    Next i
 End Function
 
 Private Function Process_Metadata( _
