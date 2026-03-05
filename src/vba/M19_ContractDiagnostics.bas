@@ -2,46 +2,46 @@ Attribute VB_Name = "M19_ContractDiagnostics"
 Option Explicit
 
 ' =============================================================================
-' MÃ³dulo: M19_ContractDiagnostics
-' PropÃ³sito:
-' - Avaliar contrato diagnÃ³stico por passo (opt-in via Config extra) com estado tri-state.
-' - Emitir eventos canÃ³nicos no DEBUG com metadados legÃ­veis ([RunID], [Passo], [Estado], ...).
-' - Fornecer payload compacto (DetailJsonCompact) com orÃ§amento configurÃ¡vel na folha Config.
+' Modulo: M19_ContractDiagnostics
+' Proposito:
+' - Avaliar contrato diagnostico por passo (opt-in via Config extra) com estado tri-state.
+' - Emitir eventos canonicos no DEBUG com metadados legiveis ([RunID], [Passo], [Estado], ...).
+' - Fornecer payload compacto (DetailJsonCompact) com orcamento configuravel na folha Config.
 '
-' AtualizaÃ§Ãµes:
+' Atualizacoes:
 ' - 2026-03-04 | Codex | Hardening de contrato com prova minima textual obrigatoria
 '   - Torna parsing de diagnostic_contract resiliente a aliases comuns (underscore/hifen/espaco).
 '   - Exige marcadores minimos de prova (CSV_EXISTE_EM_MNT_DATA, FILE_CSV, MNT_DATA_LIST) quando ha intencao CSV/EXECUTE.
 '   - Reforca CONTRACT_SUGGEST_ENABLE com contexto (modo/processo) e sugestao prescritiva.
 '   - Valida consistencia de estado (CSV_EXISTE_EM_MNT_DATA afirmativo quando EXPORT_OK_CSV/LOAD_CSV indicam sucesso).
-' - 2026-03-04 | Codex | Diff determinÃ­stico PROVA_CI e extraÃ§Ã£o pÃºblica do bloco
+' - 2026-03-04 | Codex | Diff deterministico PROVA_CI e extracao publica do bloco
 '   - Adiciona diff formal expected-vs-prova no contrato (R5_PROVA_EXPECTED_DIFF).
-'   - ExpÃµe ContractDiag_ExtractProvaCiBlock para reutilizaÃ§Ã£o no bundle de diagnÃ³sticos.
-'   - Expande selftests para validar cenÃ¡rio de diff em falta (FAIL inequÃ­voco).
-' - 2026-03-04 | Codex | Regras hierÃ¡rquicas e observabilidade para SEM_CONTRATO
-'   - Emite CONTRACT_STATE_DECISION/CONTRACT_NEXT_ACTION tambÃ©m quando nÃ£o hÃ¡ contrato ativo.
-'   - Ajusta regra de citation: WARN (sem bloqueio) quando hÃ¡ PROVA_CI vÃ¡lida com FLOW_TEMPLATE.csv.
-'   - Expande selftests para cenÃ¡rios de fallback vÃ¡lido e bloqueio sem prova equivalente.
-' - 2026-03-04 | Codex | Hardening de regras e eventos canÃ³nicos por regra
-'   - Adiciona emissÃ£o explÃ­cita de CONTRACT_RULE_RESULT (PASS/WARN/FAIL) para auditoria por regra.
-'   - ReforÃ§a validaÃ§Ã£o de PROVA_CI para priorizar bloco delimitado (PROVA_CI_START/PROVA_CI_END).
-'   - Inclui SelfTest_ContractDiagnostics_RunAll para cenÃ¡rios DoD crÃ­ticos.
-' - 2026-03-03 | Codex | ImplementaÃ§Ã£o inicial do contrato ci_csv_v1
-'   - Adiciona avaliaÃ§Ã£o de marcadores mÃ­nimos (PROVA_CI/FOUND/EXPORT/citation/EXECUTE).
-'   - Emite eventos CONTRACT_* em DEBUG e devolve decisÃ£o OK/FAIL/BLOCKED para gate no M07.
-'   - Suporta budget configurÃ¡vel DEBUG_DETAIL_JSON_MAX_CHARS para detalhe compacto.
+'   - Expoe ContractDiag_ExtractProvaCiBlock para reutilizacao no bundle de diagnosticos.
+'   - Expande selftests para validar cenario de diff em falta (FAIL inequivoco).
+' - 2026-03-04 | Codex | Regras hierarquicas e observabilidade para SEM_CONTRATO
+'   - Emite CONTRACT_STATE_DECISION/CONTRACT_NEXT_ACTION tambem quando nao ha contrato ativo.
+'   - Ajusta regra de citation: WARN (sem bloqueio) quando ha PROVA_CI valida com FLOW_TEMPLATE.csv.
+'   - Expande selftests para cenarios de fallback valido e bloqueio sem prova equivalente.
+' - 2026-03-04 | Codex | Hardening de regras e eventos canonicos por regra
+'   - Adiciona emissao explicita de CONTRACT_RULE_RESULT (PASS/WARN/FAIL) para auditoria por regra.
+'   - Reforca validacao de PROVA_CI para priorizar bloco delimitado (PROVA_CI_START/PROVA_CI_END).
+'   - Inclui SelfTest_ContractDiagnostics_RunAll para cenarios DoD criticos.
+' - 2026-03-03 | Codex | Implementacao inicial do contrato ci_csv_v1
+'   - Adiciona avaliacao de marcadores minimos (PROVA_CI/FOUND/EXPORT/citation/EXECUTE).
+'   - Emite eventos CONTRACT_* em DEBUG e devolve decisao OK/FAIL/BLOCKED para gate no M07.
+'   - Suporta budget configuravel DEBUG_DETAIL_JSON_MAX_CHARS para detalhe compacto.
 '
-' FunÃ§Ãµes e procedimentos:
+' Funcoes e procedimentos:
 ' - ContractDiag_EvaluateStep(...)
-'   - Avalia contrato do passo e devolve decisÃ£o + detalhe + sugestÃ£o.
+'   - Avalia contrato do passo e devolve decisao + detalhe + sugestao.
 ' - ContractDiag_ExtractProvaCiBlock(outputText As String) As String
 '   - Extrai o bloco PROVA_CI para auditoria e artefactos de suporte.
 ' - ContractDiag_GetBundleMode(...)
-'   - Resolve modo de bundle por precedÃªncia (prompt > Config global > default).
+'   - Resolve modo de bundle por precedencia (prompt > Config global > default).
 ' - ContractDiag_GetDiagnosticsSubfolder(...)
-'   - Resolve subpasta de diagnÃ³sticos por precedÃªncia (prompt > Config global > default).
+'   - Resolve subpasta de diagnosticos por precedencia (prompt > Config global > default).
 ' - SelfTest_ContractDiagnostics_RunAll()
-'   - Executa cenÃ¡rios mÃ­nimos do contrato (sem contrato, marcador ausente, inconsistÃªncia e caso OK).
+'   - Executa cenarios minimos do contrato (sem contrato, marcador ausente, inconsistencia e caso OK).
 ' =============================================================================
 
 Private Const CFG_DEBUG_DETAIL_JSON_MAX_CHARS As String = "DEBUG_DETAIL_JSON_MAX_CHARS"
@@ -70,8 +70,8 @@ Public Sub ContractDiag_EvaluateStep( _
     outContractMode = "SEM_CONTRATO"
     outStepState = "OK"
     outRuleCode = "C0_NO_CONTRACT"
-    outProblem = "Passo sem contrato explÃ­cito; execuÃ§Ã£o segue com observaÃ§Ã£o diagnÃ³stica."
-    outSuggestion = "Sem aÃ§Ã£o obrigatÃ³ria. Se houver falhas recorrentes, ativar diagnostic_contract: ci_csv_v1 no passo."
+    outProblem = "Passo sem contrato explicito; execucao segue com observacao diagnostica."
+    outSuggestion = "Sem acao obrigatoria. Se houver falhas recorrentes, ativar diagnostic_contract: ci_csv_v1 no passo."
     outDetailJsonCompact = "{}"
 
     Dim contractMode As String
@@ -79,8 +79,8 @@ Public Sub ContractDiag_EvaluateStep( _
 
     If contractMode <> "ci_csv_v1" Then
         Call ContractDiag_LogEvent(passo, promptId, "INFO", "CONTRACT_EVAL_START", runId, "SEM_CONTRATO", "OK", "C0_NO_CONTRACT", _
-            "ValidaÃ§Ã£o de consistÃªncia desativada neste passo.", _
-            "Se houver intermitÃªncia de ficheiros, considerar ativar diagnostic_contract: ci_csv_v1.", _
+            "Validacao de consistencia desativada neste passo.", _
+            "Se houver intermitencia de ficheiros, considerar ativar diagnostic_contract: ci_csv_v1.", _
             "{""contract"":""SEM_CONTRATO""}")
 
         If InStr(1, outputText, EXPECTED_FLOW_CSV, vbTextCompare) > 0 Or _
@@ -96,14 +96,14 @@ Public Sub ContractDiag_EvaluateStep( _
                 "}"
             Call ContractDiag_LogEvent(passo, promptId, "ALERTA", "CONTRACT_SUGGEST_ENABLE", runId, "SEM_CONTRATO", "OK", "C0_SUGGEST", _
                 "Este passo menciona CSV/LOAD_CSV sem contrato ativo.", _
-                "SugestÃ£o: ativar diagnostic_contract: ci_csv_v1 e exigir prova textual mÃ­nima (CSV_EXISTE_EM_MNT_DATA, FILE_CSV, MNT_DATA_LIST).", _
+                "Sugestao: ativar diagnostic_contract: ci_csv_v1 e exigir prova textual minima (CSV_EXISTE_EM_MNT_DATA, FILE_CSV, MNT_DATA_LIST).", _
                 lintContext)
         End If
 
         Call ContractDiag_LogEvent(passo, promptId, "INFO", "CONTRACT_STATE_DECISION", runId, "SEM_CONTRATO", "OK", "C0_NO_CONTRACT", _
             outProblem, outSuggestion, "{""contract"":""SEM_CONTRATO""}")
         Call ContractDiag_LogEvent(passo, promptId, "INFO", "CONTRACT_NEXT_ACTION", runId, "SEM_CONTRATO", "OK", "C0_NO_CONTRACT", _
-            "PrÃ³xima aÃ§Ã£o recomendada definida.", outSuggestion, "{""action"":""continue_pipeline""}")
+            "Proxima acao recomendada definida.", outSuggestion, "{""action"":""continue_pipeline""}")
         Exit Sub
     End If
 
@@ -153,25 +153,25 @@ Public Sub ContractDiag_EvaluateStep( _
     outDetailJsonCompact = ContractDiag_ApplyDetailBudget(outDetailJsonCompact)
 
     Call ContractDiag_LogEvent(passo, promptId, "INFO", "CONTRACT_MARKERS_PARSED", runId, outContractMode, "EM_ANALISE", "C1_PARSE", _
-        "Marcadores do contrato avaliados.", "Seguir validaÃ§Ã£o das regras de consistÃªncia.", outDetailJsonCompact)
+        "Marcadores do contrato avaliados.", "Seguir validacao das regras de consistencia.", outDetailJsonCompact)
 
     If (Not hasProva) Or (Not hasFound) Or (Not hasExport) Then
         outStepState = "BLOCKED"
         outRuleCode = "C1_MISSING_MARKER"
-        outProblem = "Faltam marcadores obrigatÃ³rios do contrato (PROVA_CI/FOUND/EXPORT)."
-        outSuggestion = "Pedir resposta com todos os marcadores obrigatÃ³rios e repetir o passo."
+        outProblem = "Faltam marcadores obrigatorios do contrato (PROVA_CI/FOUND/EXPORT)."
+        outSuggestion = "Pedir resposta com todos os marcadores obrigatorios e repetir o passo."
         GoTo Finalize
     End If
 
     Call ContractDiag_LogRuleResult(passo, promptId, runId, outContractMode, "R1B_MIN_PROOF_MARKERS", _
         IIf((Not hasCsvIntent) Or (hasCsvInMntData And hasFileCsv And hasMntDataList), "PASS", "FAIL"), _
-        "Valida prova textual mÃ­nima (CSV_EXISTE_EM_MNT_DATA, FILE_CSV, MNT_DATA_LIST) quando hÃ¡ intenÃ§Ã£o CSV.", outDetailJsonCompact)
+        "Valida prova textual minima (CSV_EXISTE_EM_MNT_DATA, FILE_CSV, MNT_DATA_LIST) quando ha intencao CSV.", outDetailJsonCompact)
 
     If hasCsvIntent Then
         If (Not hasCsvInMntData) Or (Not hasFileCsv) Or (Not hasMntDataList) Then
             outStepState = "BLOCKED"
             outRuleCode = "C1B_MIN_PROOF_MARKERS_MISSING"
-            outProblem = "Faltam marcadores mÃ­nimos de prova textual para output CSV em CI."
+            outProblem = "Faltam marcadores minimos de prova textual para output CSV em CI."
             outSuggestion = "Incluir no output final: CSV_EXISTE_EM_MNT_DATA: SIM/NAO; FILE_CSV: <basename.csv>; MNT_DATA_LIST: <nome(bytes=...) ; ...>."
             GoTo Finalize
         End If
@@ -179,13 +179,13 @@ Public Sub ContractDiag_EvaluateStep( _
 
     Call ContractDiag_LogRuleResult(passo, promptId, runId, outContractMode, "R1C_STATE_CONSISTENCY", _
         IIf(((LCase$(exportOk) = "true") Or hasExecuteLoadCsv) And (Not csvExistsAffirmative), "FAIL", "PASS"), _
-        "Valida consistÃªncia entre sucesso CSV e marcador CSV_EXISTE_EM_MNT_DATA.", outDetailJsonCompact)
+        "Valida consistencia entre sucesso CSV e marcador CSV_EXISTE_EM_MNT_DATA.", outDetailJsonCompact)
 
     If ((LCase$(exportOk) = "true") Or hasExecuteLoadCsv) And (Not csvExistsAffirmative) Then
         outStepState = "FAIL"
         outRuleCode = "C1C_CSV_STATE_INCONSISTENT"
-        outProblem = "Output reporta sucesso CSV/EXECUTE, mas CSV_EXISTE_EM_MNT_DATA nÃ£o confirma estado afirmativo."
-        outSuggestion = "Confirmar existÃªncia real do CSV em /mnt/data e corrigir marcador para SIM antes de emitir EXECUTE/LOAD_CSV."
+        outProblem = "Output reporta sucesso CSV/EXECUTE, mas CSV_EXISTE_EM_MNT_DATA nao confirma estado afirmativo."
+        outSuggestion = "Confirmar existencia real do CSV em /mnt/data e corrigir marcador para SIM antes de emitir EXECUTE/LOAD_CSV."
         GoTo Finalize
     End If
 
@@ -207,7 +207,7 @@ Public Sub ContractDiag_EvaluateStep( _
     diffDetail = ContractDiag_ApplyDetailBudget(diffDetail)
 
     Call ContractDiag_LogEvent(passo, promptId, IIf(Trim$(missingCsv) = "", "INFO", "ALERTA"), "CONTRACT_PROVA_DIFF", runId, outContractMode, "EM_ANALISE", "R5_PROVA_DIFF", _
-        "ComparaÃ§Ã£o expected vs PROVA_CI concluÃ­da.", "Rever ficheiros em falta antes de avanÃ§ar para passos dependentes de CSV.", diffDetail)
+        "Comparacao expected vs PROVA_CI concluida.", "Rever ficheiros em falta antes de avancar para passos dependentes de CSV.", diffDetail)
 
     Call ContractDiag_LogRuleResult(passo, promptId, runId, outContractMode, "R5_PROVA_EXPECTED_DIFF", _
         IIf(Trim$(missingCsv) = "", "PASS", "FAIL"), _
@@ -216,7 +216,7 @@ Public Sub ContractDiag_EvaluateStep( _
     If Trim$(missingCsv) <> "" Then
         outStepState = "FAIL"
         outRuleCode = "C5_PROVA_EXPECTED_MISSING"
-        outProblem = "PROVA_CI nÃ£o comprovou ficheiro(s) esperado(s): " & missingCsv
+        outProblem = "PROVA_CI nao comprovou ficheiro(s) esperado(s): " & missingCsv
         outSuggestion = "Reexecutar o passo e garantir listagem PROVA_CI com path completo dos ficheiros esperados."
         outDetailJsonCompact = diffDetail
         GoTo Finalize
@@ -224,13 +224,13 @@ Public Sub ContractDiag_EvaluateStep( _
 
     Call ContractDiag_LogRuleResult(passo, promptId, runId, outContractMode, "R2_EXECUTE_REQUIRES_FOUND", _
         IIf(hasExecuteLoadCsv And LCase$(foundCsv) = "false", "FAIL", "PASS"), _
-        "Valida que LOAD_CSV sÃ³ ocorre quando FOUND_FLOW_TEMPLATE_CSV=true.", outDetailJsonCompact)
+        "Valida que LOAD_CSV so ocorre quando FOUND_FLOW_TEMPLATE_CSV=true.", outDetailJsonCompact)
 
     If hasExecuteLoadCsv And LCase$(foundCsv) = "false" Then
         outStepState = "FAIL"
         outRuleCode = "C2_EXECUTE_WITH_FOUND_FALSE"
-        outProblem = "InconsistÃªncia: LOAD_CSV foi solicitado mas FOUND_FLOW_TEMPLATE_CSV=false."
-        outSuggestion = "Corrigir decisÃ£o do modelo ou garantir presenÃ§a real do CSV antes de executar LOAD_CSV."
+        outProblem = "Inconsistencia: LOAD_CSV foi solicitado mas FOUND_FLOW_TEMPLATE_CSV=false."
+        outSuggestion = "Corrigir decisao do modelo ou garantir presenca real do CSV antes de executar LOAD_CSV."
         GoTo Finalize
     End If
 
@@ -245,19 +245,19 @@ Public Sub ContractDiag_EvaluateStep( _
     End If
 
     Call ContractDiag_LogRuleResult(passo, promptId, runId, outContractMode, "R3_FOUND_REQUIRES_CITATION", _
-        r3State, "Valida citaÃ§Ã£o quando FOUND_FLOW_TEMPLATE_CSV=true.", outDetailJsonCompact)
+        r3State, "Valida citacao quando FOUND_FLOW_TEMPLATE_CSV=true.", outDetailJsonCompact)
 
     If LCase$(foundCsv) = "true" And (Not hasCitation) Then
         If provaHasCsv Then
             outStepState = "OK"
             outRuleCode = "C3_FOUND_WITHOUT_CITATION_WARN"
             outProblem = "CSV foi reportado sem container_file_citation, mas PROVA_CI confirmou FLOW_TEMPLATE.csv."
-            outSuggestion = "Pode avanÃ§ar, mas recomenda-se incluir citation para facilitar recolha automÃ¡tica em runs futuros."
+            outSuggestion = "Pode avancar, mas recomenda-se incluir citation para facilitar recolha automatica em runs futuros."
         Else
             outStepState = "BLOCKED"
             outRuleCode = "C3_FOUND_WITHOUT_CITATION"
             outProblem = "CSV foi reportado como encontrado mas sem container_file_citation e sem prova equivalente."
-            outSuggestion = "Pedir citation explÃ­cita ou evidÃªncia equivalente antes de avanÃ§ar."
+            outSuggestion = "Pedir citation explicita ou evidencia equivalente antes de avancar."
             GoTo Finalize
         End If
     End If
@@ -269,15 +269,15 @@ Public Sub ContractDiag_EvaluateStep( _
     If LCase$(exportOk) = "true" And (Not provaHasCsv) Then
         outStepState = "FAIL"
         outRuleCode = "C4_EXPORT_NOT_PROVEN"
-        outProblem = "EXPORT_OK_CSV=true, mas PROVA_CI nÃ£o comprova FLOW_TEMPLATE.csv."
-        outSuggestion = "Reexecutar com prova de ficheiros no /mnt/data e validar listagem antes do prÃ³ximo passo."
+        outProblem = "EXPORT_OK_CSV=true, mas PROVA_CI nao comprova FLOW_TEMPLATE.csv."
+        outSuggestion = "Reexecutar com prova de ficheiros no /mnt/data e validar listagem antes do proximo passo."
         GoTo Finalize
     End If
 
     outStepState = "OK"
     outRuleCode = "C9_OK"
     outProblem = "Contrato validado com sucesso para este passo."
-    outSuggestion = "Pode avanÃ§ar para o prÃ³ximo passo da pipeline."
+    outSuggestion = "Pode avancar para o proximo passo da pipeline."
 
 Finalize:
     Dim sev As String
@@ -286,7 +286,7 @@ Finalize:
     If outStepState = "FAIL" Then sev = "ERRO"
 
     Call ContractDiag_LogEvent(passo, promptId, sev, "CONTRACT_STATE_DECISION", runId, outContractMode, outStepState, outRuleCode, outProblem, outSuggestion, outDetailJsonCompact)
-    Call ContractDiag_LogEvent(passo, promptId, "INFO", "CONTRACT_NEXT_ACTION", runId, outContractMode, outStepState, outRuleCode, "PrÃ³xima aÃ§Ã£o recomendada definida.", outSuggestion, outDetailJsonCompact)
+    Call ContractDiag_LogEvent(passo, promptId, "INFO", "CONTRACT_NEXT_ACTION", runId, outContractMode, outStepState, outRuleCode, "Proxima acao recomendada definida.", outSuggestion, outDetailJsonCompact)
 End Sub
 
 Public Function ContractDiag_ExtractProvaCiBlock(ByVal outputText As String) As String
@@ -504,7 +504,7 @@ Private Sub ContractDiag_LogRuleResult(ByVal passo As Long, ByVal promptId As St
 
     Call ContractDiag_LogEvent(passo, promptId, sev, "CONTRACT_RULE_RESULT", runId, contractMode, "EM_ANALISE", ruleCode, _
         "Resultado da regra: " & resultState & ". " & desc, _
-        "Se FAIL, rever marcadores/evidÃªncias deste passo.", detailJson)
+        "Se FAIL, rever marcadores/evidencias deste passo.", detailJson)
 End Sub
 
 Private Function ContractDiag_HasValidProva(ByVal outputText As String) As Boolean
@@ -687,10 +687,10 @@ Public Sub SelfTest_ContractDiagnostics_RunAll()
     If UCase$(st) <> "FAIL" Then Err.Raise 5, , "T3 fail: execute com FOUND=false deveria FAIL"
 
     Call ContractDiag_EvaluateStep(4, "SELFTEST/D", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/FLOW_TEMPLATE.csv" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: true" & vbLf & "EXPORT_OK_CSV: true" & vbLf & "CSV_EXISTE_EM_MNT_DATA: SIM" & vbLf & "FILE_CSV: FLOW_TEMPLATE.csv" & vbLf & "MNT_DATA_LIST: FLOW_TEMPLATE.csv(bytes=10)" & vbLf & "container_file_citation: sandbox:/mnt/data/FLOW_TEMPLATE.csv", "{""type"":""container_file_citation""}", hasContract, cMode, st, rule, pr, sg, dj)
-    If UCase$(st) <> "OK" Then Err.Raise 5, , "T4 fail: cenÃ¡rio consistente deveria OK"
+    If UCase$(st) <> "OK" Then Err.Raise 5, , "T4 fail: cenario consistente deveria OK"
 
     Call ContractDiag_EvaluateStep(5, "SELFTEST/E", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/FLOW_TEMPLATE.csv" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: true" & vbLf & "EXPORT_OK_CSV: true" & vbLf & "CSV_EXISTE_EM_MNT_DATA: SIM" & vbLf & "FILE_CSV: FLOW_TEMPLATE.csv" & vbLf & "MNT_DATA_LIST: FLOW_TEMPLATE.csv(bytes=10)", "", hasContract, cMode, st, rule, pr, sg, dj)
-    If UCase$(st) <> "OK" Then Err.Raise 5, , "T5 fail: sem citation mas com prova vÃ¡lida deveria OK (warn)"
+    If UCase$(st) <> "OK" Then Err.Raise 5, , "T5 fail: sem citation mas com prova valida deveria OK (warn)"
     If UCase$(rule) <> "C3_FOUND_WITHOUT_CITATION_WARN" Then Err.Raise 5, , "T5 fail: regra esperada C3_FOUND_WITHOUT_CITATION_WARN"
 
     Call ContractDiag_EvaluateStep(6, "SELFTEST/F", "diagnostic_contract: ci_csv_v1", "PROVA_CI_START" & vbLf & "FILE: /mnt/data/out.pdf" & vbLf & "PROVA_CI_END" & vbLf & "FOUND_FLOW_TEMPLATE_CSV: true" & vbLf & "EXPORT_OK_CSV: true" & vbLf & "CSV_EXISTE_EM_MNT_DATA: SIM" & vbLf & "FILE_CSV: FLOW_TEMPLATE.csv" & vbLf & "MNT_DATA_LIST: out.pdf(bytes=10)", "", hasContract, cMode, st, rule, pr, sg, dj)
@@ -711,7 +711,7 @@ Public Sub SelfTest_ContractDiagnostics_RunAll()
     If (Not hasContract) Then Err.Raise 5, , "T10 fail: alias contract_mode deveria ativar contrato"
     If UCase$(st) <> "OK" Then Err.Raise 5, , "T10 fail: CSV_EXISTE_EM_MNT_DATA=OK com prova valida deveria OK"
 
-    Call Debug_Registar(0, "SELFTEST_CONTRACT", "INFO", "", "SELFTEST_CONTRACT", "PASS", "SelfTest_ContractDiagnostics_RunAll concluÃ­do com sucesso.")
+    Call Debug_Registar(0, "SELFTEST_CONTRACT", "INFO", "", "SELFTEST_CONTRACT", "PASS", "SelfTest_ContractDiagnostics_RunAll concluido com sucesso.")
     MsgBox "SelfTest_ContractDiagnostics_RunAll PASS", vbInformation
     Exit Sub
 EH:
