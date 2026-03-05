@@ -2,29 +2,29 @@ Attribute VB_Name = "M04_ConfigExtraParser"
 Option Explicit
 
 ' =============================================================================
-' Módulo: M04_ConfigExtraParser
-' Propósito:
-' - Converter o campo amigável "Config extra" em JSON válido para a API.
-' - Validar sintaxe, chaves proibidas e coerência de parâmetros com logging em DEBUG.
+' Modulo: M04_ConfigExtraParser
+' Proposito:
+' - Converter o campo amigavel "Config extra" em JSON valido para a API.
+' - Validar sintaxe, chaves proibidas e coerencia de parametros com logging em DEBUG.
 '
-' Atualizações:
-' - 2026-02-16 | Codex | Correção de serialização de dicionários aninhados e helper de dump
+' Atualizacoes:
+' - 2026-02-16 | Codex | Correcao de serializacao de dicionarios aninhados e helper de dump
 '   - Evita erro 450 ao ler itens Object de Scripting.Dictionary sem Set.
-'   - Adiciona helper público para dump recursivo de dicionários na janela Immediate.
-' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
-'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
-'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+'   - Adiciona helper publico para dump recursivo de dicionarios na janela Immediate.
+' - 2026-02-12 | Codex | Implementacao do padrao de header obrigatorio
+'   - Adiciona proposito, historico de alteracoes e inventario de rotinas publicas.
+'   - Mantem documentacao tecnica do modulo alinhada com AGENTS.md.
 '
-' Funções e procedimentos (inventário público):
-' - ConfigExtra_Converter (Sub): rotina pública do módulo.
+' Funcoes e procedimentos (inventario publico):
+' - ConfigExtra_Converter (Sub): rotina publica do modulo.
 ' - ConfigExtra_DebugDumpDictionary (Sub): imprime recursivamente keys/tipos/valores no Immediate.
 ' =============================================================================
 
 
 ' =============================================================================
-' PARSER DIDÁCTICO: "Config extra" amigável -> JSON
+' PARSER DIDACTICO: "Config extra" amigavel -> JSON
 '
-' Convenção:
+' Convencao:
 '   - Cada linha: chave: valor
 '   - Separador de linhas: ALT+ENTER (Excel)
 '   - input como bloco:
@@ -35,7 +35,7 @@ Option Explicit
 ' Comportamento:
 '   - Se encontrar erros de sintaxe: regista alerta no DEBUG e ignora apenas essa parte
 '   - Se houver conflitos (ex.: conversation + previous_response_id): ignora previous_response_id e alerta
-'   - Proíbe chaves dedicadas (model/temperature/max_output_tokens/store/tools): ignora e alerta
+'   - Proibe chaves dedicadas (model/temperature/max_output_tokens/store/tools): ignora e alerta
 ' =============================================================================
 
 Private Function NormalizarQuebrasDeLinha(ByVal texto As String) As String
@@ -91,7 +91,7 @@ Private Function ChaveProibida(ByVal chave As String) As Boolean
 End Function
 
 
-' ---- cria/obtém um dicionário (late binding) para permitir nesting via keys com "."
+' ---- cria/obtem um dicionario (late binding) para permitir nesting via keys com "."
 Private Function NovoDict() As Object
     Set NovoDict = CreateObject("Scripting.Dictionary")
 End Function
@@ -297,7 +297,7 @@ Private Function ParseObjectoSimples(ByVal valor As String, ByVal passo As Long,
                 GoTo ProximoPar
             End If
 
-            ' valores: boolean/número/strings
+            ' valores: boolean/numero/strings
             Dim vJsonTipo As String, vJsonLiteral As String
             Call ConverterValorParaJson(v, passo, promptId, linhaN, parametro, vJsonTipo, vJsonLiteral)
 
@@ -328,8 +328,8 @@ Private Sub ConverterValorParaJson( _
     ByRef outTipo As String, ByRef outJsonLiteralOrText As String _
 )
     ' outTipo:
-    '   - "raw": outJsonLiteralOrText contém literal JSON (true/123/{"a":1}/["x"])
-    '   - "str": outJsonLiteralOrText contém texto (será escapado e entre aspas)
+    '   - "raw": outJsonLiteralOrText contem literal JSON (true/123/{"a":1}/["x"])
+    '   - "str": outJsonLiteralOrText contem texto (sera escapado e entre aspas)
 
     Dim v As String
     v = Trim$(valorTexto)
@@ -353,7 +353,7 @@ Private Sub ConverterValorParaJson( _
         Exit Sub
     End If
 
-    ' listas/objectos amigáveis
+    ' listas/objectos amigaveis
     If Left$(v, 1) = "[" Then
         Dim okList As Boolean
         Dim jsonList As String
@@ -391,7 +391,7 @@ Private Function IsChaveInternaFileOutput(ByVal chave As String) As Boolean
     Dim k As String
     k = LCase$(Trim$(chave))
 
-    ' File Output (interno PIPELINER) — não deve ir para o request /v1/responses
+    ' File Output (interno PIPELINER) - nao deve ir para o request /v1/responses
     If k = "output_kind" Or k = "process_mode" Or k = "auto_save" Or k = "overwrite_mode" Then
         IsChaveInternaFileOutput = True
         Exit Function
@@ -407,7 +407,7 @@ Private Function IsChaveInternaFileOutput(ByVal chave As String) As Boolean
         Exit Function
     End If
 
-    ' Qualquer chave "file_*" é tratada como interna ao PIPELINER (ex.: file_output_encoding)
+    ' Qualquer chave "file_*" e tratada como interna ao PIPELINER (ex.: file_output_encoding)
     If Left$(k, 5) = "file_" Then
         IsChaveInternaFileOutput = True
         Exit Function
@@ -469,7 +469,7 @@ Public Sub ConfigExtra_Converter( _
             GoTo ProximaLinha
         End If
 
-        ' Detectar início de bloco input:
+        ' Detectar inicio de bloco input:
         If LCase$(linhaTrim) = "input:" Then
             emInputBloco = True
             GoTo ProximaLinha
@@ -532,7 +532,7 @@ Public Sub ConfigExtra_Converter( _
 ProximaLinha:
     Next i
 
-    ' ---- Aplicar regras pós-parse
+    ' ---- Aplicar regras pos-parse
     ' Conflito conversation + previous_response_id
     If Dict_ExistsTop(d, "conversation") And Dict_ExistsTop(d, "previous_response_id") Then
         Dict_RemoveTop d, "previous_response_id"
@@ -550,11 +550,11 @@ ProximaLinha:
         ' input como array de mensagens
         outInputJsonLiteral = "[{""role"":""" & JsonEscapar(inputRole) & """,""content"":""" & JsonEscapar(inputContent) & """}]"
 
-        ' Para auditoria, guardamos também no JSON convertido:
+        ' Para auditoria, guardamos tambem no JSON convertido:
         Dict_SetPathValue d, "input", "raw", outInputJsonLiteral
     End If
 
-    ' ---- Gerar JSON auditável (config extra convertido)
+    ' ---- Gerar JSON auditavel (config extra convertido)
     outAuditJson = Dict_ToJsonObject(d)
 
     ' ---- Gerar fragmento sem "input" para merge no request

@@ -2,23 +2,23 @@ Attribute VB_Name = "M11_DebugLogging"
 Option Explicit
 
 ' =============================================================================
-' Módulo: M11_DebugLogging
-' Propósito:
-' - Fornecer utilitários de logging técnico em DEBUG/Seguimento/FILES_MANAGEMENT.
-' - Padronizar severidades e helpers de criação/obtenção de folhas de log.
+' Modulo: M11_DebugLogging
+' Proposito:
+' - Fornecer utilitarios de logging tecnico em DEBUG/Seguimento/FILES_MANAGEMENT.
+' - Padronizar severidades e helpers de criacao/obtencao de folhas de log.
 '
-' Atualizações:
-' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
-'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
-'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+' Atualizacoes:
+' - 2026-02-12 | Codex | Implementacao do padrao de header obrigatorio
+'   - Adiciona proposito, historico de alteracoes e inventario de rotinas publicas.
+'   - Mantem documentacao tecnica do modulo alinhada com AGENTS.md.
 '
-' Funções e procedimentos (inventário público):
-' - DebugLog (Sub): rotina pública do módulo.
-' - SeguimentoInfo (Sub): rotina pública do módulo.
-' - FilesManagementNote (Sub): rotina pública do módulo.
+' Funcoes e procedimentos (inventario publico):
+' - DebugLog (Sub): rotina publica do modulo.
+' - SeguimentoInfo (Sub): rotina publica do modulo.
+' - FilesManagementNote (Sub): rotina publica do modulo.
 ' =============================================================================
 
-' Logging leve e compatível com folhas DEBUG/Seguimento.
+' Logging leve e compativel com folhas DEBUG/Seguimento.
 ' Escreve apenas texto e metadados; nunca escreve chaves nem bytes de ficheiros.
 
 Public Enum LogSeverity

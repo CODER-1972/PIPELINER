@@ -2,55 +2,55 @@ Attribute VB_Name = "M12_SelfTests"
 Option Explicit
 
 ' =============================================================================
-' Módulo: M12_SelfTests
-' Propósito:
-' - Executar self-tests idempotentes de componentes críticos do motor VBA.
-' - Registar resultados PASS/FAIL/ALERTA no DEBUG para diagnóstico rápido.
+' Modulo: M12_SelfTests
+' Proposito:
+' - Executar self-tests idempotentes de componentes criticos do motor VBA.
+' - Registar resultados PASS/FAIL/ALERTA no DEBUG para diagnostico rapido.
 '
-' Atualizações:
+' Atualizacoes:
 ' - 2026-03-04 | Codex | Selftests para gate de contrato minimo e handoff TSV ContextKV
 '   - Adiciona cenario de contrato ci_csv_v1 sem prova minima (espera BLOCKED deterministico).
 '   - Executa selftest dedicado de parse TSV_CATALOGO_FINAL_ENC no modulo ContextKV.
-' - 2026-03-02 | Codex | Correção de compile error no selftest DEBUG_DIAG
-'   - Renomeia variáveis locais `sum`/`fix` para `rcSummary`/`rcFixSuggestion` para evitar colisão com nomes reservados.
-'   - Mantém assinatura e cobertura dos cenários de classificação sem alteração funcional.
+' - 2026-03-02 | Codex | Correcao de compile error no selftest DEBUG_DIAG
+'   - Renomeia variaveis locais `sum`/`fix` para `rcSummary`/`rcFixSuggestion` para evitar colisao com nomes reservados.
+'   - Mantem assinatura e cobertura dos cenarios de classificacao sem alteracao funcional.
 ' - 2026-03-03 | Codex | SelfTest do resolvedor CI de output
-'   - Adiciona 5 cenários mínimos (citation, marker, fallback limpo, apenas inputs, ambiguidade).
-'   - Valida que fallback não escolhe `file-*` e falha quando não há desambiguação determinística.
+'   - Adiciona 5 cenarios minimos (citation, marker, fallback limpo, apenas inputs, ambiguidade).
+'   - Valida que fallback nao escolhe `file-*` e falha quando nao ha desambiguacao deterministica.
 ' - 2026-03-02 | Codex | Cobertura agnostica para 1, 2+ wildcards em FILES
 '   - Amplia SELFTEST_FILES_WILDCARD_RESOLUTION para padroes com 1, 2 e 3+ asteriscos (`*`).
 '   - Valida comportamento agnostico ao texto de procura com multiplos nomes de ficheiro no mesmo lote.
 ' - 2026-03-01 | Codex | SelfTests do classificador DEBUG_DIAG (RC)
-'   - Adiciona 3 cenários simulados (sucesso, apenas input no container, text_embed com risco /mnt/data).
-'   - Valida código RC esperado via DebugDiag_ClassifyForSelfTest sem dependência de API/rede.
-' - 2026-02-18 | Codex | SelfTest automático para wildcard FILES (GUIA_DE_ESTILO)
-'   - Cria pasta temporária + PDFs dummy e valida resolução `GUIA_DE_ESTILO*.pdf` com latest.
-'   - Integra resultado PASS/FAIL no ciclo SelfTest_RunAll sem dependência de API.
-'   - Corrige invocação do teste de output-chain para chamada direta com parâmetros ByRef (status/candidatos).
+'   - Adiciona 3 cenarios simulados (sucesso, apenas input no container, text_embed com risco /mnt/data).
+'   - Valida codigo RC esperado via DebugDiag_ClassifyForSelfTest sem dependencia de API/rede.
+' - 2026-02-18 | Codex | SelfTest automatico para wildcard FILES (GUIA_DE_ESTILO)
+'   - Cria pasta temporaria + PDFs dummy e valida resolucao `GUIA_DE_ESTILO*.pdf` com latest.
+'   - Integra resultado PASS/FAIL no ciclo SelfTest_RunAll sem dependencia de API.
+'   - Corrige invocacao do teste de output-chain para chamada direta com parametros ByRef (status/candidatos).
 ' - 2026-02-16 | Codex | SelfTest de schema strict para File Output (required vs properties)
-'   - Adiciona macro pública SELFTEST_FILEOUTPUT_SCHEMA para validar alinhamento entre properties e required.
+'   - Adiciona macro publica SELFTEST_FILEOUTPUT_SCHEMA para validar alinhamento entre properties e required.
 '   - Integra o teste no SelfTest_RunAll com registo PASS/FAIL no DEBUG.
-' - 2026-02-16 | Codex | Novos self-tests para resolução segura de OPENAI_API_KEY
-'   - Substitui teste de presença simples por cenários de precedência ENV -> Config!B1.
-'   - Valida alertas/erros de migração sem exposição de segredo em logs.
-' - 2026-02-12 | Codex | Implementação do padrão de header obrigatório
-'   - Adiciona propósito, histórico de alterações e inventário de rotinas públicas.
-'   - Mantém documentação técnica do módulo alinhada com AGENTS.md.
+' - 2026-02-16 | Codex | Novos self-tests para resolucao segura de OPENAI_API_KEY
+'   - Substitui teste de presenca simples por cenarios de precedencia ENV -> Config!B1.
+'   - Valida alertas/erros de migracao sem exposicao de segredo em logs.
+' - 2026-02-12 | Codex | Implementacao do padrao de header obrigatorio
+'   - Adiciona proposito, historico de alteracoes e inventario de rotinas publicas.
+'   - Mantem documentacao tecnica do modulo alinhada com AGENTS.md.
 '
-' Funções e procedimentos (inventário público):
-' - SelfTest_RunAll (Sub): rotina pública do módulo.
+' Funcoes e procedimentos (inventario publico):
+' - SelfTest_RunAll (Sub): rotina publica do modulo.
 ' - SELFTEST_FILEOUTPUT_SCHEMA (Sub): valida schema strict do manifest de File Output.
-' - SELFTEST_FILES_WILDCARD_RESOLUTION (Sub): valida resolução automática de wildcard FILES em pasta temporária.
-' - SELFTEST_DEBUG_DIAG_CLASSIFIER (Sub): valida regras mínimas de root cause do DEBUG_DIAG.
-' - SELFTEST_CI_OUTPUT_RESOLVER (Sub): valida resolução determinística do ficheiro de output em CI.
+' - SELFTEST_FILES_WILDCARD_RESOLUTION (Sub): valida resolucao automatica de wildcard FILES em pasta temporaria.
+' - SELFTEST_DEBUG_DIAG_CLASSIFIER (Sub): valida regras minimas de root cause do DEBUG_DIAG.
+' - SELFTEST_CI_OUTPUT_RESOLVER (Sub): valida resolucao deterministica do ficheiro de output em CI.
 ' - SELFTEST_CONTRACT_MIN_PROOF_GATE (Sub): valida bloqueio quando faltam marcadores minimos no contrato ci_csv_v1.
 ' =============================================================================
 
 ' =============================================================================
 ' M12_SelfTests
-' - Testes internos idempotentes (não alteram Config permanentemente)
+' - Testes internos idempotentes (nao alteram Config permanentemente)
 ' - Escrevem resultados na folha DEBUG via Debug_Registar (M02_Logger_DEBUG_e_Seguimento)
-' - Não dependem de funções inexistentes no M09 (evita "Sub or Function not defined")
+' - Nao dependem de funcoes inexistentes no M09 (evita "Sub or Function not defined")
 '
 ' Como usar:
 '   - Corre SelfTest_RunAll a partir do Editor VBA (F5) ou via Macro.
@@ -74,12 +74,12 @@ Private Const SELFTEST_PARAM_PREFIX As String = "SELFTEST_"
 Public Sub SelfTest_RunAll()
     On Error GoTo EH
 
-    ' Idempotência: remove apenas linhas antigas do SELFTEST (sem tocar noutros logs)
+    ' Idempotencia: remove apenas linhas antigas do SELFTEST (sem tocar noutros logs)
     SelfTest_ClearPreviousDebugRows
 
     SelfTest_Log SEV_INFO, "SELFTEST_RUN", "Início dos testes internos.", "OK"
 
-    ' 1) Sanitização de filename (ASCII_SAFE) - teste local
+    ' 1) Sanitizacao de filename (ASCII_SAFE) - teste local
     SelfTest_SanitizeFilename
 
     ' 2) Multipart em bytes - teste local (estrutura boundary/CRLF/fecho)
@@ -88,10 +88,10 @@ Public Sub SelfTest_RunAll()
     ' 3) Disponibilidade de engines COM (WinHTTP / MSXML)
     SelfTest_EnginesAvailability
 
-    ' 4) Resolução de OPENAI_API_KEY (precedência e diagnósticos)
+    ' 4) Resolucao de OPENAI_API_KEY (precedencia e diagnosticos)
     SelfTest_ConfigApiKeyResolution
 
-    ' 5) Esquema mínimo da FILES_MANAGEMENT para output chain
+    ' 5) Esquema minimo da FILES_MANAGEMENT para output chain
     SelfTest_Schema_FilesManagement
 
     ' 6) Fluxo register/resolve output->input
@@ -103,10 +103,10 @@ Public Sub SelfTest_RunAll()
     ' 8) File Output json_schema strict (required alinhado com properties)
     SELFTEST_FILEOUTPUT_SCHEMA
 
-    ' 9) Classificador DEBUG_DIAG (cenários simulados)
+    ' 9) Classificador DEBUG_DIAG (cenarios simulados)
     SELFTEST_DEBUG_DIAG_CLASSIFIER
 
-    ' 10) Resolvedor determinístico de output CI
+    ' 10) Resolvedor deterministico de output CI
     SELFTEST_CI_OUTPUT_RESOLVER
 
     SELFTEST_CONTRACT_MIN_PROOF_GATE
@@ -119,7 +119,7 @@ EH:
 End Sub
 
 ' =============================================================================
-' Teste 1: Sanitização ASCII_SAFE
+' Teste 1: Sanitizacao ASCII_SAFE
 ' =============================================================================
 
 Private Sub SelfTest_SanitizeFilename()
@@ -134,7 +134,7 @@ Private Sub SelfTest_SanitizeFilename()
     Dim ok As Boolean
     ok = True
 
-    ' Checks mínimos
+    ' Checks minimos
     If Right$(LCase$(outName), 5) <> ".docx" Then ok = False
     If InStr(1, outName, " ", vbBinaryCompare) > 0 Then ok = False
     If InStr(1, outName, ChrW(8211), vbBinaryCompare) > 0 Then ok = False ' – en dash
@@ -177,7 +177,7 @@ Private Sub SelfTest_MultipartBuild_Local()
     Dim ok As Boolean
     ok = True
 
-    ' Validações estruturais
+    ' Validacoes estruturais
     If ByteLen(body) <= ByteLen(fileBytes) Then ok = False
 
     Dim startNeedle() As Byte
@@ -198,7 +198,7 @@ Private Sub SelfTest_MultipartBuild_Local()
     needleFile = ToBytes_Ansi("name=""file""; filename=""" & fileName & """")
     If BytesIndexOf(body, needleFile) < 0 Then ok = False
 
-    ' Deve conter os bytes do ficheiro fictício (ABC123)
+    ' Deve conter os bytes do ficheiro ficticio (ABC123)
     If BytesIndexOf(body, fileBytes) < 0 Then ok = False
 
     If ok Then
@@ -214,7 +214,7 @@ EH:
 End Sub
 
 ' =============================================================================
-' Teste 3: Engines COM disponíveis (WinHTTP / MSXML)
+' Teste 3: Engines COM disponiveis (WinHTTP / MSXML)
 ' =============================================================================
 
 Private Sub SelfTest_EnginesAvailability()
@@ -245,7 +245,7 @@ EH:
 End Sub
 
 ' =============================================================================
-' Teste 4: resolução de OPENAI_API_KEY (ENV -> Config!B1)
+' Teste 4: resolucao de OPENAI_API_KEY (ENV -> Config!B1)
 ' =============================================================================
 
 Private Sub SelfTest_ConfigApiKeyResolution()
@@ -254,7 +254,7 @@ Private Sub SelfTest_ConfigApiKeyResolution()
     Dim apiKey As String, src As String, warnTxt As String, errTxt As String
     Dim ok As Boolean
 
-    ' Cenário A: ENV presente, Config literal também presente -> usa ENV + alerta
+    ' Cenario A: ENV presente, Config literal tambem presente -> usa ENV + alerta
     ok = Config_SelfTest_ResolveOpenAIApiKey("env-secret", "cfg-secret", apiKey, src, warnTxt, errTxt)
     If ok And src = "ENV" And apiKey = "env-secret" And warnTxt <> "" And errTxt = "" Then
         SelfTest_Log SEV_INFO, "SELFTEST_CONFIG", "APIKEY_RESOLUTION ENV precedence: PASS", "OK"
@@ -262,7 +262,7 @@ Private Sub SelfTest_ConfigApiKeyResolution()
         SelfTest_Log SEV_ERRO, "SELFTEST_CONFIG", "APIKEY_RESOLUTION ENV precedence: FAIL", "Esperado source=ENV com alerta de key literal em Config!B1."
     End If
 
-    ' Cenário B: ENV vazio, Config literal válida -> fallback com alerta
+    ' Cenario B: ENV vazio, Config literal valida -> fallback com alerta
     ok = Config_SelfTest_ResolveOpenAIApiKey("", "cfg-secret", apiKey, src, warnTxt, errTxt)
     If ok And src = "CONFIG_B1" And apiKey = "cfg-secret" And warnTxt <> "" And errTxt = "" Then
         SelfTest_Log SEV_INFO, "SELFTEST_CONFIG", "APIKEY_RESOLUTION Config fallback: PASS", "OK"
@@ -270,7 +270,7 @@ Private Sub SelfTest_ConfigApiKeyResolution()
         SelfTest_Log SEV_ERRO, "SELFTEST_CONFIG", "APIKEY_RESOLUTION Config fallback: FAIL", "Esperado source=CONFIG_B1 com alerta de migração para ambiente."
     End If
 
-    ' Cenário C: Config diretiva Environ e ENV vazio -> erro
+    ' Cenario C: Config diretiva Environ e ENV vazio -> erro
     ok = Config_SelfTest_ResolveOpenAIApiKey("", "(Environ(""OPENAI_API_KEY""))", apiKey, src, warnTxt, errTxt)
     If (Not ok) And errTxt <> "" Then
         SelfTest_Log SEV_INFO, "SELFTEST_CONFIG", "APIKEY_RESOLUTION Environ directive sem ENV: PASS", "OK"
@@ -278,7 +278,7 @@ Private Sub SelfTest_ConfigApiKeyResolution()
         SelfTest_Log SEV_ERRO, "SELFTEST_CONFIG", "APIKEY_RESOLUTION Environ directive sem ENV: FAIL", "Esperado erro com instrução para definir OPENAI_API_KEY no ambiente."
     End If
 
-    ' Cenário D: sem ENV e sem Config válida -> erro
+    ' Cenario D: sem ENV e sem Config valida -> erro
     ok = Config_SelfTest_ResolveOpenAIApiKey("", "", apiKey, src, warnTxt, errTxt)
     If (Not ok) And errTxt <> "" Then
         SelfTest_Log SEV_INFO, "SELFTEST_CONFIG", "APIKEY_RESOLUTION sem fontes: PASS", "OK"
@@ -580,7 +580,7 @@ Private Function SelfTest_GetFileName(ByVal fullPath As String) As String
 End Function
 
 ' =============================================================================
-' Logging (compatível com o PIPELINER)
+' Logging (compativel com o PIPELINER)
 ' =============================================================================
 
 Private Sub SelfTest_Log(ByVal severidade As String, ByVal parametro As String, ByVal problema As String, ByVal sugestao As String)
@@ -590,8 +590,8 @@ Private Sub SelfTest_Log(ByVal severidade As String, ByVal parametro As String, 
 End Sub
 
 ' =============================================================================
-' Idempotência: limpar linhas antigas do SELFTEST na folha DEBUG
-' (Só remove linhas cujo Prompt ID seja SELFTEST e Parametro comece por SELFTEST_)
+' Idempotencia: limpar linhas antigas do SELFTEST na folha DEBUG
+' (So remove linhas cujo Prompt ID seja SELFTEST e Parametro comece por SELFTEST_)
 ' =============================================================================
 
 Private Sub SelfTest_ClearPreviousDebugRows()
@@ -626,7 +626,7 @@ Private Sub SelfTest_ClearPreviousDebugRows()
     Exit Sub
 
 FailSoft:
-    ' não falhar o pipeline por causa de limpeza de logs
+    ' nao falhar o pipeline por causa de limpeza de logs
 End Sub
 
 Private Function FindHeaderColumn(ByVal ws As Worksheet, ByVal headerName As String) As Long
@@ -659,7 +659,7 @@ Private Function NormalizeHeader(ByVal s As String) As String
 End Function
 
 ' =============================================================================
-' Helpers: sanitização ASCII_SAFE
+' Helpers: sanitizacao ASCII_SAFE
 ' =============================================================================
 
 Private Function SanitizeFilename_AsciiSafe(ByVal fileName As String) As String
@@ -669,26 +669,26 @@ Private Function SanitizeFilename_AsciiSafe(ByVal fileName As String) As String
     Dim s As String
     s = base
 
-    ' Remover diacríticos (PT)
+    ' Remover diacriticos (PT)
     s = RemoveDiacriticsPT(s)
 
-    ' Normalizar travessões
+    ' Normalizar travessoes
     s = Replace(s, ChrW(8211), "-") ' –
     s = Replace(s, ChrW(8212), "-") ' —
 
-    ' Espaços para hífen
+    ' Espacos para hifen
     s = Replace(s, " ", "-")
 
-    ' Remover/normalizar caracteres problemáticos
+    ' Remover/normalizar caracteres problematicos
     s = SanitizeForbiddenChars(s)
 
-    ' Colapsar hífens repetidos
+    ' Colapsar hifens repetidos
     s = CollapseRepeats(s, "-")
 
     ' Limpar extremos
     s = TrimChars(s, "-_.")
 
-    ' Limite simples (preserva extensão)
+    ' Limite simples (preserva extensao)
     If Len(s) > 160 Then s = Left$(s, 160)
 
     If ext <> "" Then
@@ -782,7 +782,7 @@ Private Function RemoveDiacriticsPT(ByVal s As String) As String
     s = Replace(s, ChrW(231), "c")
     s = Replace(s, ChrW(199), "C")
 
-    ' n/N (não PT puro, mas aparece)
+    ' n/N (nao PT puro, mas aparece)
     s = Replace(s, ChrW(241), "n")
     s = Replace(s, ChrW(209), "N")
 
@@ -953,7 +953,7 @@ Public Sub SELFTEST_DEBUG_DIAG_CLASSIFIER()
 
     Dim rc As String, rcSummary As String, rcFixSuggestion As String, conf As Long
 
-    ' Cenário 1: sucesso (CSV+DOCX + EXECUTE)
+    ' Cenario 1: sucesso (CSV+DOCX + EXECUTE)
     Call DebugDiag_ClassifyForSelfTest("code_interpreter", "SIM", "2", "report.csv|summary.docx", "input_file", "EXECUTE: LOAD_CSV report.csv", 1, "", "{""type"":""code_interpreter_call""}", rc, rcSummary, rcFixSuggestion, conf)
     If Trim$(rc) = "" Then
         SelfTest_Log SEV_INFO, "SELFTEST_DEBUG_DIAG", "DEBUG_DIAG_SUCCESS_CASE PASS (sem root cause crítica)", "OK"
@@ -961,7 +961,7 @@ Public Sub SELFTEST_DEBUG_DIAG_CLASSIFIER()
         SelfTest_Log SEV_ALERTA, "SELFTEST_DEBUG_DIAG", "DEBUG_DIAG_SUCCESS_CASE FAIL rc=" & rc, "Esperado rc vazio no cenário de sucesso."
     End If
 
-    ' Cenário 2: container com apenas input
+    ' Cenario 2: container com apenas input
     Call DebugDiag_ClassifyForSelfTest("code_interpreter", "SIM", "1", "input.pdf", "input_file", "Gerar output", 0, "", "{""type"":""code_interpreter_call""}", rc, rcSummary, rcFixSuggestion, conf)
     If rc = "RC_ONLY_INPUTS_IN_CONTAINER" Then
         SelfTest_Log SEV_INFO, "SELFTEST_DEBUG_DIAG", "DEBUG_DIAG_ONLY_INPUTS PASS rc=" & rc, "OK"
@@ -969,7 +969,7 @@ Public Sub SELFTEST_DEBUG_DIAG_CLASSIFIER()
         SelfTest_Log SEV_ERRO, "SELFTEST_DEBUG_DIAG", "DEBUG_DIAG_ONLY_INPUTS FAIL rc=" & rc, "Esperado RC_ONLY_INPUTS_IN_CONTAINER."
     End If
 
-    ' Cenário 3: text_embed + tentativa de abrir ficheiro
+    ' Cenario 3: text_embed + tentativa de abrir ficheiro
     Call DebugDiag_ClassifyForSelfTest("code_interpreter", "SIM", "0", "", "text_embed", "Abrir /mnt/data/dados.csv e processar", 0, "", "{""type"":""code_interpreter_call""}", rc, rcSummary, rcFixSuggestion, conf)
     If rc = "RC_TEXT_EMBED_FILE_NOT_FOUND_RISK" Then
         SelfTest_Log SEV_INFO, "SELFTEST_DEBUG_DIAG", "DEBUG_DIAG_TEXT_EMBED_RISK PASS rc=" & rc, "OK"
