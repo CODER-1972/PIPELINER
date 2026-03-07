@@ -555,6 +555,8 @@ Se começar a ficar demasiado grande:
 
 - Em declarações de variáveis locais/globais (`Dim/Private/Public`), evitar identificadores com nomes reservados/funções intrínsecas do VBA (ex.: `Fix`, `Left`, `Date`, `Name`, `Input`, `Shell`); usar prefixos semânticos (`rcSummary`, `outFix`, `tmpDate`) para prevenir `Compile error: Syntax error` no VBE.
 
+- Em loops de parsing textual, evitar identificadores genéricos potencialmente reservados (ex.: `line`, `name`) tanto em variáveis locais como em parâmetros; preferir nomes semânticos (`lineText`, `sheetName`, `fileName`) para reduzir ambiguidades e riscos de compilação no VBE.
+
 - Em mapeamentos de funcionalidade no DEBUG, modelar `ACAO EM CURSO` como lista de ações acumuláveis (não exclusivas) e anexar contexto em formato `chave=valor`; evitar lógica de primeiro-match que esconda etapas simultâneas do mesmo evento.
 
 - Em selftests/fixtures VBA com JSON inline em literais de string, duplicar sempre aspas (`""`) em vez de escapes C-style; literais como `"{"type":"x"}"` causam `Compile error` ou string inválida no VBE e devem ser escritos como `"{""type"":""x""}"`.
@@ -565,6 +567,9 @@ Se começar a ficar demasiado grande:
 
 - Em rastreio de overrides de modo em FILES (`raw_mode` vs `effective_mode`), emitir o evento canónico (`FILES_MODE_OVERRIDE_TRACE`) apenas após o modo final do item estar estabilizado (incluindo fallbacks tardios como `pdf_upload -> text_embed`), para evitar diagnósticos incompletos ou duplicados.
 
+- Em módulos VBA tocados no PR, executar varredura de helpers usados (`rg`) e garantir que cada helper chamado é local ao módulo ou `Public`; chamadas a helper `Private` de outro módulo devem ser tratadas como P1 por risco de compilação.
+
+- Em flags textuais de configuração (ex.: `auto_save` no File Output), interpretar valores por tokens case-insensitive mesmo com texto adicional (ex.: `sim, todos`/`não, debug`); manter fallback retrocompatível quando não houver token reconhecido para evitar regressões em templates antigos.
 - Em repositórios com `.gitattributes` a forçar `working-tree-encoding=windows-1252` para `.bas/.cls/.frm`, evitar “normalizações” massivas de encoding no working tree; validar primeiro com script de higiene de encoding (blob UTF-8 + worktree cp1252 + heurística mojibake) para não introduzir regressões visuais entre VBE e editor/terminal.
 - Quando houver relatos recorrentes de mojibake em ambientes mistos (VBE/editor/terminal), preferir normalizar para ASCII apenas comentarios/documentacao de modulos `.bas` (sem alterar chaves/labels funcionais) para reduzir ambiguidade visual sem impacto de runtime.
 
@@ -575,3 +580,6 @@ Se começar a ficar demasiado grande:
 - Ao inserir/editar helpers VBA, garantir que existe assinatura completa (`Private/Public Sub/Function ...`) antes do corpo; blocos órfãos (linhas iniciadas por `Dim/Set` fora de procedimento) causam `Compile error: Sub or Function not defined` nos call-sites.
 
 - Em refactors de nomenclatura de helpers (ex.: `GitCfg_Get` -> `GH_Config_Get`), executar varredura global de call-sites (`rg`) e manter wrapper de compatibilidade temporário quando necessário; ausência desta etapa causa `Compile error: Sub or Function not defined`.
+- Em literais funcionais críticos (nome de folha, severidade, flags), preferir token ASCII como base e adicionar fallback acentuado via `ChrW$` quando necessário; isso evita que variações UTF-8/CP1252 quebrem comparações/lookup no VBA.
+- Quando o CI reportar mojibake em `.bas/.cls/.frm`, normalizar apenas os módulos afetados para UTF-8 sem BOM e validar com `python scripts/check_vba_encoding.py` antes do commit; evitar conversões massivas sem diagnóstico para reduzir risco de regressão em diffs.
+- Em alterações assistidas por agentes (Codex/LLM), manter comentários e headers em ASCII puro sempre que possível e preservar `cp1252 + CRLF` no working tree para reduzir reincidência de mojibake e diffs de EOL.

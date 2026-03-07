@@ -42,7 +42,7 @@ Option Explicit
 ' - EnsureFolder(folderPath): cria pasta local para fixtures temporarias dos selftests.
 ' - WriteTextUTF8(filePath, txt): escreve ficheiros UTF-8 usados nos selftests.
 ' - BuildFileNotFoundContext(...): agrega contexto operacional para troubleshooting em OUTPUT_EXECUTE_FILE_NOT_FOUND.
-' - Nz(v, [fallback]): normaliza Null/Error/Empty para String em helpers internos de diagnÃ³stico.
+' - Nz(v, [fallback]): normaliza Null/Error/Empty para String em helpers internos de diagnostico.
 ' =============================================================================
 
 Private Const OUTPUT_ORDERS_MAX As Long = 3

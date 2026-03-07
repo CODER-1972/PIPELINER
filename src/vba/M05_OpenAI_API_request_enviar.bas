@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos uteis da resposta JSON para consumo da orquestracao.
 '
 ' Atualizacoes:
+' - 2026-03-07 | Codex | Evita identificadores reservados em variaveis locais de parsing de rede
+'   - Renomeia variaveis locais `line` para `lineText` em helpers de diagnostico de proxy/IP.
+'   - Mantem comportamento funcional sem alterar formato de output nos eventos de troubleshooting.
 ' - 2026-03-01 | Codex | Evita falso M05_CI_AUTO_SUPPRESS quando CI vem do modo efetivo
 '   - OpenAI_Executar passa a aceitar sinal opcional de intencao CI ja resolvida pelo orquestrador (File Output).
 '   - Regista M05_CI_INTENT_EVAL com origem da decisao (extra vs modo efetivo) para diagnostico mais objetivo.
@@ -1470,7 +1473,7 @@ Private Function M05_GetWinHttpProxySummary() As String
     On Error GoTo EH
 
     Dim s As String
-    Dim line As Variant
+    Dim lineText As Variant
     s = M05_RunCommandCapture("cmd /c netsh winhttp show proxy")
     If Trim$(s) = "" Then GoTo EH
 
@@ -1479,13 +1482,13 @@ Private Function M05_GetWinHttpProxySummary() As String
         Exit Function
     End If
 
-    For Each line In Split(s, vbCrLf)
-        If InStr(1, CStr(line), "Proxy Server", vbTextCompare) > 0 Then
-            M05_GetWinHttpProxySummary = Trim$(Replace(CStr(line), "Proxy Server(s) :", ""))
+    For Each lineText In Split(s, vbCrLf)
+        If InStr(1, CStr(lineText), "Proxy Server", vbTextCompare) > 0 Then
+            M05_GetWinHttpProxySummary = Trim$(Replace(CStr(lineText), "Proxy Server(s) :", ""))
             If M05_GetWinHttpProxySummary = "" Then M05_GetWinHttpProxySummary = "SET"
             Exit Function
         End If
-    Next line
+    Next lineText
 
     M05_GetWinHttpProxySummary = "SET"
     Exit Function
@@ -1498,19 +1501,19 @@ Private Function M05_GetLocalIPv4Masked() As String
     On Error GoTo EH
 
     Dim s As String
-    Dim line As Variant
+    Dim lineText As Variant
     Dim t As String
     Dim ip As String
 
     s = M05_RunCommandCapture("cmd /c ipconfig")
-    For Each line In Split(s, vbCrLf)
-        t = Trim$(CStr(line))
+    For Each lineText In Split(s, vbCrLf)
+        t = Trim$(CStr(lineText))
         If InStr(1, t, "IPv4", vbTextCompare) > 0 Then
             ip = Trim$(Split(t, ":")(1))
             M05_GetLocalIPv4Masked = M05_MaskIPv4(ip)
             Exit Function
         End If
-    Next line
+    Next lineText
 
 EH:
     M05_GetLocalIPv4Masked = ""
