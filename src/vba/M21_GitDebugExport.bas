@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-07 | Codex | Corrige erro de compilacao por dependencia JsonPick ausente
+'   - Adiciona helper local `JsonPick` para extrair valores string de chaves top-level em respostas GitHub.
+'   - Elimina `Compile error: Sub or Function not defined` reportado no VBE durante compile.
 ' - 2026-03-07 | Codex | Corrige erro de compilacao por helper de config inexistente
 '   - Reintroduz wrapper local `GitCfg_Get` como compatibilidade para call-sites legados do modulo.
 '   - Evita `Compile error: Sub or Function not defined` quando o projeto referencia `GitCfg_Get`.
@@ -33,6 +36,8 @@ Option Explicit
 '   - Macro rapida para instalar parametros minimos GH_* com defaults e explicacao para leigos.
 ' - GitDebug_LogFilesForUpload(pipelineNome As String, remoteFolder As String, files As Collection) (Private Sub)
 '   - Regista path remoto e nome dos ficheiros preparados para upload GitHub.
+' - JsonPick(body As String, keyName As String) As String (Private Function)
+'   - Extrai valor string de chave JSON simples para compatibilidade de parsing em M21.
 ' =============================================================================
 
 Private Const SHEET_DEBUG As String = "DEBUG"
@@ -420,6 +425,14 @@ End Function
 
 Private Function GitCfg_Get(ByVal keyName As String, ByVal defaultValue As String) As String
     GitCfg_Get = GH_Config_Get(keyName, defaultValue)
+End Function
+
+Private Function JsonPick(ByVal body As String, ByVal keyName As String) As String
+    Dim re As Object: Set re = CreateObject("VBScript.RegExp")
+    re.Global = False
+    re.IgnoreCase = True
+    re.Pattern = """" & keyName & """\s*:\s*""([^""]+)"""
+    If re.Test(body) Then JsonPick = re.Execute(body)(0).SubMatches(0)
 End Function
 
 Private Function JsonPickTreeSha(ByVal body As String) As String
