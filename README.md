@@ -89,7 +89,7 @@ Ponto de operação principal:
 - `INPUT Folder`, `OUTPUT Folder`;
 - limites (`Max Steps`, `Max Repetitions`);
 - botões de execução.
-- botão `Git LOG` por pipeline (abaixo de `INICIAR`) com estado `Git LOG ON/OFF` independente, usado como gatilho rápido do auto-upload Git de logs no run.
+- botão `Git LOG` por pipeline (abaixo de `INICIAR`) com estado `Git LOG ON/OFF` independente, usado como gatilho rápido do auto-upload Git de logs no run; quando `ON`, o botão destaca visualmente com azul claro acinzentado e texto a negrito (em `OFF`, volta ao estilo padrão).
 
 Comportamentos esperados:
 

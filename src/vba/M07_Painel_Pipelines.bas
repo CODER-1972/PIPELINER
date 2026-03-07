@@ -8,12 +8,12 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-07 | Codex | Feedback visual do toggle Git LOG no PAINEL
+'   - Aplica fundo azul claro acinzentado + texto a negrito quando Git LOG estiver ON.
+'   - Repoe estilo padrao do botao quando Git LOG estiver OFF.
 ' - 2026-03-07 | Codex | Toggle Git LOG por pipeline no PAINEL para gatilho de auto-upload
 '   - Cria botao "Git LOG ON/OFF" abaixo de INICIAR (linha 9) para cada pipeline com estado independente.
 '   - Quando ON, ativa export Git no fim do run como equivalente ao auto-save=debug, sem exigir mudanca estrutural no PAINEL.
-' - 2026-03-07 | Codex | Evita nome reservado em parser de Config extra no PAINEL
-'   - Renomeia variavel local `line` para `lineText` no leitor de chave/valor.
-'   - Preserva logica de trim e parsing sem alterar contrato de retorno.
 ' - 2026-03-04 | Codex | Auto-upload Git de artefactos de debug por pipeline
 '   - Ativa exportacao no fim da execucao quando auto-guardar contem "sim, todos" ou "debug".
 '   - Publica CSV de DEBUG/Seguimento/catalogo e TXT do PAINEL via Git Data API usando GH_* no Config.
@@ -102,6 +102,7 @@ Option Explicit
 ' - Painel_CriarBotoes (Sub): rotina publica do modulo.
 ' - Painel_Click_Iniciar (Sub): rotina publica do modulo.
 ' - Painel_Click_GitLog (Sub): alterna estado ON/OFF do gatilho Git LOG por pipeline.
+' - Painel_GitLog_ApplyButtonStyle (Sub): aplica estilo visual ON/OFF ao botao Git LOG.
 ' - Painel_Click_Registar (Sub): rotina publica do modulo.
 ' - Painel_Click_SetDefault (Sub): rotina publica do modulo.
 ' - Painel_Click_CriarMapa (Sub): rotina publica do modulo.
@@ -174,6 +175,7 @@ Public Sub Painel_CriarBotoes()
         ' Botoes principais (linha 8)
         Call Painel_CriarBotaoEmCelula(ws, ws.Cells(8, colIniciar), BTN_INICIAR & Format$(i, "00"), "INICIAR", "Painel_Click_Iniciar")
         Call Painel_CriarBotaoEmCelula(ws, ws.Cells(9, colIniciar), BTN_GITLOG & Format$(i, "00"), Painel_GitLog_Label(i), "Painel_Click_GitLog")
+        Call Painel_GitLog_RefreshButtonCaption(i)
         Call Painel_CriarBotaoEmCelula(ws, ws.Cells(8, colRegistar), BTN_REGISTAR & Format$(i, "00"), "REGISTAR", "Painel_Click_Registar")
 
         ' Botoes auxiliares (linha 5/6 na 2a coluna do par)
@@ -354,6 +356,26 @@ Private Sub Painel_GitLog_RefreshButtonCaption(ByVal pipelineIndex As Long)
     If shp Is Nothing Then Exit Sub
 
     shp.TextFrame.Characters.text = Painel_GitLog_Label(pipelineIndex)
+    Call Painel_GitLog_ApplyButtonStyle(shp, Painel_GitLog_IsEnabled(pipelineIndex))
+
+    On Error GoTo 0
+End Sub
+
+Private Sub Painel_GitLog_ApplyButtonStyle(ByVal shp As Shape, ByVal isOn As Boolean)
+    On Error Resume Next
+
+    Const COLOR_ON As Long = 14737632   ' RGB(224,236,255) - azul claro acinzentado
+    Const COLOR_OFF As Long = 15658734  ' RGB(238,238,238) - cinza claro padrao
+
+    shp.Fill.Visible = -1
+
+    If isOn Then
+        shp.Fill.ForeColor.RGB = COLOR_ON
+        shp.TextFrame.Characters.Font.Bold = True
+    Else
+        shp.Fill.ForeColor.RGB = COLOR_OFF
+        shp.TextFrame.Characters.Font.Bold = False
+    End If
 
     On Error GoTo 0
 End Sub
