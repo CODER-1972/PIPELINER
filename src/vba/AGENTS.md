@@ -567,3 +567,7 @@ Se começar a ficar demasiado grande:
 
 - Em repositórios com `.gitattributes` a forçar `working-tree-encoding=windows-1252` para `.bas/.cls/.frm`, evitar “normalizações” massivas de encoding no working tree; validar primeiro com script de higiene de encoding (blob UTF-8 + worktree cp1252 + heurística mojibake) para não introduzir regressões visuais entre VBE e editor/terminal.
 - Quando houver relatos recorrentes de mojibake em ambientes mistos (VBE/editor/terminal), preferir normalizar para ASCII apenas comentarios/documentacao de modulos `.bas` (sem alterar chaves/labels funcionais) para reduzir ambiguidade visual sem impacto de runtime.
+
+- Em procedimentos VBA, evitar declarações locais duplicadas no mesmo escopo (ex.: `Dim txt As String` repetido); isso provoca erro de compilação "Duplicate declaration in current scope".
+
+- Em literais VBA que representem o caractere aspas dupla (`"`), usar `""""` (quatro aspas) no código fonte; formas truncadas (ex.: `"""`) geram `Compile error: Syntax error`.
