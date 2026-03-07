@@ -12,6 +12,12 @@ Option Explicit
 ' - 2026-03-05 | Codex | Pasta remota em logs com template configuravel por run
 '   - Passa a compor pasta alvo com GH_BASE_PATH/GH_LOG_FOLDER e nome por template (com fallback retrocompativel).
 '   - Suporta placeholders {{YYYY}}, {{MM}}, {{SS}}, {{HHMM}} e {{PIPELINE_NAME}} para naming do run.
+' - 2026-03-07 | Codex | Evita identificador reservado na montagem de CSV
+'   - Renomeia variavel local `line` para `csvLine` em `SheetToCsv`.
+'   - Mantem serializacao CSV exatamente com a mesma ordem de colunas/linhas.
+' - 2026-03-05 | Codex | Corrige fallback de nome de folha Historico para evitar dependencia de acentos
+'   - Define constante SHEET_HIST em ASCII (HISTORICO) para robustez entre encodings/editores.
+'   - Mantem tentativa alternativa com nome acentuado via ChrW no resolvedor de folha.
 ' - 2026-03-04 | Codex | Endurece instalacao de parametros GH_* na folha Config
 '   - Garante cabecalhos Key/Value/Explicacao/Default/Valores na linha 8 e dados apenas em linhas >= 9.
 '   - Mantem politica de overwrite seletivo em B:E e regista falhas no DEBUG com codigo estavel.
@@ -27,7 +33,7 @@ Option Explicit
 
 Private Const SHEET_DEBUG As String = "DEBUG"
 Private Const SHEET_SEGUIMENTO As String = "Seguimento"
-Private Const SHEET_HIST As String = "HISTÓRICO"
+Private Const SHEET_HIST As String = "HISTORICO"
 Private Const GH_CONFIG_HEADER_ROW As Long = 8
 Private Const GH_CONFIG_FIRST_DATA_ROW As Long = 9
 
@@ -249,16 +255,16 @@ Private Function SheetToCsv(ByVal ws As Worksheet) As String
 
     Dim r As Long
     Dim c As Long
-    Dim line As String
+    Dim csvLine As String
     Dim out As String
 
     For r = 1 To lr
-        line = ""
+        csvLine = ""
         For c = 1 To lc
-            If c > 1 Then line = line & ","
-            line = line & CsvEscape(CStr(ws.Cells(r, c).Value))
+            If c > 1 Then csvLine = csvLine & ","
+            csvLine = csvLine & CsvEscape(CStr(ws.Cells(r, c).Value))
         Next c
-        out = out & line & vbCrLf
+        out = out & csvLine & vbCrLf
     Next r
 
     SheetToCsv = out
@@ -442,8 +448,8 @@ End Sub
 
 Private Function GitDebug_GetHistoricoSheet() As Worksheet
     On Error Resume Next
-    Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets("HISTÃ“RICO")
-    If GitDebug_GetHistoricoSheet Is Nothing Then Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets(SHEET_HIST)
+    Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets(SHEET_HIST)
+    If GitDebug_GetHistoricoSheet Is Nothing Then Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets("HIST" & ChrW$(&HD3) & "RICO")
     On Error GoTo 0
 End Function
 
