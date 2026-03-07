@@ -9,6 +9,9 @@ Option Explicit
 ' - Garantir mensagens curtas, sem segredos e com sugestoes acionaveis.
 '
 ' Atualizacoes:
+' - 2026-03-07 | Codex | Corrige constantes de evento GH para evitar erro de compilacao
+'   - Substitui aliases legados nao declarados (GH_UNKNOWN/GH_CONFIG_OK/...) por codigos canonicos GH_EVT_*.
+'   - Normaliza mapeamento em GH_NormalizeEventCode para nomes realmente definidos no modulo.
 ' - 2026-03-04 | Codex | Refactor de logging GitHub para modulo dedicado
 '   - Move codigos de eventos GH_* para constantes publicas reutilizaveis.
 '   - Mantem wrappers GH_LogInfo/GH_LogWarn/GH_LogError para padronizacao.
@@ -52,25 +55,25 @@ Private Function GH_NormalizeEventCode(ByVal eventCode As String) As String
     code = UCase$(Trim$(eventCode))
 
     If code = "" Then
-        GH_NormalizeEventCode = GH_UNKNOWN
+        GH_NormalizeEventCode = GH_EVT_CONFIG
         Exit Function
     End If
 
     Select Case code
-        Case GH_CONFIG_OK, GH_REF_OK, GH_TREE_OK, GH_COMMIT_OK, GH_DONE_OK, GH_DONE_FAIL, GH_HTTP_FAIL
+        Case GH_EVT_CONFIG, GH_EVT_UPLOAD, GH_EVT_HTTP, GH_EVT_HTTP_FAIL, _
+             GH_EVT_REF_OK, GH_EVT_BASE_TREE_OK, GH_EVT_BLOB_OK, GH_EVT_BLOB_TOO_LARGE, _
+             GH_EVT_TREE_CREATED, GH_EVT_COMMIT_CREATED, GH_EVT_REF_UPDATED, GH_EVT_MAX_FILES
             GH_NormalizeEventCode = code
-        Case "CONFIG_OK", "GH_CFG_OK"
-            GH_NormalizeEventCode = GH_CONFIG_OK
-        Case "REF_OK", "GH_REFERENCE_OK"
-            GH_NormalizeEventCode = GH_REF_OK
-        Case "TREE_OK", "GH_BLOB_TREE_OK"
-            GH_NormalizeEventCode = GH_TREE_OK
-        Case "COMMIT_OK", "GH_COMMIT_CREATED"
-            GH_NormalizeEventCode = GH_COMMIT_OK
-        Case "DONE_FAIL", "GH_FAILED"
-            GH_NormalizeEventCode = GH_DONE_FAIL
-        Case "HTTP_FAIL", "GH_API_FAIL"
-            GH_NormalizeEventCode = GH_HTTP_FAIL
+        Case "CONFIG_OK", "GH_CFG_OK", "GH_CONFIG_OK"
+            GH_NormalizeEventCode = GH_EVT_CONFIG
+        Case "REF_OK", "GH_REFERENCE_OK", "GH_REF_OK"
+            GH_NormalizeEventCode = GH_EVT_REF_OK
+        Case "TREE_OK", "GH_TREE_OK", "GH_BLOB_TREE_OK"
+            GH_NormalizeEventCode = GH_EVT_TREE_CREATED
+        Case "COMMIT_OK", "GH_COMMIT_OK", "GH_COMMIT_CREATED"
+            GH_NormalizeEventCode = GH_EVT_COMMIT_CREATED
+        Case "HTTP_FAIL", "GH_API_FAIL", "GH_HTTP_FAIL"
+            GH_NormalizeEventCode = GH_EVT_HTTP_FAIL
         Case Else
             GH_NormalizeEventCode = code
     End Select
