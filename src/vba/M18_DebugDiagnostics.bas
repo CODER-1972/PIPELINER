@@ -8,6 +8,9 @@ Option Explicit
 ' - Ler niveis de diagnostico (BASE/DIAG/TRACE), classificar causa provavel e gerar bundle opcional.
 '
 ' Atualizacoes:
+' - 2026-03-07 | Codex | Evita identificador reservado no parser de EXECUTE
+'   - Renomeia variavel local e parametro `line` para `lineText` nas rotinas de saneamento.
+'   - Mantem extracao/sanitizacao de linhas EXECUTE sem alteracao semantica.
 ' - 2026-03-04 | Codex | Bundle passa a incluir evidencia PROVA_CI isolada por passo
 '   - Escreve `step<passo>_PROVA_CI.txt` nos modos local/zip/local_and_zip para suporte rapido.
 '   - Centraliza escrita de artefactos de bundle em helper unico para reduzir divergencia entre modos.
@@ -439,24 +442,24 @@ EH:
 End Function
 
 Private Function DebugDiag_ExtractExecuteLines(ByVal outputText As String, ByRef outLines As String) As Long
-    Dim arr() As String, i As Long, line As String
+    Dim arr() As String, i As Long, lineText As String
     If Trim$(outputText) = "" Then Exit Function
     arr = Split(Replace(outputText, vbCrLf, vbLf), vbLf)
     For i = LBound(arr) To UBound(arr)
-        line = Trim$(arr(i))
-        If UCase$(Left$(line, 8)) = "EXECUTE:" Then
+        lineText = Trim$(arr(i))
+        If UCase$(Left$(lineText, 8)) = "EXECUTE:" Then
             If outLines <> "" Then outLines = outLines & " || "
-            outLines = outLines & DebugDiag_SanitizeExecuteLine(line)
+            outLines = outLines & DebugDiag_SanitizeExecuteLine(lineText)
             DebugDiag_ExtractExecuteLines = DebugDiag_ExtractExecuteLines + 1
         End If
     Next i
 End Function
 
-Private Function DebugDiag_SanitizeExecuteLine(ByVal line As String) As String
+Private Function DebugDiag_SanitizeExecuteLine(ByVal lineText As String) As String
     Dim p As Long
-    p = InStrRev(line, "\")
-    If p > 0 Then line = Left$(line, p) & "<basename>"
-    DebugDiag_SanitizeExecuteLine = line
+    p = InStrRev(lineText, "\")
+    If p > 0 Then lineText = Left$(lineText, p) & "<basename>"
+    DebugDiag_SanitizeExecuteLine = lineText
 End Function
 
 Private Function DebugDiag_LooksLikeManifest(ByVal outputText As String) As Boolean
