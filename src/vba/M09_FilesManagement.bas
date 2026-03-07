@@ -8,6 +8,9 @@ Option Explicit
 ' - Aplicar effective_mode, robustez multipart e utilitarios de ficheiros para pipeline.
 '
 ' Atualizacoes:
+' - 2026-03-07 | Codex | Evita parametro com nome ambiguo em helper de path
+'   - Renomeia parametro `name` para `fileName` em `Files_PathJoin`.
+'   - Mantem assinatura sem impacto funcional para composicao de caminho.
 ' - 2026-03-03 | Codex | Emite trace final apos todos os fallbacks de modo FILES
 '   - Move emissao de `FILES_MODE_OVERRIDE_TRACE` para o fecho do item, garantindo effective_mode final.
 '   - Cobre overrides tardios (ex.: pdf_upload->text_embed por fallback de conversao/overflow).
@@ -16,7 +19,7 @@ Option Explicit
 '   - Introduz evento `FILES_MODE_OVERRIDE_TRACE` com requested/resolved/raw_mode/effective_mode/reason.
 '   - Emite trace sempre que modo pedido diverge do modo aplicado, incluindo overrides nao-Office.
 '   - Mantem `DOCX_INPUTFILE_OVERRIDDEN` por retrocompatibilidade com mensagem curta para consultar o trace.
-' Atualizações:
+' Atualizacoes:
 ' - 2026-03-03 | Codex | Robustez na normalizacao do hash_short de TEXT_EMBED_TRACE
 '   - Normaliza line endings antes do FNV-1a para reduzir variacao entre extratores/hosts.
 '   - Remove prefixo fnv32- apenas quando presente no inicio (sem Replace global).
@@ -4180,11 +4183,11 @@ Private Sub Files_CriarPastaSeNaoExiste(ByVal folderPath As String)
     On Error GoTo 0
 End Sub
 
-Private Function Files_PathJoin(ByVal folder As String, ByVal name As String) As String
+Private Function Files_PathJoin(ByVal folder As String, ByVal fileName As String) As String
     If Right$(folder, 1) = "\" Then
-        Files_PathJoin = folder & name
+        Files_PathJoin = folder & fileName
     Else
-        Files_PathJoin = folder & "\" & name
+        Files_PathJoin = folder & "\" & fileName
     End If
 End Function
 
