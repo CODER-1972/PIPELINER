@@ -9,6 +9,9 @@ Option Explicit
 ' - Reutilizar HTTP/Blob/Logger mantendo M21 como facade de compatibilidade.
 '
 ' Atualizacoes:
+' - 2026-03-07 | Codex | Corrige sintaxe JSON em payloads Git Data API
+'   - Corrige escaping de aspas nas chaves `tree` e `parents` em requests de create tree/commit.
+'   - Elimina `Compile error: Syntax error` causado por literais JSON malformadas.
 ' - 2026-03-04 | Codex | Refactor do fluxo tree/commit para modulo dedicado
 '   - Move pipeline completo de commit para GH_TreeCommit_CommitFiles.
 '   - Adiciona helpers publicos para endpoint de blobs e URL web da pasta do run.
@@ -169,7 +172,7 @@ Private Function GH_TreeCommit_CreateTree( _
     ByRef errReason As String) As Boolean
 
     Dim req As String
-    req = "{""base_tree"":""" & baseTreeSha & """,""tree": [" & treeItems & "]}"
+    req = "{""base_tree"":""" & baseTreeSha & """,""tree"": [" & treeItems & "]}"
 
     Dim statusCode As Long
     Dim responseText As String
@@ -207,7 +210,7 @@ Private Function GH_TreeCommit_CreateCommit( _
     commitMsg = Replace(commitMsg, "{{RUN_ID}}", Format$(Now, "yyyymmdd_hhnnss"))
 
     Dim req As String
-    req = "{""message"":""" & GH_Blob_JsonEscape(commitMsg) & """,""tree"":""" & treeSha & """,""parents": [""" & headSha & """]}"
+    req = "{""message"":""" & GH_Blob_JsonEscape(commitMsg) & """,""tree"":""" & treeSha & """,""parents"": [""" & headSha & """]}"
 
     Dim statusCode As Long
     Dim responseText As String

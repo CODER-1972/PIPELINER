@@ -89,6 +89,7 @@ Ponto de operação principal:
 - `INPUT Folder`, `OUTPUT Folder`;
 - limites (`Max Steps`, `Max Repetitions`);
 - botões de execução.
+- botão `Git LOG` por pipeline (abaixo de `INICIAR`) com estado `Git LOG ON/OFF` independente, usado como gatilho rápido do auto-upload Git de logs no run; quando `ON`, o botão destaca visualmente com azul claro acinzentado e texto a negrito (em `OFF`, volta ao estilo padrão).
 
 Comportamentos esperados:
 
@@ -109,14 +110,22 @@ Defaults e opções globais, incluindo:
 - opções de robustez de upload e fallback.
 Também suporta exportação opcional de debug para GitHub (Git Data API) no fim da execução da pipeline:
 
-- gatilho na célula **Auto-guardar ficheiros** da pipeline quando contém `sim, todos` ou `debug` (case-insensitive, mesmo com texto adicional);
+- gatilho por pipeline quando **Auto-guardar ficheiros** contém `sim, todos` ou `debug` (case-insensitive, mesmo com texto adicional) **ou** quando o botão `Git LOG` desse pipeline está em `ON`;
+- quando faltam parâmetros mínimos (`GH_OWNER`, `GH_REPO`, `GH_BRANCH`, token e `GH_BASE_PATH`), o DEBUG regista alerta com instrução de ação para preenchimento na folha `Config`;
 - publicação de `DEBUG.csv`, `catalogo_prompts_executadas.csv`, `Seguimento.csv` e `painel_pipeline.txt`;
+- composição da pasta remota por run em `GH_BASE_PATH/GH_LOG_FOLDER/<run_folder>`, onde `<run_folder>` por default segue `{{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]`;
 - atualização da coluna `GIT_DEBUG` nas folhas `Seguimento` e `HISTÓRICO` com o link da pasta remota.
+- no arranque/fim do export, o DEBUG regista INFO/ALERTA para `run_folder`, `remote_folder` e gravação de link em `Seguimento/HISTÓRICO`.
+- em cada execução de upload Git, o DEBUG regista a fonte do token (`token_source`) e a `path` de cada ficheiro enviado.
 - macro `GitDebug_Config_InstalarParametros` para preencher/atualizar na folha `Config` as chaves `GH_*` com `default`, explicação pedagógica (coluna C) e valores/intervalos possíveis (coluna E), sem forçar overwrite dos valores atuais por defeito.
+- esta macro inclui os parâmetros mínimos GH usados pelo VBA (ex.: `GH_OWNER`, `GH_REPO`, `GH_BRANCH`, `GH_TOKEN_ENV`, `GH_TOKEN_CONFIG`, `GH_BASE_PATH`, `GH_LOG_FOLDER`, `GH_RUN_FOLDER_TEMPLATE`) e apresenta significado para leigos + default.
+- macro auxiliar `GitDebug_Config_InstalarMinimos` para execução rápida (chama a instalação guiada sem overwrite e regista ação no DEBUG).
 - a macro fixa os cabeçalhos `Key | Value | Explicacao (leigos) | Default | Valores possiveis / intervalo` na linha 8 e escreve os parâmetros `GH_*` apenas a partir da linha 9 (evitando conflito com `Config!B1:B7`).
 - quando `sobrescreverValores=False`, só preenche células vazias nas colunas B:E; quando `sobrescreverValores=True`, reescreve B:E com defaults/documentação atuais.
 
 Configuração recomendada (folha `Config`, formato Key/Value): `GH_OWNER`, `GH_REPO`, `GH_BRANCH`, `GH_API_BASE`, `GH_TOKEN_ENV`, `GH_TOKEN_CONFIG`, `GH_COMMIT_MESSAGE_TEMPLATE`, `GH_BASE_PATH`, `GH_API_VERSION`, `GH_USER_AGENT`, `GH_RETRY_ON_CONFLICT`, `GH_MAX_RETRIES`.
+
+Regra prática do token: se `GH_TOKEN_ENV` estiver vazio, inválido, ou com valor `Ambiente`/`Environment` (case-insensitive), o VBA tenta automaticamente `ENV("GH_TOKEN")`.
 
 No update de `PATCH /git/refs/heads/{branch}`, conflitos HTTP `409` são tratados explicitamente como concorrência: quando `GH_RETRY_ON_CONFLICT=true`, o fluxo reinicia desde a leitura de HEAD até ao limite de `GH_MAX_RETRIES`, registando eventos canónicos `GH_REF_CONFLICT`, `GH_RETRY_ATTEMPT`, `GH_REF_UPDATED` e `GH_DONE_FAIL`.
 
@@ -132,6 +141,8 @@ No update de `PATCH /git/refs/heads/{branch}`, conflitos HTTP `409` são tratado
 | `GH_TOKEN_CONFIG` | vazio | vazio ou token |
 | `GH_COMMIT_MESSAGE_TEMPLATE` | `PIPELINER run {{RUN_ID}}` | template com placeholders |
 | `GH_BASE_PATH` | `pipeliner_runs` | path relativo sem `/` inicial |
+| `GH_LOG_FOLDER` | `logs` | subpasta relativa (ex.: `logs`) |
+| `GH_RUN_FOLDER_TEMPLATE` | `{{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]` | placeholders: `{{YYYY}}`, `{{MM}}`, `{{DD}}`, `{{HHMM}}`, `{{PIPELINE_NAME}}` |
 | `GH_API_VERSION` | `2022-11-28` | formato `YYYY-MM-DD` |
 | `GH_USER_AGENT` | `PIPELINER-VBA` | texto não vazio |
 | `GH_FORCE_UPDATE` | `false` | `true` ou `false` |

@@ -9,6 +9,15 @@ Option Explicit
 ' - Resolver enable/token de forma deterministica para o facade M21.
 '
 ' Atualizacoes:
+' - 2026-03-07 | Codex | Preferencia de token por ambiente GH_TOKEN
+'   - Se GH_TOKEN_ENV estiver vazio, "Ambiente"/"Environment" ou erro, usa variavel de ambiente GH_TOKEN.
+'   - Expoe token_source no cfg para auditoria no DEBUG sem revelar segredo.
+' - 2026-03-07 | Codex | Validacao minima GH_* com mensagem acionavel
+'   - Agrega campos obrigatorios em falta (owner/repo/branch/token/base_path) numa unica mensagem curta.
+'   - Inclui acao recomendada para preencher Config (GH_OWNER/GH_REPO/GH_BRANCH/token/GH_BASE_PATH).
+' - 2026-03-05 | Codex | Expor pasta de logs e template de run folder no cfg GH_*
+'   - Passa a ler GH_LOG_FOLDER e GH_RUN_FOLDER_TEMPLATE para compor path remoto por execucao.
+'   - Mantem defaults internos e compatibilidade quando as chaves nao existem.
 ' - 2026-03-04 | Codex | Refactor da configuracao GitHub para modulo dedicado
 '   - Move leitura de GH_* (Config) para um dicionario normalizado.
 '   - Implementa validacao canonica de campos obrigatorios e limites numericos.
@@ -23,6 +32,10 @@ Option Explicit
 '   - Le string do dicionario com fallback seguro.
 ' - GH_Config_GetBoolean(cfg As Object, keyName As String, Optional fallback As Boolean = False) As Boolean
 '   - Le booleano normalizado com fallback seguro.
+' - GH_Config_AppendMissing(currentList As String, itemName As String) As String
+'   - Helper para concatenar campos em falta nas mensagens de validacao GH_*.
+' - GH_Config_ResolveToken(Optional ByRef sourceUsed As String = "") As String
+'   - Resolve token priorizando GH_TOKEN quando indicado e devolve a fonte para auditoria.
 ' =============================================================================
 
 Private Const SHEET_CONFIG As String = "Config"
@@ -43,9 +56,13 @@ Public Function GH_Config_Load(ByVal painelAutoSave As String) As Object
     cfg("api_version") = GH_Config_Get("GH_API_VERSION", "2022-11-28")
     cfg("user_agent") = GH_Config_Get("GH_USER_AGENT", "PIPELINER-VBA")
 
-    cfg("token") = GH_Config_ResolveToken()
+    Dim tokenSource As String
+    cfg("token") = GH_Config_ResolveToken(tokenSource)
+    cfg("token_source") = tokenSource
 
     cfg("base_path") = GH_Config_Get("GH_BASE_PATH", "pipeliner_runs")
+    cfg("log_folder") = GH_Config_Get("GH_LOG_FOLDER", "logs")
+    cfg("run_folder_template") = GH_Config_Get("GH_RUN_FOLDER_TEMPLATE", "{{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]")
     cfg("commit_message_template") = GH_Config_Get("GH_COMMIT_MESSAGE_TEMPLATE", "PIPELINER run {{RUN_ID}}")
     cfg("force_update") = GH_Config_ToBoolean(GH_Config_Get("GH_FORCE_UPDATE", "false"), False)
 
@@ -69,20 +86,17 @@ Public Function GH_Config_Validate(ByVal cfg As Object, ByRef reason As String) 
         Exit Function
     End If
 
-    If GH_Config_GetString(cfg, "owner") = "" Then
-        reason = "GH_OWNER em falta"
-        Exit Function
-    End If
-    If GH_Config_GetString(cfg, "repo") = "" Then
-        reason = "GH_REPO em falta"
-        Exit Function
-    End If
-    If GH_Config_GetString(cfg, "branch") = "" Then
-        reason = "GH_BRANCH em falta"
-        Exit Function
-    End If
-    If GH_Config_GetString(cfg, "token") = "" Then
-        reason = "Token GitHub ausente (GH_TOKEN_ENV/GH_TOKEN_CONFIG)"
+    Dim missing As String
+    missing = ""
+
+    If GH_Config_GetString(cfg, "owner") = "" Then missing = GH_Config_AppendMissing(missing, "GH_OWNER")
+    If GH_Config_GetString(cfg, "repo") = "" Then missing = GH_Config_AppendMissing(missing, "GH_REPO")
+    If GH_Config_GetString(cfg, "branch") = "" Then missing = GH_Config_AppendMissing(missing, "GH_BRANCH")
+    If GH_Config_GetString(cfg, "token") = "" Then missing = GH_Config_AppendMissing(missing, "GH_TOKEN_ENV/GH_TOKEN_CONFIG")
+    If GH_Config_GetString(cfg, "base_path") = "" Then missing = GH_Config_AppendMissing(missing, "GH_BASE_PATH")
+
+    If missing <> "" Then
+        reason = "Campos GH_* obrigatorios em falta: " & missing & " | [ACTION] Na folha Config, preencher GH_OWNER, GH_REPO, GH_BRANCH, token (GH_TOKEN_ENV ou GH_TOKEN_CONFIG) e GH_BASE_PATH."
         Exit Function
     End If
 
@@ -158,21 +172,58 @@ Fallback:
     GH_Config_Get = defaultValue
 End Function
 
-Public Function GH_Config_ResolveToken() As String
+Public Function GH_Config_ResolveToken(Optional ByRef sourceUsed As String = "") As String
+    On Error GoTo Fallback
+
+    Dim envKeyRaw As String
+    envKeyRaw = GH_Config_Get("GH_TOKEN_ENV", "")
+
     Dim envKey As String
-    envKey = GH_Config_Get("GH_TOKEN_ENV", "GITHUB_TOKEN")
+    envKey = Trim$(envKeyRaw)
 
-    Dim t As String
-    t = Trim$(CStr(Environ$(envKey)))
-    If t = "" Then t = GH_Config_Get("GH_TOKEN_CONFIG", "")
+    If envKey = "" Or UCase$(envKey) = "AMBIENTE" Or UCase$(envKey) = "ENVIRONMENT" Then
+        envKey = "GH_TOKEN"
+        sourceUsed = "ENV:GH_TOKEN (fallback)"
+    Else
+        sourceUsed = "ENV:" & envKey
+    End If
 
-    GH_Config_ResolveToken = t
+    Dim tkn As String
+    tkn = Trim$(CStr(Environ$(envKey)))
+
+    If tkn = "" Then
+        tkn = Trim$(GH_Config_Get("GH_TOKEN_CONFIG", ""))
+        If tkn <> "" Then
+            sourceUsed = "CONFIG:GH_TOKEN_CONFIG"
+        Else
+            sourceUsed = sourceUsed & " -> vazio"
+        End If
+    End If
+
+    GH_Config_ResolveToken = tkn
+    Exit Function
+
+Fallback:
+    GH_Config_ResolveToken = Trim$(CStr(Environ$("GH_TOKEN")))
+    If GH_Config_ResolveToken <> "" Then
+        sourceUsed = "ENV:GH_TOKEN (error_fallback)"
+    Else
+        sourceUsed = "nao_resolvido"
+    End If
 End Function
 
 Private Function GH_Config_IsEnabledByPanel(ByVal painelAutoSave As String) As Boolean
     Dim s As String
     s = LCase$(Trim$(painelAutoSave))
     GH_Config_IsEnabledByPanel = (InStr(1, s, "sim, todos", vbTextCompare) > 0) Or (InStr(1, s, "debug", vbTextCompare) > 0)
+End Function
+
+Private Function GH_Config_AppendMissing(ByVal currentList As String, ByVal itemName As String) As String
+    If Trim$(currentList) = "" Then
+        GH_Config_AppendMissing = itemName
+    Else
+        GH_Config_AppendMissing = currentList & ", " & itemName
+    End If
 End Function
 
 Private Function GH_Config_ToBoolean(ByVal value As Variant, ByVal fallback As Boolean) As Boolean
