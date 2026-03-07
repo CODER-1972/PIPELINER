@@ -584,6 +584,8 @@ Se começar a ficar demasiado grande:
 - Em módulos que processam JSON sem dependência explícita de parser global, manter helpers locais mínimos (ex.: `JsonPick`) ou dependência pública claramente importada; isso evita `Compile error: Sub or Function not defined` após export/import parcial de módulos.
 
 - Em módulos com códigos de evento canonizados (ex.: `GH_EVT_*`), evitar aliases não declarados (`GH_UNKNOWN`, `GH_CONFIG_OK`, etc.); ao normalizar eventos, mapear apenas para constantes realmente definidas no módulo para prevenir `Compile error: Variable not defined`.
+
+- Em payloads JSON montados por concatenação VBA, validar sempre o padrão de chave com aspas duplicadas completas (`""chave""`) antes de fechar commit; formas truncadas (`""chave"`) geram `Compile error: Syntax error` e JSON inválido.
 - Em literais funcionais críticos (nome de folha, severidade, flags), preferir token ASCII como base e adicionar fallback acentuado via `ChrW$` quando necessário; isso evita que variações UTF-8/CP1252 quebrem comparações/lookup no VBA.
 - Quando o CI reportar mojibake em `.bas/.cls/.frm`, normalizar apenas os módulos afetados para UTF-8 sem BOM e validar com `python scripts/check_vba_encoding.py` antes do commit; evitar conversões massivas sem diagnóstico para reduzir risco de regressão em diffs.
 - Em alterações assistidas por agentes (Codex/LLM), manter comentários e headers em ASCII puro sempre que possível e preservar `cp1252 + CRLF` no working tree para reduzir reincidência de mojibake e diffs de EOL.
