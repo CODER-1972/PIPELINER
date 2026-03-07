@@ -9,6 +9,18 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-07 | Codex | Corrige erro de compilacao por dependencia JsonPick ausente
+'   - Adiciona helper local `JsonPick` para extrair valores string de chaves top-level em respostas GitHub.
+'   - Elimina `Compile error: Sub or Function not defined` reportado no VBE durante compile.
+' - 2026-03-07 | Codex | Corrige erro de compilacao por helper de config inexistente
+'   - Reintroduz wrapper local `GitCfg_Get` como compatibilidade para call-sites legados do modulo.
+'   - Evita `Compile error: Sub or Function not defined` quando o projeto referencia `GitCfg_Get`.
+' - 2026-03-07 | Codex | Auditoria da origem do token e ficheiros enviados
+'   - Regista no DEBUG a fonte de resolucao do token GitHub em cada execucao de export.
+'   - Regista path remoto e nome de cada ficheiro preparado para upload no run.
+' - 2026-03-05 | Codex | Pasta remota em logs com template configuravel por run
+'   - Passa a compor pasta alvo com GH_BASE_PATH/GH_LOG_FOLDER e nome por template (com fallback retrocompativel).
+'   - Suporta placeholders {{YYYY}}, {{MM}}, {{DD}}, {{HHMM}} e {{PIPELINE_NAME}} para naming do run.
 ' - 2026-03-04 | Codex | Endurece instalacao de parametros GH_* na folha Config
 '   - Garante cabecalhos Key/Value/Explicacao/Default/Valores na linha 8 e dados apenas em linhas >= 9.
 '   - Mantem politica de overwrite seletivo em B:E e regista falhas no DEBUG com codigo estavel.
@@ -20,6 +32,12 @@ Option Explicit
 '   - Entry point chamado no fim da pipeline para export opcional de debug para GitHub.
 ' - GitDebug_Config_InstalarParametros(Optional sobrescreverValores As Boolean = False)
 '   - Preenche/atualiza chaves GH_* na folha Config sem quebra de retrocompatibilidade.
+' - GitDebug_Config_InstalarMinimos()
+'   - Macro rapida para instalar parametros minimos GH_* com defaults e explicacao para leigos.
+' - GitDebug_LogFilesForUpload(pipelineNome As String, remoteFolder As String, files As Collection) (Private Sub)
+'   - Regista path remoto e nome dos ficheiros preparados para upload GitHub.
+' - JsonPick(body As String, keyName As String) As String (Private Function)
+'   - Extrai valor string de chave JSON simples para compatibilidade de parsing em M21.
 ' =============================================================================
 
 Private Const SHEET_DEBUG As String = "DEBUG"
@@ -42,12 +60,29 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
         Exit Sub
     End If
 
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Fonte do token GitHub resolvida.", "token_source=" & GH_Config_GetString(cfg, "token_source", "desconhecida"))
+
     Dim ghFolder As String
-    ghFolder = GitDebug_BuildRunFolder(pipelineNome)
+    ghFolder = GitDebug_BuildRunFolder(cfg, pipelineNome)
+    If Trim$(ghFolder) = "" Then
+        Call GH_LogWarn(0, pipelineNome, GH_EVT_CONFIG, "run_folder_template gerou pasta vazia; aplicado fallback.", "[ACTION] Ajuste GH_RUN_FOLDER_TEMPLATE (use {{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]).")
+    Else
+        Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Run folder resolvida.", "run_folder=" & ghFolder)
+    End If
+
+    Dim remoteFolder As String
+    remoteFolder = GitDebug_BuildRemoteFolder(cfg, ghFolder)
+    If Trim$(remoteFolder) = "" Then
+        Call GH_LogError(0, pipelineNome, GH_EVT_CONFIG, "Falha a resolver remote_folder para upload.", "[ACTION] Confirme GH_BASE_PATH/GH_LOG_FOLDER/GH_RUN_FOLDER_TEMPLATE na Config.")
+        Exit Sub
+    Else
+        Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Pasta remota final resolvida.", "remote_folder=" & remoteFolder)
+    End If
 
     Dim files As Collection
-    Set files = GitDebug_BuildFilesForUpload(pipelineIndex, pipelineNome, ghFolder, cfg)
+    Set files = GitDebug_BuildFilesForUpload(pipelineIndex, pipelineNome, remoteFolder, cfg)
     If files Is Nothing Or files.Count = 0 Then Exit Sub
+    Call GitDebug_LogFilesForUpload(pipelineNome, remoteFolder, files)
 
     Dim commitSha As String
     If Not GH_TreeCommit_CommitFiles(cfg, files, pipelineNome, commitSha, reason) Then
@@ -56,10 +91,11 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     End If
 
     Dim webUrl As String
-    webUrl = GH_TreeCommit_BuildWebFolderUrl(cfg, GH_Config_GetString(cfg, "base_path", "pipeliner_runs") & "/" & ghFolder)
+    webUrl = GH_TreeCommit_BuildWebFolderUrl(cfg, remoteFolder)
 
     Call GitDebug_WriteLinkToSeguimento(pipelineNome, webUrl)
     Call GitDebug_WriteLinkToHistorico(pipelineNome, webUrl)
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Link registado em Seguimento/HISTORICO.", webUrl)
 
     Call GH_LogInfo(0, pipelineNome, GH_EVT_REF_UPDATED, "Debug export publicado no GitHub.", webUrl)
     Exit Sub
@@ -68,22 +104,54 @@ EH:
     Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD, "Falha no auto-upload de debug: " & Err.Description, "Validar parametros GH_* e conectividade com api.github.com.")
 End Sub
 
-Private Function GitDebug_BuildRunFolder(ByVal pipelineNome As String) As String
-    GitDebug_BuildRunFolder = Format$(Now, "yyyy-mmm-dd") & "-" & Format$(Now, "hhnn") & " - " & GitDebug_SanitizePathPart(pipelineNome)
+Private Function GitDebug_BuildRunFolder(ByVal cfg As Object, ByVal pipelineNome As String) As String
+    Dim tpl As String
+    tpl = Trim$(GH_Config_GetString(cfg, "run_folder_template", "{{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]"))
+
+    Dim safePipeline As String
+    safePipeline = GitDebug_SanitizePathPart(pipelineNome)
+
+    If tpl = "" Then
+        GitDebug_BuildRunFolder = Format$(Now, "yyyy-mm-dd") & " - " & Format$(Now, "hhnn") & " - [" & safePipeline & "]"
+        Exit Function
+    End If
+
+    tpl = Replace(tpl, "{{YYYY}}", Format$(Now, "yyyy"))
+    tpl = Replace(tpl, "{{MM}}", Format$(Now, "mm"))
+    tpl = Replace(tpl, "{{DD}}", Format$(Now, "dd"))
+    tpl = Replace(tpl, "{{HHMM}}", Format$(Now, "hhnn"))
+    tpl = Replace(tpl, "{{PIPELINE_NAME}}", safePipeline)
+
+    GitDebug_BuildRunFolder = GitDebug_SanitizePathPart(tpl)
 End Function
 
-Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByVal ghFolder As String, ByVal cfg As Object) As Collection
-    On Error GoTo EH
-
+Private Function GitDebug_BuildRemoteFolder(ByVal cfg As Object, ByVal ghFolder As String) As String
     Dim cfgBase As String
     cfgBase = Trim$(GH_Config_GetString(cfg, "base_path", "pipeliner_runs"))
 
-    Dim remoteFolder As String
-    If cfgBase <> "" Then
-        remoteFolder = cfgBase & "/" & ghFolder
-    Else
-        remoteFolder = ghFolder
+    Dim logFolder As String
+    logFolder = Trim$(GH_Config_GetString(cfg, "log_folder", "logs"))
+
+    Dim fullPath As String
+    fullPath = ""
+    If cfgBase <> "" Then fullPath = cfgBase
+    If logFolder <> "" Then
+        If fullPath <> "" Then
+            fullPath = fullPath & "/" & logFolder
+        Else
+            fullPath = logFolder
+        End If
     End If
+
+    If fullPath <> "" Then
+        GitDebug_BuildRemoteFolder = fullPath & "/" & ghFolder
+    Else
+        GitDebug_BuildRemoteFolder = ghFolder
+    End If
+End Function
+
+Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByVal remoteFolder As String, ByVal cfg As Object) As Collection
+    On Error GoTo EH
 
     Dim wsDebug As Worksheet
     Dim wsSeg As Worksheet
@@ -114,6 +182,24 @@ Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal
 EH:
     Set GitDebug_BuildFilesForUpload = Nothing
 End Function
+
+Private Sub GitDebug_LogFilesForUpload(ByVal pipelineNome As String, ByVal remoteFolder As String, ByVal files As Collection)
+    On Error GoTo EH
+
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD, "Ficheiros preparados para upload Git.", "remote_folder=" & remoteFolder & " | total=" & CStr(files.Count))
+
+    Dim i As Long
+    For i = 1 To files.Count
+        Dim item As Object
+        Set item = files(i)
+        If Not item Is Nothing Then
+            Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD, "Upload file", "path=" & CStr(item("path")))
+        End If
+    Next i
+    Exit Sub
+EH:
+    Call GH_LogWarn(0, pipelineNome, GH_EVT_UPLOAD, "Falha ao listar ficheiros de upload no DEBUG.", "err=" & CStr(Err.Number) & " | " & Left$(Err.Description, 180))
+End Sub
 
 Private Function BuildPainelPipelineInfo(ByVal pipelineIndex As Long) As String
     On Error GoTo EH
@@ -337,6 +423,18 @@ Private Function Git_Http(ByVal method As String, ByVal url As String, ByVal tok
     Git_Http = CStr(http.ResponseText)
 End Function
 
+Private Function GitCfg_Get(ByVal keyName As String, ByVal defaultValue As String) As String
+    GitCfg_Get = GH_Config_Get(keyName, defaultValue)
+End Function
+
+Private Function JsonPick(ByVal body As String, ByVal keyName As String) As String
+    Dim re As Object: Set re = CreateObject("VBScript.RegExp")
+    re.Global = False
+    re.IgnoreCase = True
+    re.Pattern = """" & keyName & """\s*:\s*""([^""]+)"""
+    If re.Test(body) Then JsonPick = re.Execute(body)(0).SubMatches(0)
+End Function
+
 Private Function JsonPickTreeSha(ByVal body As String) As String
     Dim re As Object: Set re = CreateObject("VBScript.RegExp")
     re.Global = False
@@ -344,6 +442,9 @@ Private Function JsonPickTreeSha(ByVal body As String) As String
     re.Pattern = """tree""\s*:\s*\{\s*""sha""\s*:\s*""([^""]+)"""
     If re.Test(body) Then JsonPickTreeSha = re.Execute(body)(0).SubMatches(0)
 End Function
+
+Private Sub GitDebug_WriteLinkToSeguimento(ByVal pipelineNome As String, ByVal link As String)
+    On Error Resume Next
 
     Dim ws As Worksheet
     Set ws = ThisWorkbook.Worksheets(SHEET_SEGUIMENTO)
@@ -505,6 +606,20 @@ EH:
     MsgBox "Erro em GitDebug_Config_InstalarParametros: " & Err.Description, vbExclamation
 End Sub
 
+Public Sub GitDebug_Config_InstalarMinimos()
+    On Error GoTo EH
+
+    Call GitDebug_Config_InstalarParametros(False)
+    Call Debug_Registar(0, "", "INFO", "", "GH_CONFIG_INSTALL_MIN", _
+        "Parametros minimos GH_* preparados na folha Config.", _
+        "[ACTION] Rever GH_OWNER/GH_REPO/GH_BRANCH/GH_TOKEN_ENV ou GH_TOKEN_CONFIG/GH_BASE_PATH antes de executar.")
+    Exit Sub
+EH:
+    Call Debug_Registar(0, "", "ERRO", "", "GH_CONFIG_INSTALL_MIN_FAIL", _
+        "Falha ao preparar parametros minimos GH_*.", _
+        "err=" & CStr(Err.Number) & " | " & Left$(Err.Description, 180))
+End Sub
+
 Private Sub GitDebug_Config_EnsureGuideHeaders(ByVal ws As Worksheet)
     ws.Cells(GH_CONFIG_HEADER_ROW, 1).Value = "Key"
     ws.Cells(GH_CONFIG_HEADER_ROW, 2).Value = "Value"
@@ -538,7 +653,7 @@ Private Function GitDebug_Config_Definitions() As Collection
     Call GitDebug_Config_Add(defs, "GH_BINARY_MODE", "base64", "Encoding recomendado para ficheiros binarios.", "base64")
 
     Call GitDebug_Config_Add(defs, "GH_BASE_PATH", "pipeliner_runs", "Pasta base no repo para agrupar execucoes.", "path relativo sem / inicial")
-    Call GitDebug_Config_Add(defs, "GH_RUN_FOLDER_TEMPLATE", "{{DATE}}/{{RUN_ID}}", "Template opcional da subpasta do run.", "ex.: {{DATE}}/{{RUN_ID}}")
+    Call GitDebug_Config_Add(defs, "GH_RUN_FOLDER_TEMPLATE", "{{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]", "Template opcional da subpasta do run (placeholders de data/pipeline).", "ex.: {{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]")
     Call GitDebug_Config_Add(defs, "GH_LOG_FOLDER", "logs", "Subpasta para logs complementares (quando aplicavel).", "path relativo")
 
     Call GitDebug_Config_Add(defs, "GH_RETRY_ON_CONFLICT", "true", "Se true, tenta novamente quando o HEAD muda durante commit.", "true | false")
