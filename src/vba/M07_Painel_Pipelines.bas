@@ -2197,16 +2197,16 @@ Private Function Painel_ConfigExtraGetValue(ByVal configExtraText As String, ByV
 
     Dim i As Long
     For i = LBound(lines) To UBound(lines)
-        Dim line As String
-        line = Trim$(CStr(lines(i)))
-        If line <> "" Then
+        Dim lineText As String
+        lineText = Trim$(CStr(lines(i)))
+        If lineText <> "" Then
             Dim p As Long
-            p = InStr(1, line, ":", vbTextCompare)
+            p = InStr(1, lineText, ":", vbTextCompare)
             If p > 0 Then
                 Dim k As String
-                k = Trim$(Left$(line, p - 1))
+                k = Trim$(Left$(lineText, p - 1))
                 If StrComp(k, keyName, vbTextCompare) = 0 Then
-                    Painel_ConfigExtraGetValue = Trim$(Mid$(line, p + 1))
+                    Painel_ConfigExtraGetValue = Trim$(Mid$(lineText, p + 1))
                     Exit Function
                 End If
             End If

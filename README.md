@@ -117,6 +117,10 @@ Também suporta exportação opcional de debug para GitHub (Git Data API) no fim
 - atualização da coluna `GIT_DEBUG` nas folhas `Seguimento` e `HISTÓRICO` com o link da pasta remota.
 - no arranque/fim do export, o DEBUG regista INFO/ALERTA para `run_folder`, `remote_folder` e gravação de link em `Seguimento/HISTÓRICO`.
 - em cada execução de upload Git, o DEBUG regista a fonte do token (`token_source`) e a `path` de cada ficheiro enviado.
+- publicação de `DEBUG.csv`, `catalogo_prompts_executadas.csv`, `Seguimento.csv` e `painel_pipeline.txt`;
+- composição da pasta remota por run em `GH_BASE_PATH/GH_LOG_FOLDER/<run_folder>`, onde `<run_folder>` por default segue `{{YYYY}}-{{MM}}-{{SS}} - {{HHMM}} - [{{PIPELINE_NAME}}]`;
+- atualização da coluna `GIT_DEBUG` nas folhas `Seguimento` e `HISTÓRICO` com o link da pasta remota.
+- no arranque/fim do export, o DEBUG regista INFO/ALERTA para `run_folder`, `remote_folder` e gravação de link em `Seguimento/HISTÓRICO`.
 - macro `GitDebug_Config_InstalarParametros` para preencher/atualizar na folha `Config` as chaves `GH_*` com `default`, explicação pedagógica (coluna C) e valores/intervalos possíveis (coluna E), sem forçar overwrite dos valores atuais por defeito.
 - esta macro inclui os parâmetros mínimos GH usados pelo VBA (ex.: `GH_OWNER`, `GH_REPO`, `GH_BRANCH`, `GH_TOKEN_ENV`, `GH_TOKEN_CONFIG`, `GH_BASE_PATH`, `GH_LOG_FOLDER`, `GH_RUN_FOLDER_TEMPLATE`) e apresenta significado para leigos + default.
 - macro auxiliar `GitDebug_Config_InstalarMinimos` para execução rápida (chama a instalação guiada sem overwrite e regista ação no DEBUG).
@@ -665,7 +669,7 @@ auto_save: Sim
 overwrite_mode: suffix
 ```
 
-`auto_save` é interpretado de forma case-insensitive e aceita aliases comuns. Exemplos equivalentes a **desligado**: `Não`, `no`, `false`, `off`, `0`, `disabled`. Valores **ligados**: `Sim`, `yes`, `true`, `on`, `1`, `enabled`. Para compatibilidade retroativa, valores não reconhecidos continuam a ser tratados como ligado.
+`auto_save` é interpretado de forma case-insensitive e aceita aliases comuns. Exemplos equivalentes a **desligado**: `Não`, `no`, `false`, `off`, `0`, `disabled`. Valores **ligados**: `Sim`, `yes`, `true`, `on`, `1`, `enabled`. Também aceita texto livre com palavras adicionais (ex.: `sim, todos`, `não, debug`) e decide por presença de tokens reconhecidos. Para compatibilidade retroativa, valores sem tokens reconhecidos continuam a ser tratados como ligado.
 
 Opcional (recomendado para reduzir falsos positivos no fallback por listagem de container):
 
@@ -1004,4 +1008,6 @@ Para evitar mojibake (`MÃ³dulo`, `ValidaÃ§Ã£o`, `nÃ£o`) sem quebrar comp
 
 Regra operacional rápida:
 - se um ficheiro parecer “corrompido” no terminal/editor, validar primeiro o encoding usado pela ferramenta antes de editar conteúdo textual.
-
+- para literais críticos (nomes de folhas, severidades, chaves de configuração), preferir tokens ASCII e usar fallback com `ChrW$` quando precisar de acentos (ex.: `"HIST" & ChrW$(&HD3) & "RICO"`) para reduzir risco de mojibake entre UTF-8/CP1252.
+- em edições feitas por agentes/LLMs (ex.: Codex), preferir comentários e headers em ASCII puro (sem acentos), mantendo acentos apenas quando forem funcionais.
+- após qualquer edição de módulos `.bas/.cls/.frm`, correr `python scripts/check_vba_encoding.py`; se houver erro de EOL/encoding, normalizar o ficheiro para `cp1252 + CRLF` antes do commit.

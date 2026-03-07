@@ -84,7 +84,7 @@ Private Function GH_NormalizeSeverity(ByVal severity As String) As String
     s = UCase$(Trim$(severity))
 
     Select Case s
-        Case "INFO", "INFORMACAO", "INFORMAÃ‡ÃƒO"
+        Case "INFO", "INFORMACAO", "INFORMAÇÃO"
             GH_NormalizeSeverity = "INFO"
         Case "WARN", "WARNING", "ALERTA"
             GH_NormalizeSeverity = "ALERTA"
@@ -106,7 +106,7 @@ Private Function GH_SafeText(ByVal valueText As String) As String
     Dim s As String
     s = CStr(valueText)
 
-    ' RedaÃ§Ã£o de padrÃµes comuns de segredos/tokens.
+    ' Redacao de padroes comuns de segredos/tokens.
     s = GH_RedactAfterKey(s, "token")
     s = GH_RedactAfterKey(s, "authorization")
     s = GH_RedactAfterKey(s, "api_key")
