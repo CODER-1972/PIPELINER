@@ -578,6 +578,8 @@ Se começar a ficar demasiado grande:
 - Em literais VBA que representem o caractere aspas dupla (`"`), usar `""""` (quatro aspas) no código fonte; formas truncadas (ex.: `"""`) geram `Compile error: Syntax error`.
 
 - Ao inserir/editar helpers VBA, garantir que existe assinatura completa (`Private/Public Sub/Function ...`) antes do corpo; blocos órfãos (linhas iniciadas por `Dim/Set` fora de procedimento) causam `Compile error: Sub or Function not defined` nos call-sites.
+
+- Em refactors de nomenclatura de helpers (ex.: `GitCfg_Get` -> `GH_Config_Get`), executar varredura global de call-sites (`rg`) e manter wrapper de compatibilidade temporário quando necessário; ausência desta etapa causa `Compile error: Sub or Function not defined`.
 - Em literais funcionais críticos (nome de folha, severidade, flags), preferir token ASCII como base e adicionar fallback acentuado via `ChrW$` quando necessário; isso evita que variações UTF-8/CP1252 quebrem comparações/lookup no VBA.
 - Quando o CI reportar mojibake em `.bas/.cls/.frm`, normalizar apenas os módulos afetados para UTF-8 sem BOM e validar com `python scripts/check_vba_encoding.py` antes do commit; evitar conversões massivas sem diagnóstico para reduzir risco de regressão em diffs.
 - Em alterações assistidas por agentes (Codex/LLM), manter comentários e headers em ASCII puro sempre que possível e preservar `cp1252 + CRLF` no working tree para reduzir reincidência de mojibake e diffs de EOL.

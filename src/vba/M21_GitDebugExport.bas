@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-07 | Codex | Corrige erro de compilacao por helper de config inexistente
+'   - Reintroduz wrapper local `GitCfg_Get` como compatibilidade para call-sites legados do modulo.
+'   - Evita `Compile error: Sub or Function not defined` quando o projeto referencia `GitCfg_Get`.
 ' - 2026-03-07 | Codex | Auditoria da origem do token e ficheiros enviados
 '   - Regista no DEBUG a fonte de resolucao do token GitHub em cada execucao de export.
 '   - Regista path remoto e nome de cada ficheiro preparado para upload no run.
@@ -413,6 +416,10 @@ Private Function Git_Http(ByVal method As String, ByVal url As String, ByVal tok
     End If
 
     Git_Http = CStr(http.ResponseText)
+End Function
+
+Private Function GitCfg_Get(ByVal keyName As String, ByVal defaultValue As String) As String
+    GitCfg_Get = GH_Config_Get(keyName, defaultValue)
 End Function
 
 Private Function JsonPickTreeSha(ByVal body As String) As String
