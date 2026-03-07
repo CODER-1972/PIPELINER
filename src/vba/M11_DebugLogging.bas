@@ -8,6 +8,9 @@ Option Explicit
 ' - Padronizar severidades e helpers de criacao/obtencao de folhas de log.
 '
 ' Atualizacoes:
+' - 2026-03-07 | Codex | Evita parametro ambiguo no helper de folhas
+'   - Renomeia parametro `name` para `sheetName` em `EnsureSheetByName`.
+'   - Preserva o comportamento de lookup case-insensitive e criacao idempotente.
 ' - 2026-02-12 | Codex | Implementacao do padrao de header obrigatorio
 '   - Adiciona proposito, historico de alteracoes e inventario de rotinas publicas.
 '   - Mantem documentacao tecnica do modulo alinhada com AGENTS.md.
@@ -66,16 +69,16 @@ Exit Sub
 EH:
 End Sub
 
-Private Function EnsureSheetByName(ByVal name As String) As Object
+Private Function EnsureSheetByName(ByVal sheetName As String) As Object
 Dim ws As Object
 For Each ws In ThisWorkbook.Worksheets
-If StrComp(ws.name, name, vbTextCompare) = 0 Then
+If StrComp(ws.name, sheetName, vbTextCompare) = 0 Then
 Set EnsureSheetByName = ws
 Exit Function
 End If
 Next ws
 Set EnsureSheetByName = ThisWorkbook.Worksheets.Add
-EnsureSheetByName.name = name
+EnsureSheetByName.name = sheetName
 End Function
 
 Private Function NextFreeRow(ByVal ws As Object, ByVal colIndex As Long) As Long

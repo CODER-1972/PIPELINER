@@ -233,7 +233,7 @@ Private Function GH_Config_ToBoolean(ByVal value As Variant, ByVal fallback As B
     Select Case raw
         Case "TRUE", "1", "SIM", "YES"
             GH_Config_ToBoolean = True
-        Case "FALSE", "0", "NAO", "NÃƒO", "NO"
+        Case "FALSE", "0", "NAO", "NÃO", "NO"
             GH_Config_ToBoolean = False
         Case Else
             GH_Config_ToBoolean = fallback
