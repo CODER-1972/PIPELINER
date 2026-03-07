@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-05 | Codex | Pasta remota em logs com template configuravel por run
+'   - Passa a compor pasta alvo com GH_BASE_PATH/GH_LOG_FOLDER e nome por template (com fallback retrocompativel).
+'   - Suporta placeholders {{YYYY}}, {{MM}}, {{SS}}, {{HHMM}} e {{PIPELINE_NAME}} para naming do run.
 ' - 2026-03-04 | Codex | Endurece instalacao de parametros GH_* na folha Config
 '   - Garante cabecalhos Key/Value/Explicacao/Default/Valores na linha 8 e dados apenas em linhas >= 9.
 '   - Mantem politica de overwrite seletivo em B:E e regista falhas no DEBUG com codigo estavel.
@@ -43,10 +46,13 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     End If
 
     Dim ghFolder As String
-    ghFolder = GitDebug_BuildRunFolder(pipelineNome)
+    ghFolder = GitDebug_BuildRunFolder(cfg, pipelineNome)
+
+    Dim remoteFolder As String
+    remoteFolder = GitDebug_BuildRemoteFolder(cfg, ghFolder)
 
     Dim files As Collection
-    Set files = GitDebug_BuildFilesForUpload(pipelineIndex, pipelineNome, ghFolder, cfg)
+    Set files = GitDebug_BuildFilesForUpload(pipelineIndex, pipelineNome, remoteFolder, cfg)
     If files Is Nothing Or files.Count = 0 Then Exit Sub
 
     Dim commitSha As String
@@ -56,7 +62,7 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     End If
 
     Dim webUrl As String
-    webUrl = GH_TreeCommit_BuildWebFolderUrl(cfg, GH_Config_GetString(cfg, "base_path", "pipeliner_runs") & "/" & ghFolder)
+    webUrl = GH_TreeCommit_BuildWebFolderUrl(cfg, remoteFolder)
 
     Call GitDebug_WriteLinkToSeguimento(pipelineNome, webUrl)
     Call GitDebug_WriteLinkToHistorico(pipelineNome, webUrl)
@@ -68,22 +74,54 @@ EH:
     Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD, "Falha no auto-upload de debug: " & Err.Description, "Validar parametros GH_* e conectividade com api.github.com.")
 End Sub
 
-Private Function GitDebug_BuildRunFolder(ByVal pipelineNome As String) As String
-    GitDebug_BuildRunFolder = Format$(Now, "yyyy-mmm-dd") & "-" & Format$(Now, "hhnn") & " - " & GitDebug_SanitizePathPart(pipelineNome)
+Private Function GitDebug_BuildRunFolder(ByVal cfg As Object, ByVal pipelineNome As String) As String
+    Dim tpl As String
+    tpl = Trim$(GH_Config_GetString(cfg, "run_folder_template", "{{YYYY}}-{{MM}}-{{SS}} - {{HHMM}} - [{{PIPELINE_NAME}}]"))
+
+    Dim safePipeline As String
+    safePipeline = GitDebug_SanitizePathPart(pipelineNome)
+
+    If tpl = "" Then
+        GitDebug_BuildRunFolder = Format$(Now, "yyyy-mm-ss") & " - " & Format$(Now, "hhnn") & " - [" & safePipeline & "]"
+        Exit Function
+    End If
+
+    tpl = Replace(tpl, "{{YYYY}}", Format$(Now, "yyyy"))
+    tpl = Replace(tpl, "{{MM}}", Format$(Now, "mm"))
+    tpl = Replace(tpl, "{{SS}}", Format$(Now, "ss"))
+    tpl = Replace(tpl, "{{HHMM}}", Format$(Now, "hhnn"))
+    tpl = Replace(tpl, "{{PIPELINE_NAME}}", safePipeline)
+
+    GitDebug_BuildRunFolder = GitDebug_SanitizePathPart(tpl)
 End Function
 
-Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByVal ghFolder As String, ByVal cfg As Object) As Collection
-    On Error GoTo EH
-
+Private Function GitDebug_BuildRemoteFolder(ByVal cfg As Object, ByVal ghFolder As String) As String
     Dim cfgBase As String
     cfgBase = Trim$(GH_Config_GetString(cfg, "base_path", "pipeliner_runs"))
 
-    Dim remoteFolder As String
-    If cfgBase <> "" Then
-        remoteFolder = cfgBase & "/" & ghFolder
-    Else
-        remoteFolder = ghFolder
+    Dim logFolder As String
+    logFolder = Trim$(GH_Config_GetString(cfg, "log_folder", "logs"))
+
+    Dim fullPath As String
+    fullPath = ""
+    If cfgBase <> "" Then fullPath = cfgBase
+    If logFolder <> "" Then
+        If fullPath <> "" Then
+            fullPath = fullPath & "/" & logFolder
+        Else
+            fullPath = logFolder
+        End If
     End If
+
+    If fullPath <> "" Then
+        GitDebug_BuildRemoteFolder = fullPath & "/" & ghFolder
+    Else
+        GitDebug_BuildRemoteFolder = ghFolder
+    End If
+End Function
+
+Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByVal remoteFolder As String, ByVal cfg As Object) As Collection
+    On Error GoTo EH
 
     Dim wsDebug As Worksheet
     Dim wsSeg As Worksheet
@@ -538,7 +576,7 @@ Private Function GitDebug_Config_Definitions() As Collection
     Call GitDebug_Config_Add(defs, "GH_BINARY_MODE", "base64", "Encoding recomendado para ficheiros binarios.", "base64")
 
     Call GitDebug_Config_Add(defs, "GH_BASE_PATH", "pipeliner_runs", "Pasta base no repo para agrupar execucoes.", "path relativo sem / inicial")
-    Call GitDebug_Config_Add(defs, "GH_RUN_FOLDER_TEMPLATE", "{{DATE}}/{{RUN_ID}}", "Template opcional da subpasta do run.", "ex.: {{DATE}}/{{RUN_ID}}")
+    Call GitDebug_Config_Add(defs, "GH_RUN_FOLDER_TEMPLATE", "{{YYYY}}-{{MM}}-{{SS}} - {{HHMM}} - [{{PIPELINE_NAME}}]", "Template opcional da subpasta do run (placeholders de data/pipeline).", "ex.: {{YYYY}}-{{MM}}-{{SS}} - {{HHMM}} - [{{PIPELINE_NAME}}]")
     Call GitDebug_Config_Add(defs, "GH_LOG_FOLDER", "logs", "Subpasta para logs complementares (quando aplicavel).", "path relativo")
 
     Call GitDebug_Config_Add(defs, "GH_RETRY_ON_CONFLICT", "true", "Se true, tenta novamente quando o HEAD muda durante commit.", "true | false")

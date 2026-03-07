@@ -9,6 +9,9 @@ Option Explicit
 ' - Resolver enable/token de forma deterministica para o facade M21.
 '
 ' Atualizacoes:
+' - 2026-03-05 | Codex | Expor pasta de logs e template de run folder no cfg GH_*
+'   - Passa a ler GH_LOG_FOLDER e GH_RUN_FOLDER_TEMPLATE para compor path remoto por execucao.
+'   - Mantem defaults internos e compatibilidade quando as chaves nao existem.
 ' - 2026-03-04 | Codex | Refactor da configuracao GitHub para modulo dedicado
 '   - Move leitura de GH_* (Config) para um dicionario normalizado.
 '   - Implementa validacao canonica de campos obrigatorios e limites numericos.
@@ -46,6 +49,8 @@ Public Function GH_Config_Load(ByVal painelAutoSave As String) As Object
     cfg("token") = GH_Config_ResolveToken()
 
     cfg("base_path") = GH_Config_Get("GH_BASE_PATH", "pipeliner_runs")
+    cfg("log_folder") = GH_Config_Get("GH_LOG_FOLDER", "logs")
+    cfg("run_folder_template") = GH_Config_Get("GH_RUN_FOLDER_TEMPLATE", "{{YYYY}}-{{MM}}-{{SS}} - {{HHMM}} - [{{PIPELINE_NAME}}]")
     cfg("commit_message_template") = GH_Config_Get("GH_COMMIT_MESSAGE_TEMPLATE", "PIPELINER run {{RUN_ID}}")
     cfg("force_update") = GH_Config_ToBoolean(GH_Config_Get("GH_FORCE_UPDATE", "false"), False)
 
