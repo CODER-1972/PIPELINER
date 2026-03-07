@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-07 | Codex | Auditoria da origem do token e ficheiros enviados
+'   - Regista no DEBUG a fonte de resolucao do token GitHub em cada execucao de export.
+'   - Regista path remoto e nome de cada ficheiro preparado para upload no run.
 ' - 2026-03-05 | Codex | Pasta remota em logs com template configuravel por run
 '   - Passa a compor pasta alvo com GH_BASE_PATH/GH_LOG_FOLDER e nome por template (com fallback retrocompativel).
 '   - Suporta placeholders {{YYYY}}, {{MM}}, {{DD}}, {{HHMM}} e {{PIPELINE_NAME}} para naming do run.
@@ -23,6 +26,10 @@ Option Explicit
 '   - Entry point chamado no fim da pipeline para export opcional de debug para GitHub.
 ' - GitDebug_Config_InstalarParametros(Optional sobrescreverValores As Boolean = False)
 '   - Preenche/atualiza chaves GH_* na folha Config sem quebra de retrocompatibilidade.
+' - GitDebug_Config_InstalarMinimos()
+'   - Macro rapida para instalar parametros minimos GH_* com defaults e explicacao para leigos.
+' - GitDebug_LogFilesForUpload(pipelineNome As String, remoteFolder As String, files As Collection) (Private Sub)
+'   - Regista path remoto e nome dos ficheiros preparados para upload GitHub.
 ' =============================================================================
 
 Private Const SHEET_DEBUG As String = "DEBUG"
@@ -45,6 +52,8 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
         Exit Sub
     End If
 
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Fonte do token GitHub resolvida.", "token_source=" & GH_Config_GetString(cfg, "token_source", "desconhecida"))
+
     Dim ghFolder As String
     ghFolder = GitDebug_BuildRunFolder(cfg, pipelineNome)
     If Trim$(ghFolder) = "" Then
@@ -65,6 +74,7 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     Dim files As Collection
     Set files = GitDebug_BuildFilesForUpload(pipelineIndex, pipelineNome, remoteFolder, cfg)
     If files Is Nothing Or files.Count = 0 Then Exit Sub
+    Call GitDebug_LogFilesForUpload(pipelineNome, remoteFolder, files)
 
     Dim commitSha As String
     If Not GH_TreeCommit_CommitFiles(cfg, files, pipelineNome, commitSha, reason) Then
@@ -164,6 +174,24 @@ Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal
 EH:
     Set GitDebug_BuildFilesForUpload = Nothing
 End Function
+
+Private Sub GitDebug_LogFilesForUpload(ByVal pipelineNome As String, ByVal remoteFolder As String, ByVal files As Collection)
+    On Error GoTo EH
+
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD, "Ficheiros preparados para upload Git.", "remote_folder=" & remoteFolder & " | total=" & CStr(files.Count))
+
+    Dim i As Long
+    For i = 1 To files.Count
+        Dim item As Object
+        Set item = files(i)
+        If Not item Is Nothing Then
+            Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD, "Upload file", "path=" & CStr(item("path")))
+        End If
+    Next i
+    Exit Sub
+EH:
+    Call GH_LogWarn(0, pipelineNome, GH_EVT_UPLOAD, "Falha ao listar ficheiros de upload no DEBUG.", "err=" & CStr(Err.Number) & " | " & Left$(Err.Description, 180))
+End Sub
 
 Private Function BuildPainelPipelineInfo(ByVal pipelineIndex As Long) As String
     On Error GoTo EH

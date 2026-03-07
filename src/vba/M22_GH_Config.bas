@@ -9,6 +9,9 @@ Option Explicit
 ' - Resolver enable/token de forma deterministica para o facade M21.
 '
 ' Atualizacoes:
+' - 2026-03-07 | Codex | Preferencia de token por ambiente GH_TOKEN
+'   - Se GH_TOKEN_ENV estiver vazio, "Ambiente"/"Environment" ou erro, usa variavel de ambiente GH_TOKEN.
+'   - Expoe token_source no cfg para auditoria no DEBUG sem revelar segredo.
 ' - 2026-03-07 | Codex | Validacao minima GH_* com mensagem acionavel
 '   - Agrega campos obrigatorios em falta (owner/repo/branch/token/base_path) numa unica mensagem curta.
 '   - Inclui acao recomendada para preencher Config (GH_OWNER/GH_REPO/GH_BRANCH/token/GH_BASE_PATH).
@@ -31,6 +34,8 @@ Option Explicit
 '   - Le booleano normalizado com fallback seguro.
 ' - GH_Config_AppendMissing(currentList As String, itemName As String) As String
 '   - Helper para concatenar campos em falta nas mensagens de validacao GH_*.
+' - GH_Config_ResolveToken(Optional ByRef sourceUsed As String = "") As String
+'   - Resolve token priorizando GH_TOKEN quando indicado e devolve a fonte para auditoria.
 ' =============================================================================
 
 Private Const SHEET_CONFIG As String = "Config"
@@ -51,7 +56,9 @@ Public Function GH_Config_Load(ByVal painelAutoSave As String) As Object
     cfg("api_version") = GH_Config_Get("GH_API_VERSION", "2022-11-28")
     cfg("user_agent") = GH_Config_Get("GH_USER_AGENT", "PIPELINER-VBA")
 
-    cfg("token") = GH_Config_ResolveToken()
+    Dim tokenSource As String
+    cfg("token") = GH_Config_ResolveToken(tokenSource)
+    cfg("token_source") = tokenSource
 
     cfg("base_path") = GH_Config_Get("GH_BASE_PATH", "pipeliner_runs")
     cfg("log_folder") = GH_Config_Get("GH_LOG_FOLDER", "logs")
@@ -165,15 +172,44 @@ Fallback:
     GH_Config_Get = defaultValue
 End Function
 
-Public Function GH_Config_ResolveToken() As String
+Public Function GH_Config_ResolveToken(Optional ByRef sourceUsed As String = "") As String
+    On Error GoTo Fallback
+
+    Dim envKeyRaw As String
+    envKeyRaw = GH_Config_Get("GH_TOKEN_ENV", "")
+
     Dim envKey As String
-    envKey = GH_Config_Get("GH_TOKEN_ENV", "GITHUB_TOKEN")
+    envKey = Trim$(envKeyRaw)
 
-    Dim t As String
-    t = Trim$(CStr(Environ$(envKey)))
-    If t = "" Then t = GH_Config_Get("GH_TOKEN_CONFIG", "")
+    If envKey = "" Or UCase$(envKey) = "AMBIENTE" Or UCase$(envKey) = "ENVIRONMENT" Then
+        envKey = "GH_TOKEN"
+        sourceUsed = "ENV:GH_TOKEN (fallback)"
+    Else
+        sourceUsed = "ENV:" & envKey
+    End If
 
-    GH_Config_ResolveToken = t
+    Dim tkn As String
+    tkn = Trim$(CStr(Environ$(envKey)))
+
+    If tkn = "" Then
+        tkn = Trim$(GH_Config_Get("GH_TOKEN_CONFIG", ""))
+        If tkn <> "" Then
+            sourceUsed = "CONFIG:GH_TOKEN_CONFIG"
+        Else
+            sourceUsed = sourceUsed & " -> vazio"
+        End If
+    End If
+
+    GH_Config_ResolveToken = tkn
+    Exit Function
+
+Fallback:
+    GH_Config_ResolveToken = Trim$(CStr(Environ$("GH_TOKEN")))
+    If GH_Config_ResolveToken <> "" Then
+        sourceUsed = "ENV:GH_TOKEN (error_fallback)"
+    Else
+        sourceUsed = "nao_resolvido"
+    End If
 End Function
 
 Private Function GH_Config_IsEnabledByPanel(ByVal painelAutoSave As String) As Boolean
