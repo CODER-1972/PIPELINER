@@ -16,7 +16,7 @@ Option Explicit
 '   - Introduz evento `FILES_MODE_OVERRIDE_TRACE` com requested/resolved/raw_mode/effective_mode/reason.
 '   - Emite trace sempre que modo pedido diverge do modo aplicado, incluindo overrides nao-Office.
 '   - Mantem `DOCX_INPUTFILE_OVERRIDDEN` por retrocompatibilidade com mensagem curta para consultar o trace.
-' Atualizações:
+' Atualizacoes:
 ' - 2026-03-03 | Codex | Robustez na normalizacao do hash_short de TEXT_EMBED_TRACE
 '   - Normaliza line endings antes do FNV-1a para reduzir variacao entre extratores/hosts.
 '   - Remove prefixo fnv32- apenas quando presente no inicio (sem Replace global).

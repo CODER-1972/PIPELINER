@@ -7,7 +7,7 @@ Option Explicit
 ' - Orquestrar execucao de pipelines a partir da folha PAINEL e acoes de botoes.
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
-' Atualizações:
+' Atualizacoes:
 ' - 2026-03-04 | Codex | Auto-upload Git de artefactos de debug por pipeline
 '   - Ativa exportacao no fim da execucao quando auto-guardar contem "sim, todos" ou "debug".
 '   - Publica CSV de DEBUG/Seguimento/catalogo e TXT do PAINEL via Git Data API usando GH_* no Config.

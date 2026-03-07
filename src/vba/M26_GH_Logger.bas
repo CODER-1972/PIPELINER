@@ -103,7 +103,7 @@ Private Function GH_SafeText(ByVal valueText As String) As String
     Dim s As String
     s = CStr(valueText)
 
-    ' Redação de padrões comuns de segredos/tokens.
+    ' Redacao de padroes comuns de segredos/tokens.
     s = GH_RedactAfterKey(s, "token")
     s = GH_RedactAfterKey(s, "authorization")
     s = GH_RedactAfterKey(s, "api_key")

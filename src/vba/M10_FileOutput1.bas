@@ -7,13 +7,13 @@ Option Explicit
 ' - Gerir registo e resolucao de ficheiros de output produzidos por prompts.
 ' - Suportar cadeia output->input e escrita de eventos de output no historico de ficheiros.
 '
-' Atualizações:
+' Atualizacoes:
 ' - 2026-03-05 | Codex | auto_save com texto livre (tokens mistos)
-'   - Trata valores com palavras adicionais (ex.: "sim, todos", "não, debug") mantendo decisão por tokens reconhecidos.
-'   - Em conflito, privilegia token afirmativo para evitar desativação acidental; sem tokens, mantém fallback ligado.
-' - 2026-03-04 | Codex | Normalização robusta de auto_save (aliases além de sim/não)
-'   - Reconhece aliases case-insensitive para NO/YES (false/true, off/on, 0/1, etc.) sem quebrar valores históricos.
-'   - Mantém retrocompatibilidade: valores não reconhecidos continuam a comportar-se como ativo (auto-save ligado).
+'   - Trata valores com palavras adicionais (ex.: "sim, todos", "nao, debug") mantendo decisao por tokens reconhecidos.
+'   - Em conflito, privilegia token afirmativo para evitar desativacao acidental; sem tokens, mantem fallback ligado.
+' - 2026-03-04 | Codex | Normalizacao robusta de auto_save (aliases alem de sim/nao)
+'   - Reconhece aliases case-insensitive para NO/YES (false/true, off/on, 0/1, etc.) sem quebrar valores historicos.
+'   - Mantem retrocompatibilidade: valores nao reconhecidos continuam a comportar-se como ativo (auto-save ligado).
 ' - 2026-03-04 | Codex | Consistencia de marcadores afirmativos CI
 '   - Alinha CI_IsAffirmativeMarker com o contrato ci_csv_v1 (aceita SIM/TRUE/YES/OK/1/Y/S).
 '   - Evita divergencia entre M10_CI_PROOF_SUMMARY e validacao de contrato no M19.

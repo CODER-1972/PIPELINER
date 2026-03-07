@@ -994,4 +994,5 @@ Para evitar mojibake (`MÃ³dulo`, `ValidaÃ§Ã£o`, `nÃ£o`) sem quebrar comp
 Regra operacional rápida:
 - se um ficheiro parecer “corrompido” no terminal/editor, validar primeiro o encoding usado pela ferramenta antes de editar conteúdo textual.
 - para literais críticos (nomes de folhas, severidades, chaves de configuração), preferir tokens ASCII e usar fallback com `ChrW$` quando precisar de acentos (ex.: `"HIST" & ChrW$(&HD3) & "RICO"`) para reduzir risco de mojibake entre UTF-8/CP1252.
-
+- em edições feitas por agentes/LLMs (ex.: Codex), preferir comentários e headers em ASCII puro (sem acentos), mantendo acentos apenas quando forem funcionais.
+- após qualquer edição de módulos `.bas/.cls/.frm`, correr `python scripts/check_vba_encoding.py`; se houver erro de EOL/encoding, normalizar o ficheiro para `cp1252 + CRLF` antes do commit.
