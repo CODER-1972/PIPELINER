@@ -9,6 +9,9 @@ Option Explicit
 ' - Resolver enable/token de forma deterministica para o facade M21.
 '
 ' Atualizacoes:
+' - 2026-03-07 | Codex | Validacao minima GH_* com mensagem acionavel
+'   - Agrega campos obrigatorios em falta (owner/repo/branch/token/base_path) numa unica mensagem curta.
+'   - Inclui acao recomendada para preencher Config (GH_OWNER/GH_REPO/GH_BRANCH/token/GH_BASE_PATH).
 ' - 2026-03-05 | Codex | Expor pasta de logs e template de run folder no cfg GH_*
 '   - Passa a ler GH_LOG_FOLDER e GH_RUN_FOLDER_TEMPLATE para compor path remoto por execucao.
 '   - Mantem defaults internos e compatibilidade quando as chaves nao existem.
@@ -26,6 +29,8 @@ Option Explicit
 '   - Le string do dicionario com fallback seguro.
 ' - GH_Config_GetBoolean(cfg As Object, keyName As String, Optional fallback As Boolean = False) As Boolean
 '   - Le booleano normalizado com fallback seguro.
+' - GH_Config_AppendMissing(currentList As String, itemName As String) As String
+'   - Helper para concatenar campos em falta nas mensagens de validacao GH_*.
 ' =============================================================================
 
 Private Const SHEET_CONFIG As String = "Config"
@@ -50,7 +55,7 @@ Public Function GH_Config_Load(ByVal painelAutoSave As String) As Object
 
     cfg("base_path") = GH_Config_Get("GH_BASE_PATH", "pipeliner_runs")
     cfg("log_folder") = GH_Config_Get("GH_LOG_FOLDER", "logs")
-    cfg("run_folder_template") = GH_Config_Get("GH_RUN_FOLDER_TEMPLATE", "{{YYYY}}-{{MM}}-{{SS}} - {{HHMM}} - [{{PIPELINE_NAME}}]")
+    cfg("run_folder_template") = GH_Config_Get("GH_RUN_FOLDER_TEMPLATE", "{{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]")
     cfg("commit_message_template") = GH_Config_Get("GH_COMMIT_MESSAGE_TEMPLATE", "PIPELINER run {{RUN_ID}}")
     cfg("force_update") = GH_Config_ToBoolean(GH_Config_Get("GH_FORCE_UPDATE", "false"), False)
 
@@ -74,20 +79,17 @@ Public Function GH_Config_Validate(ByVal cfg As Object, ByRef reason As String) 
         Exit Function
     End If
 
-    If GH_Config_GetString(cfg, "owner") = "" Then
-        reason = "GH_OWNER em falta"
-        Exit Function
-    End If
-    If GH_Config_GetString(cfg, "repo") = "" Then
-        reason = "GH_REPO em falta"
-        Exit Function
-    End If
-    If GH_Config_GetString(cfg, "branch") = "" Then
-        reason = "GH_BRANCH em falta"
-        Exit Function
-    End If
-    If GH_Config_GetString(cfg, "token") = "" Then
-        reason = "Token GitHub ausente (GH_TOKEN_ENV/GH_TOKEN_CONFIG)"
+    Dim missing As String
+    missing = ""
+
+    If GH_Config_GetString(cfg, "owner") = "" Then missing = GH_Config_AppendMissing(missing, "GH_OWNER")
+    If GH_Config_GetString(cfg, "repo") = "" Then missing = GH_Config_AppendMissing(missing, "GH_REPO")
+    If GH_Config_GetString(cfg, "branch") = "" Then missing = GH_Config_AppendMissing(missing, "GH_BRANCH")
+    If GH_Config_GetString(cfg, "token") = "" Then missing = GH_Config_AppendMissing(missing, "GH_TOKEN_ENV/GH_TOKEN_CONFIG")
+    If GH_Config_GetString(cfg, "base_path") = "" Then missing = GH_Config_AppendMissing(missing, "GH_BASE_PATH")
+
+    If missing <> "" Then
+        reason = "Campos GH_* obrigatorios em falta: " & missing & " | [ACTION] Na folha Config, preencher GH_OWNER, GH_REPO, GH_BRANCH, token (GH_TOKEN_ENV ou GH_TOKEN_CONFIG) e GH_BASE_PATH."
         Exit Function
     End If
 
@@ -178,6 +180,14 @@ Private Function GH_Config_IsEnabledByPanel(ByVal painelAutoSave As String) As B
     Dim s As String
     s = LCase$(Trim$(painelAutoSave))
     GH_Config_IsEnabledByPanel = (InStr(1, s, "sim, todos", vbTextCompare) > 0) Or (InStr(1, s, "debug", vbTextCompare) > 0)
+End Function
+
+Private Function GH_Config_AppendMissing(ByVal currentList As String, ByVal itemName As String) As String
+    If Trim$(currentList) = "" Then
+        GH_Config_AppendMissing = itemName
+    Else
+        GH_Config_AppendMissing = currentList & ", " & itemName
+    End If
 End Function
 
 Private Function GH_Config_ToBoolean(ByVal value As Variant, ByVal fallback As Boolean) As Boolean

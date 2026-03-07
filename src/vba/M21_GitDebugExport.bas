@@ -11,13 +11,7 @@ Option Explicit
 ' Atualizacoes:
 ' - 2026-03-05 | Codex | Pasta remota em logs com template configuravel por run
 '   - Passa a compor pasta alvo com GH_BASE_PATH/GH_LOG_FOLDER e nome por template (com fallback retrocompativel).
-'   - Suporta placeholders {{YYYY}}, {{MM}}, {{SS}}, {{HHMM}} e {{PIPELINE_NAME}} para naming do run.
-' - 2026-03-07 | Codex | Evita identificador reservado na montagem de CSV
-'   - Renomeia variavel local `line` para `csvLine` em `SheetToCsv`.
-'   - Mantem serializacao CSV exatamente com a mesma ordem de colunas/linhas.
-' - 2026-03-05 | Codex | Corrige fallback de nome de folha Historico para evitar dependencia de acentos
-'   - Define constante SHEET_HIST em ASCII (HISTORICO) para robustez entre encodings/editores.
-'   - Mantem tentativa alternativa com nome acentuado via ChrW no resolvedor de folha.
+'   - Suporta placeholders {{YYYY}}, {{MM}}, {{DD}}, {{HHMM}} e {{PIPELINE_NAME}} para naming do run.
 ' - 2026-03-04 | Codex | Endurece instalacao de parametros GH_* na folha Config
 '   - Garante cabecalhos Key/Value/Explicacao/Default/Valores na linha 8 e dados apenas em linhas >= 9.
 '   - Mantem politica de overwrite seletivo em B:E e regista falhas no DEBUG com codigo estavel.
@@ -53,9 +47,20 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
 
     Dim ghFolder As String
     ghFolder = GitDebug_BuildRunFolder(cfg, pipelineNome)
+    If Trim$(ghFolder) = "" Then
+        Call GH_LogWarn(0, pipelineNome, GH_EVT_CONFIG, "run_folder_template gerou pasta vazia; aplicado fallback.", "[ACTION] Ajuste GH_RUN_FOLDER_TEMPLATE (use {{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]).")
+    Else
+        Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Run folder resolvida.", "run_folder=" & ghFolder)
+    End If
 
     Dim remoteFolder As String
     remoteFolder = GitDebug_BuildRemoteFolder(cfg, ghFolder)
+    If Trim$(remoteFolder) = "" Then
+        Call GH_LogError(0, pipelineNome, GH_EVT_CONFIG, "Falha a resolver remote_folder para upload.", "[ACTION] Confirme GH_BASE_PATH/GH_LOG_FOLDER/GH_RUN_FOLDER_TEMPLATE na Config.")
+        Exit Sub
+    Else
+        Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Pasta remota final resolvida.", "remote_folder=" & remoteFolder)
+    End If
 
     Dim files As Collection
     Set files = GitDebug_BuildFilesForUpload(pipelineIndex, pipelineNome, remoteFolder, cfg)
@@ -72,6 +77,7 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
 
     Call GitDebug_WriteLinkToSeguimento(pipelineNome, webUrl)
     Call GitDebug_WriteLinkToHistorico(pipelineNome, webUrl)
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Link registado em Seguimento/HISTORICO.", webUrl)
 
     Call GH_LogInfo(0, pipelineNome, GH_EVT_REF_UPDATED, "Debug export publicado no GitHub.", webUrl)
     Exit Sub
@@ -82,19 +88,19 @@ End Sub
 
 Private Function GitDebug_BuildRunFolder(ByVal cfg As Object, ByVal pipelineNome As String) As String
     Dim tpl As String
-    tpl = Trim$(GH_Config_GetString(cfg, "run_folder_template", "{{YYYY}}-{{MM}}-{{SS}} - {{HHMM}} - [{{PIPELINE_NAME}}]"))
+    tpl = Trim$(GH_Config_GetString(cfg, "run_folder_template", "{{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]"))
 
     Dim safePipeline As String
     safePipeline = GitDebug_SanitizePathPart(pipelineNome)
 
     If tpl = "" Then
-        GitDebug_BuildRunFolder = Format$(Now, "yyyy-mm-ss") & " - " & Format$(Now, "hhnn") & " - [" & safePipeline & "]"
+        GitDebug_BuildRunFolder = Format$(Now, "yyyy-mm-dd") & " - " & Format$(Now, "hhnn") & " - [" & safePipeline & "]"
         Exit Function
     End If
 
     tpl = Replace(tpl, "{{YYYY}}", Format$(Now, "yyyy"))
     tpl = Replace(tpl, "{{MM}}", Format$(Now, "mm"))
-    tpl = Replace(tpl, "{{SS}}", Format$(Now, "ss"))
+    tpl = Replace(tpl, "{{DD}}", Format$(Now, "dd"))
     tpl = Replace(tpl, "{{HHMM}}", Format$(Now, "hhnn"))
     tpl = Replace(tpl, "{{PIPELINE_NAME}}", safePipeline)
 
@@ -549,6 +555,20 @@ EH:
     MsgBox "Erro em GitDebug_Config_InstalarParametros: " & Err.Description, vbExclamation
 End Sub
 
+Public Sub GitDebug_Config_InstalarMinimos()
+    On Error GoTo EH
+
+    Call GitDebug_Config_InstalarParametros(False)
+    Call Debug_Registar(0, "", "INFO", "", "GH_CONFIG_INSTALL_MIN", _
+        "Parametros minimos GH_* preparados na folha Config.", _
+        "[ACTION] Rever GH_OWNER/GH_REPO/GH_BRANCH/GH_TOKEN_ENV ou GH_TOKEN_CONFIG/GH_BASE_PATH antes de executar.")
+    Exit Sub
+EH:
+    Call Debug_Registar(0, "", "ERRO", "", "GH_CONFIG_INSTALL_MIN_FAIL", _
+        "Falha ao preparar parametros minimos GH_*.", _
+        "err=" & CStr(Err.Number) & " | " & Left$(Err.Description, 180))
+End Sub
+
 Private Sub GitDebug_Config_EnsureGuideHeaders(ByVal ws As Worksheet)
     ws.Cells(GH_CONFIG_HEADER_ROW, 1).Value = "Key"
     ws.Cells(GH_CONFIG_HEADER_ROW, 2).Value = "Value"
@@ -582,7 +602,7 @@ Private Function GitDebug_Config_Definitions() As Collection
     Call GitDebug_Config_Add(defs, "GH_BINARY_MODE", "base64", "Encoding recomendado para ficheiros binarios.", "base64")
 
     Call GitDebug_Config_Add(defs, "GH_BASE_PATH", "pipeliner_runs", "Pasta base no repo para agrupar execucoes.", "path relativo sem / inicial")
-    Call GitDebug_Config_Add(defs, "GH_RUN_FOLDER_TEMPLATE", "{{YYYY}}-{{MM}}-{{SS}} - {{HHMM}} - [{{PIPELINE_NAME}}]", "Template opcional da subpasta do run (placeholders de data/pipeline).", "ex.: {{YYYY}}-{{MM}}-{{SS}} - {{HHMM}} - [{{PIPELINE_NAME}}]")
+    Call GitDebug_Config_Add(defs, "GH_RUN_FOLDER_TEMPLATE", "{{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]", "Template opcional da subpasta do run (placeholders de data/pipeline).", "ex.: {{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]")
     Call GitDebug_Config_Add(defs, "GH_LOG_FOLDER", "logs", "Subpasta para logs complementares (quando aplicavel).", "path relativo")
 
     Call GitDebug_Config_Add(defs, "GH_RETRY_ON_CONFLICT", "true", "Se true, tenta novamente quando o HEAD muda durante commit.", "true | false")
