@@ -11,7 +11,7 @@ Option Explicit
 ' - 2026-03-03 | Codex | Mapeia trace padronizado de override de modo FILES
 '   - Inclui `FILES_MODE_OVERRIDE_TRACE` nas acoes deduzidas da coluna Funcionalidade.
 '   - Amplia extracao de contexto operacional com requested/resolved/raw_mode/effective_mode/reason.
-' Atualizações:
+' Atualizacoes:
 ' - 2026-03-04 | Codex | Coluna GIT_DEBUG no arquivamento Seguimento -> HISTORICO
 '   - Inclui GIT_DEBUG no conjunto canonico de headers e mapeamento por nome.
 '   - Garante criacao retrocompativel do header em Seguimento/HISTORICO quando inexistente.
