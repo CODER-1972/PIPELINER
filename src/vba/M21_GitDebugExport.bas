@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-07 | Codex | Evita identificador reservado na montagem de CSV
+'   - Renomeia variavel local `line` para `csvLine` em `SheetToCsv`.
+'   - Mantem serializacao CSV exatamente com a mesma ordem de colunas/linhas.
 ' - 2026-03-05 | Codex | Corrige fallback de nome de folha Historico para evitar dependencia de acentos
 '   - Define constante SHEET_HIST em ASCII (HISTORICO) para robustez entre encodings/editores.
 '   - Mantem tentativa alternativa com nome acentuado via ChrW no resolvedor de folha.
@@ -214,16 +217,16 @@ Private Function SheetToCsv(ByVal ws As Worksheet) As String
 
     Dim r As Long
     Dim c As Long
-    Dim line As String
+    Dim csvLine As String
     Dim out As String
 
     For r = 1 To lr
-        line = ""
+        csvLine = ""
         For c = 1 To lc
-            If c > 1 Then line = line & ","
-            line = line & CsvEscape(CStr(ws.Cells(r, c).Value))
+            If c > 1 Then csvLine = csvLine & ","
+            csvLine = csvLine & CsvEscape(CStr(ws.Cells(r, c).Value))
         Next c
-        out = out & line & vbCrLf
+        out = out & csvLine & vbCrLf
     Next r
 
     SheetToCsv = out
