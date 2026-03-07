@@ -9,6 +9,9 @@ Option Explicit
 ' - Fornecer payload compacto (DetailJsonCompact) com orcamento configuravel na folha Config.
 '
 ' Atualizacoes:
+' - 2026-03-07 | Codex | Evita nome reservado em loops de parsing textual
+'   - Renomeia variavel local `line` para `lineText` em leitores de Config extra/INPUTS.
+'   - Mantem regras de deteccao de pares chave-valor e tokens FILE sem regressao funcional.
 ' - 2026-03-04 | Codex | Hardening de contrato com prova minima textual obrigatoria
 '   - Torna parsing de diagnostic_contract resiliente a aliases comuns (underscore/hifen/espaco).
 '   - Exige marcadores minimos de prova (CSV_EXISTE_EM_MNT_DATA, FILE_CSV, MNT_DATA_LIST) quando ha intencao CSV/EXECUTE.
@@ -395,16 +398,16 @@ Private Function ContractDiag_ConfigExtraGet(ByVal configExtraText As String, By
 
     Dim i As Long
     For i = LBound(lines) To UBound(lines)
-        Dim line As String
-        line = Trim$(CStr(lines(i)))
-        If line <> "" Then
+        Dim lineText As String
+        lineText = Trim$(CStr(lines(i)))
+        If lineText <> "" Then
             Dim p As Long
-            p = InStr(1, line, ":", vbTextCompare)
+            p = InStr(1, lineText, ":", vbTextCompare)
             If p > 0 Then
                 Dim k As String
-                k = Trim$(Left$(line, p - 1))
+                k = Trim$(Left$(lineText, p - 1))
                 If StrComp(k, keyName, vbTextCompare) = 0 Then
-                    ContractDiag_ConfigExtraGet = Trim$(Mid$(line, p + 1))
+                    ContractDiag_ConfigExtraGet = Trim$(Mid$(lineText, p + 1))
                     Exit Function
                 End If
             End If
@@ -558,14 +561,14 @@ Private Function ContractDiag_ExtractProvaFileNames(ByVal outputText As String) 
 
     Dim i As Long
     For i = LBound(lines) To UBound(lines)
-        Dim line As String
-        line = Trim$(CStr(lines(i)))
-        If line <> "" Then
+        Dim lineText As String
+        lineText = Trim$(CStr(lines(i)))
+        If lineText <> "" Then
             Dim p As Long
-            p = InStr(1, line, "FILE:", vbTextCompare)
+            p = InStr(1, lineText, "FILE:", vbTextCompare)
             If p > 0 Then
                 Dim token As String
-                token = Trim$(Mid$(line, p + 5))
+                token = Trim$(Mid$(lineText, p + 5))
                 Dim pSep As Long
                 pSep = InStr(1, token, "|", vbTextCompare)
                 If pSep > 0 Then token = Trim$(Left$(token, pSep - 1))
