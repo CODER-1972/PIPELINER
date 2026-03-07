@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-07 | Codex | Toggle Git LOG por pipeline no PAINEL para gatilho de auto-upload
+'   - Cria botao "Git LOG ON/OFF" abaixo de INICIAR (linha 9) para cada pipeline com estado independente.
+'   - Quando ON, ativa export Git no fim do run como equivalente ao auto-save=debug, sem exigir mudanca estrutural no PAINEL.
 ' - 2026-03-04 | Codex | Auto-upload Git de artefactos de debug por pipeline
 '   - Ativa exportacao no fim da execucao quando auto-guardar contem "sim, todos" ou "debug".
 '   - Publica CSV de DEBUG/Seguimento/catalogo e TXT do PAINEL via Git Data API usando GH_* no Config.
@@ -95,6 +98,7 @@ Option Explicit
 ' Funcoes e procedimentos (inventario publico):
 ' - Painel_CriarBotoes (Sub): rotina publica do modulo.
 ' - Painel_Click_Iniciar (Sub): rotina publica do modulo.
+' - Painel_Click_GitLog (Sub): alterna estado ON/OFF do gatilho Git LOG por pipeline.
 ' - Painel_Click_Registar (Sub): rotina publica do modulo.
 ' - Painel_Click_SetDefault (Sub): rotina publica do modulo.
 ' - Painel_Click_CriarMapa (Sub): rotina publica do modulo.
@@ -145,6 +149,7 @@ Private Const BTN_INICIAR As String = "BTN_INICIAR_"
 Private Const BTN_REGISTAR As String = "BTN_REGISTAR_"
 Private Const BTN_SETDEFAULT As String = "BTN_SETDEFAULT_"
 Private Const BTN_MAPA As String = "BTN_MAPA_"
+Private Const BTN_GITLOG As String = "BTN_GITLOG_"
 
 ' ============================================================
 ' 1) Instalacao / UI
@@ -165,6 +170,7 @@ Public Sub Painel_CriarBotoes()
 
         ' Botoes principais (linha 8)
         Call Painel_CriarBotaoEmCelula(ws, ws.Cells(8, colIniciar), BTN_INICIAR & Format$(i, "00"), "INICIAR", "Painel_Click_Iniciar")
+        Call Painel_CriarBotaoEmCelula(ws, ws.Cells(9, colIniciar), BTN_GITLOG & Format$(i, "00"), Painel_GitLog_Label(i), "Painel_Click_GitLog")
         Call Painel_CriarBotaoEmCelula(ws, ws.Cells(8, colRegistar), BTN_REGISTAR & Format$(i, "00"), "REGISTAR", "Painel_Click_Registar")
 
         ' Botoes auxiliares (linha 5/6 na 2a coluna do par)
@@ -231,6 +237,16 @@ Public Sub Painel_Click_Iniciar()
 End Sub
 
 
+
+Public Sub Painel_Click_GitLog()
+    Dim idx As Long
+    idx = Painel_ExtrairIndiceDoCaller(BTN_GITLOG)
+    If idx = 0 Then Exit Sub
+
+    Call Painel_GitLog_SetEnabled(idx, Not Painel_GitLog_IsEnabled(idx))
+    Call Painel_GitLog_RefreshButtonCaption(idx)
+End Sub
+
 Public Sub Painel_Click_Registar()
     Dim idx As Long
     idx = Painel_ExtrairIndiceDoCaller(BTN_REGISTAR)
@@ -272,6 +288,72 @@ Private Function Painel_ExtrairIndiceDoCaller(ByVal prefixo As String) As Long
 Falha:
     Painel_ExtrairIndiceDoCaller = 0
 End Function
+
+
+Private Function Painel_GitLog_Name(ByVal pipelineIndex As Long) As String
+    Painel_GitLog_Name = "PIPE_GITLOG_" & Format$(pipelineIndex, "00")
+End Function
+
+Private Function Painel_GitLog_Label(ByVal pipelineIndex As Long) As String
+    If Painel_GitLog_IsEnabled(pipelineIndex) Then
+        Painel_GitLog_Label = "Git LOG ON"
+    Else
+        Painel_GitLog_Label = "Git LOG OFF"
+    End If
+End Function
+
+Private Function Painel_GitLog_IsEnabled(ByVal pipelineIndex As Long) As Boolean
+    On Error GoTo Fallback
+
+    Dim nm As Name
+    Set nm = ThisWorkbook.Names(Painel_GitLog_Name(pipelineIndex))
+
+    Dim raw As String
+    raw = UCase$(Replace(CStr(nm.RefersTo), "=", ""))
+    raw = Replace(raw, """, "")
+    raw = Trim$(raw)
+
+    Painel_GitLog_IsEnabled = (raw = "ON" Or raw = "TRUE" Or raw = "1")
+    Exit Function
+
+Fallback:
+    Painel_GitLog_IsEnabled = False
+End Function
+
+Private Sub Painel_GitLog_SetEnabled(ByVal pipelineIndex As Long, ByVal enabled As Boolean)
+    On Error Resume Next
+
+    Dim refValue As String
+    If enabled Then
+        refValue = "=""ON"""
+    Else
+        refValue = "=""OFF"""
+    End If
+
+    Dim keyName As String
+    keyName = Painel_GitLog_Name(pipelineIndex)
+
+    ThisWorkbook.Names(keyName).Delete
+    ThisWorkbook.Names.Add Name:=keyName, RefersTo:=refValue
+
+    On Error GoTo 0
+End Sub
+
+Private Sub Painel_GitLog_RefreshButtonCaption(ByVal pipelineIndex As Long)
+    On Error Resume Next
+
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(SHEET_PAINEL)
+
+    Dim shp As Shape
+    Set shp = ws.Shapes(BTN_GITLOG & Format$(pipelineIndex, "00"))
+
+    If shp Is Nothing Then Exit Sub
+
+    shp.TextFrame.Characters.text = Painel_GitLog_Label(pipelineIndex)
+
+    On Error GoTo 0
+End Sub
 
 ' ============================================================
 ' 3) Pipeline: REGISTAR / SET DEFAULT / CRIAR MAPA
@@ -593,6 +675,9 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     painelAutoSave = Trim$(CStr(wsPainel.Cells(4, colIniciar).value))
     If painelAutoSave = "" Then painelAutoSave = "Sim"
 
+    If Painel_GitLog_IsEnabled(pipelineIndex) Then
+        painelAutoSave = "debug"
+    End If
 
     Dim maxSteps As Long, maxRep As Long
     Call Painel_LerLimitesPipeline(wsPainel, pipelineIndex, maxSteps, maxRep)
