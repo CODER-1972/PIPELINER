@@ -574,6 +574,8 @@ Se começar a ficar demasiado grande:
 - Quando houver relatos recorrentes de mojibake em ambientes mistos (VBE/editor/terminal), preferir normalizar para ASCII apenas comentarios/documentacao de modulos `.bas` (sem alterar chaves/labels funcionais) para reduzir ambiguidade visual sem impacto de runtime.
 
 - Em procedimentos VBA, evitar declarações locais duplicadas no mesmo escopo (ex.: `Dim txt As String` repetido); isso provoca erro de compilação "Duplicate declaration in current scope".
+
+- Em literais VBA que representem o caractere aspas dupla (`"`), usar `""""` (quatro aspas) no código fonte; formas truncadas (ex.: `"""`) geram `Compile error: Syntax error`.
 - Em literais funcionais críticos (nome de folha, severidade, flags), preferir token ASCII como base e adicionar fallback acentuado via `ChrW$` quando necessário; isso evita que variações UTF-8/CP1252 quebrem comparações/lookup no VBA.
 - Quando o CI reportar mojibake em `.bas/.cls/.frm`, normalizar apenas os módulos afetados para UTF-8 sem BOM e validar com `python scripts/check_vba_encoding.py` antes do commit; evitar conversões massivas sem diagnóstico para reduzir risco de regressão em diffs.
 - Em alterações assistidas por agentes (Codex/LLM), manter comentários e headers em ASCII puro sempre que possível e preservar `cp1252 + CRLF` no working tree para reduzir reincidência de mojibake e diffs de EOL.

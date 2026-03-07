@@ -313,7 +313,7 @@ Private Function Painel_GitLog_IsEnabled(ByVal pipelineIndex As Long) As Boolean
 
     Dim raw As String
     raw = UCase$(Replace(CStr(nm.RefersTo), "=", ""))
-    raw = Replace(raw, """, "")
+    raw = Replace(raw, """", "")
     raw = Trim$(raw)
 
     Painel_GitLog_IsEnabled = (raw = "ON" Or raw = "TRUE" Or raw = "1")
