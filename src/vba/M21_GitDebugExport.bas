@@ -423,6 +423,9 @@ Private Function JsonPickTreeSha(ByVal body As String) As String
     If re.Test(body) Then JsonPickTreeSha = re.Execute(body)(0).SubMatches(0)
 End Function
 
+Private Sub GitDebug_WriteLinkToSeguimento(ByVal pipelineNome As String, ByVal link As String)
+    On Error Resume Next
+
     Dim ws As Worksheet
     Set ws = ThisWorkbook.Worksheets(SHEET_SEGUIMENTO)
 
