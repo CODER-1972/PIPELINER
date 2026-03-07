@@ -42,7 +42,7 @@ Option Explicit
 
 Private Const SHEET_DEBUG As String = "DEBUG"
 Private Const SHEET_SEGUIMENTO As String = "Seguimento"
-Private Const SHEET_HIST As String = "HISTÓRICO"
+Private Const SHEET_HIST As String = "HISTORICO"
 Private Const GH_CONFIG_HEADER_ROW As Long = 8
 Private Const GH_CONFIG_FIRST_DATA_ROW As Long = 9
 
@@ -297,16 +297,16 @@ Private Function SheetToCsv(ByVal ws As Worksheet) As String
 
     Dim r As Long
     Dim c As Long
-    Dim line As String
+    Dim csvLine As String
     Dim out As String
 
     For r = 1 To lr
-        line = ""
+        csvLine = ""
         For c = 1 To lc
-            If c > 1 Then line = line & ","
-            line = line & CsvEscape(CStr(ws.Cells(r, c).Value))
+            If c > 1 Then csvLine = csvLine & ","
+            csvLine = csvLine & CsvEscape(CStr(ws.Cells(r, c).Value))
         Next c
-        out = out & line & vbCrLf
+        out = out & csvLine & vbCrLf
     Next r
 
     SheetToCsv = out
@@ -505,8 +505,8 @@ End Sub
 
 Private Function GitDebug_GetHistoricoSheet() As Worksheet
     On Error Resume Next
-    Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets("HISTÃ“RICO")
-    If GitDebug_GetHistoricoSheet Is Nothing Then Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets(SHEET_HIST)
+    Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets(SHEET_HIST)
+    If GitDebug_GetHistoricoSheet Is Nothing Then Set GitDebug_GetHistoricoSheet = ThisWorkbook.Worksheets("HIST" & ChrW$(&HD3) & "RICO")
     On Error GoTo 0
 End Function
 
