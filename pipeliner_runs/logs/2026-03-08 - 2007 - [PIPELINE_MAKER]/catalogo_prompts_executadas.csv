@@ -1,0 +1,2 @@
+﻿prompt_id,catalogo,nome_curto,nome_descritivo,modelo,modos,storage
+"PIPELINE_MAKER/01/WF_PROMPT_AUDIT/v1.3","PIPELINE_MAKER","AuditoriaPrompts_PIPELINER","Auditar/optimizar prompts e configurar execução no PIPELINER; gerar TSVs + relatório + exportações.","gpt-5.2","Code Interpreter","True"
