@@ -192,7 +192,6 @@ Troubleshooting rápido para `contents_api` com `GH_CONTENTS_CREATE_FAILED` (`ht
 4. se necessário, testar o mesmo token via `curl` em `GET /repos/{owner}/{repo}` para excluir problemas de permissões.
 5. se `GH_API_VERSION` vier em formato não canónico, o DEBUG passa a emitir `GH_CONFIG` (ALERTA) com `raw` e `normalized` para facilitar correção na folha Config.
 
-
 ## 3.3 Seguimento
 
 Auditoria por passo: prompt executado, configuração usada, status HTTP, output, next prompt decidido, ficheiros usados e colunas de contexto (captured/injected).
