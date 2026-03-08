@@ -1,0 +1,31 @@
+﻿Pipeline Index: 1
+Nome: PIPELINE_MAKER
+INPUT Folder: C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER
+OUTPUT Folder: C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER
+Auto-guardar ficheiros: Sim
+Max Steps: 10
+Max Repetitions: 3
+Primeiros IDs (INICIAR):
+- PIPELINE_MAKER/01/WF_PROMPT_AUDIT/v1.3
+- STOP
+- PIPELINE_MAKER/03/WF_LAYOUT_QA/v1.1
+- STOP
+- STOP
+- 
+- 
+- 
+- 
+- 
+- 
+Primeiros IDs (REGISTAR):
+- PIPELINE_MAKER/01/WF_PROMPT_AUDIT/v1.3
+- PIPELINE_MAKER/02/WF_LAYOUT_FROM_TXT/v1.2
+- PIPELINE_MAKER/03/WF_LAYOUT_QA/v1.1
+- PIPELINE_MAKER/04/WF_CATALOGO_FROM_LAYOUT_TXT/v1.3
+- STOP
+- 
+- 
+- PIPELINE_MAKER/02/WF_LAYOUT_FROM_TXT/v1.1
+- 
+- 
+- PIPELINE_MAKER_previo/02/WF_LAYOUT_FROM_TXT/v1.2
