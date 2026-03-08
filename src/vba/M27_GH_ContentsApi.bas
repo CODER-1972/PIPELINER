@@ -9,6 +9,9 @@ Option Explicit
 ' - Registar eventos canonicos de progresso/erro no DEBUG sem expor segredos.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Remove literais JSON com aspas escapadas em validacao de create
+'   - Substitui deteccoes InStr(""""chave"""") por GH_TreeCommit_JsonPick para evitar erro de compilacao por aspas truncadas.
+'   - Mantem o mesmo diagnostico (has_sha/has_committer/has_author) com parser JSON ja usado no modulo.
 ' - 2026-03-08 | Codex | Adiciona alertas para risco de codificacao textual em conteudo binario
 '   - Regista ALERTA quando file_kind=binary porque o payload usa GH_Blob_Base64FromText(contentText).
 '   - Regista ALERTA quando local_size_bytes e estimativa de string (LenB), nao tamanho real em disco para binarios externos.
@@ -311,7 +314,12 @@ Private Function GH_ContentsApi_ValidateCreatePayload( _
     b64 = Trim$(GH_TreeCommit_JsonPick(requestBody, "content"))
     hasMessage = (msg <> "")
     hasContent = (b64 <> "")
-    hasSha = (Trim$(createSha) <> "") Or (InStr(1, requestBody, """"sha"""", vbTextCompare) > 0)
+    hasSha = (Trim$(createSha) <> "") Or (Trim$(GH_TreeCommit_JsonPick(requestBody, "sha")) <> "")
+
+    Dim hasCommitter As Boolean
+    Dim hasAuthor As Boolean
+    hasCommitter = (Trim$(GH_TreeCommit_JsonPick(requestBody, "committer")) <> "")
+    hasAuthor = (Trim$(GH_TreeCommit_JsonPick(requestBody, "author")) <> "")
 
     Dim b64Len As Long
     b64Len = Len(b64)
@@ -325,8 +333,8 @@ Private Function GH_ContentsApi_ValidateCreatePayload( _
               " | content_b64_mod4=" & CStr(b64Len Mod 4) & _
               " | content_b64_prefix=" & GH_ContentsApi_Base64PrefixMasked(b64) & _
               " | has_sha=" & IIf(hasSha, "SIM", "NAO") & _
-              " | has_committer=" & IIf(InStr(1, requestBody, """"committer"""", vbTextCompare) > 0, "SIM", "NAO") & _
-              " | has_author=" & IIf(InStr(1, requestBody, """"author"""", vbTextCompare) > 0, "SIM", "NAO") & _
+              " | has_committer=" & IIf(hasCommitter, "SIM", "NAO") & _
+              " | has_author=" & IIf(hasAuthor, "SIM", "NAO") & _
               " | api_version=" & apiVersion & _
               " | json_len=" & CStr(Len(requestBody))
 
