@@ -1,0 +1,2 @@
+﻿prompt_id,catalogo,nome_curto,nome_descritivo,modelo,modos,storage
+"PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.4","PIPELINE_MAKER_ContextKV","AuditoriaPrompts_PIPELINER","Auditar/optimizar prompts e preparar handoff por variáveis (ContextKV/RESULTS_JSON).","gpt-5-nano","None","True"
