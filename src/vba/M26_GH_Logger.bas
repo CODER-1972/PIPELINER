@@ -9,6 +9,11 @@ Option Explicit
 ' - Garantir mensagens curtas, sem segredos e com sugestoes acionaveis.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Completa taxonomia de eventos contents_api por fase
+'   - Adiciona codigos para inicio de create/update e falha por ficheiro no fluxo serial.
+' - 2026-03-08 | Codex | Expande eventos GH para dispatch por upload mode
+'   - Adiciona codigos canonicos GH_UPLOAD_START/GH_MODE_SELECTED/GH_UPLOAD_DONE/GH_UPLOAD_FAILED.
+'   - Inclui eventos GH_CONTENTS_* e GH_REF_CONFLICT_409/GH_RETRY_SCHEDULED para rastreabilidade.
 ' - 2026-03-07 | Codex | Corrige constantes de evento GH para evitar erro de compilacao
 '   - Substitui aliases legados nao declarados (GH_UNKNOWN/GH_CONFIG_OK/...) por codigos canonicos GH_EVT_*.
 '   - Normaliza mapeamento em GH_NormalizeEventCode para nomes realmente definidos no modulo.
@@ -37,6 +42,32 @@ Public Const GH_EVT_TREE_CREATED As String = "GH_TREE_CREATED"
 Public Const GH_EVT_COMMIT_CREATED As String = "GH_COMMIT_CREATED"
 Public Const GH_EVT_REF_UPDATED As String = "GH_REF_UPDATED"
 Public Const GH_EVT_MAX_FILES As String = "GH_MAX_FILES"
+Public Const GH_EVT_UPLOAD_START As String = "GH_UPLOAD_START"
+Public Const GH_EVT_MODE_SELECTED As String = "GH_MODE_SELECTED"
+Public Const GH_EVT_UPLOAD_DONE As String = "GH_UPLOAD_DONE"
+Public Const GH_EVT_UPLOAD_FAILED As String = "GH_UPLOAD_FAILED"
+Public Const GH_EVT_UPLOAD_MODE_DEFAULTED As String = "GH_UPLOAD_MODE_DEFAULTED"
+Public Const GH_EVT_UPLOAD_MODE_INVALID As String = "GH_UPLOAD_MODE_INVALID"
+Public Const GH_EVT_REF_FETCH_START As String = "GH_REF_FETCH_START"
+Public Const GH_EVT_REF_CONFLICT_409 As String = "GH_REF_CONFLICT_409"
+Public Const GH_EVT_RETRY_SCHEDULED As String = "GH_RETRY_SCHEDULED"
+Public Const GH_EVT_CONTENTS_BATCH_START As String = "GH_CONTENTS_BATCH_START"
+Public Const GH_EVT_CONTENTS_BATCH_DONE As String = "GH_CONTENTS_BATCH_DONE"
+Public Const GH_EVT_FILE_BEGIN As String = "GH_FILE_BEGIN"
+Public Const GH_EVT_FILE_DONE As String = "GH_FILE_DONE"
+Public Const GH_EVT_FILE_PROBE_START As String = "GH_FILE_PROBE_START"
+Public Const GH_EVT_FILE_PROBE_FAILED As String = "GH_FILE_PROBE_FAILED"
+Public Const GH_EVT_FILE_EXISTS_YES As String = "GH_FILE_EXISTS_YES"
+Public Const GH_EVT_FILE_EXISTS_NO As String = "GH_FILE_EXISTS_NO"
+Public Const GH_EVT_FILE_SHA_OK As String = "GH_FILE_SHA_OK"
+Public Const GH_EVT_FILE_SHA_MISSING_FOR_UPDATE As String = "GH_FILE_SHA_MISSING_FOR_UPDATE"
+Public Const GH_EVT_CONTENTS_CREATE_OK As String = "GH_CONTENTS_CREATE_OK"
+Public Const GH_EVT_CONTENTS_CREATE_FAILED As String = "GH_CONTENTS_CREATE_FAILED"
+Public Const GH_EVT_CONTENTS_UPDATE_OK As String = "GH_CONTENTS_UPDATE_OK"
+Public Const GH_EVT_CONTENTS_UPDATE_FAILED As String = "GH_CONTENTS_UPDATE_FAILED"
+Public Const GH_EVT_CONTENTS_CREATE_START As String = "GH_CONTENTS_CREATE_START"
+Public Const GH_EVT_CONTENTS_UPDATE_START As String = "GH_CONTENTS_UPDATE_START"
+Public Const GH_EVT_FILE_FAILED As String = "GH_FILE_FAILED"
 
 Public Sub GH_LogInfo(ByVal stepNo As Long, ByVal pipelineNome As String, ByVal eventCode As String, ByVal message As String, Optional ByVal suggestion As String = "")
     Call Debug_Registar(stepNo, pipelineNome, "INFO", "", eventCode, message, suggestion)
