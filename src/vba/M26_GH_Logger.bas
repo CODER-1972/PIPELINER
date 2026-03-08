@@ -9,6 +9,8 @@ Option Explicit
 ' - Garantir mensagens curtas, sem segredos e com sugestoes acionaveis.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Adiciona eventos de validacao pre-PUT no create
+'   - Inclui codigos GH_CONTENTS_CREATE_PAYLOAD_CHECK/REQUEST_READY e invalidacoes de payload/base64/json.
 ' - 2026-03-08 | Codex | Completa taxonomia de eventos contents_api por fase
 '   - Adiciona codigos para inicio de create/update e falha por ficheiro no fluxo serial.
 ' - 2026-03-08 | Codex | Expande eventos GH para dispatch por upload mode
@@ -67,6 +69,13 @@ Public Const GH_EVT_CONTENTS_UPDATE_OK As String = "GH_CONTENTS_UPDATE_OK"
 Public Const GH_EVT_CONTENTS_UPDATE_FAILED As String = "GH_CONTENTS_UPDATE_FAILED"
 Public Const GH_EVT_CONTENTS_CREATE_START As String = "GH_CONTENTS_CREATE_START"
 Public Const GH_EVT_CONTENTS_UPDATE_START As String = "GH_CONTENTS_UPDATE_START"
+Public Const GH_EVT_CONTENTS_CREATE_PAYLOAD_CHECK As String = "GH_CONTENTS_CREATE_PAYLOAD_CHECK"
+Public Const GH_EVT_CONTENTS_CREATE_REQUEST_READY As String = "GH_CONTENTS_CREATE_REQUEST_READY"
+Public Const GH_EVT_CONTENTS_CREATE_INVALID_MESSAGE As String = "GH_CONTENTS_CREATE_INVALID_MESSAGE"
+Public Const GH_EVT_CONTENTS_CREATE_INVALID_CONTENT As String = "GH_CONTENTS_CREATE_INVALID_CONTENT"
+Public Const GH_EVT_CONTENTS_CREATE_INVALID_BASE64 As String = "GH_CONTENTS_CREATE_INVALID_BASE64"
+Public Const GH_EVT_CONTENTS_CREATE_UNEXPECTED_SHA As String = "GH_CONTENTS_CREATE_UNEXPECTED_SHA"
+Public Const GH_EVT_CONTENTS_CREATE_JSON_INVALID As String = "GH_CONTENTS_CREATE_JSON_INVALID"
 Public Const GH_EVT_FILE_FAILED As String = "GH_FILE_FAILED"
 
 Public Sub GH_LogInfo(ByVal stepNo As Long, ByVal pipelineNome As String, ByVal eventCode As String, ByVal message As String, Optional ByVal suggestion As String = "")

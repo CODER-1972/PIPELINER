@@ -143,7 +143,8 @@ No update de `PATCH /git/refs/heads/{branch}`, conflitos HTTP `409` são tratado
   - por defeito **não** lê `HEAD` da branch (apenas em troubleshooting explícito, quando necessário).
 
 Eventos comuns de rastreabilidade no DEBUG: `GH_UPLOAD_START`, `GH_MODE_SELECTED`, `GH_UPLOAD_DONE` e `GH_UPLOAD_FAILED`, com resumo de sucessos/falhas/retries por execução.
-No `contents_api`, o runtime também regista fases por ficheiro (`GH_CONTENTS_CREATE_START`/`GH_CONTENTS_UPDATE_START`) e falha terminal por item (`GH_FILE_FAILED`) para troubleshooting granular.
+No `contents_api`, o runtime também regista fases por ficheiro (`GH_CONTENTS_CREATE_START`/`GH_CONTENTS_UPDATE_START`), validação pré-`PUT` (`GH_CONTENTS_CREATE_PAYLOAD_CHECK`/`GH_CONTENTS_CREATE_REQUEST_READY`) e falha terminal por item (`GH_FILE_FAILED`) para troubleshooting granular.
+Além disso, `GH_FILE_BEGIN` passa a incluir `file_kind=text|binary` e `local_size_bytes=...`, e o payload pode incluir `author/committer` quando `GH_COMMIT_AUTHOR_NAME` + `GH_COMMIT_AUTHOR_EMAIL` estiverem preenchidos.
 
 ### Quadro resumido `GH_*` (defaults e valores permitidos)
 
@@ -188,9 +189,11 @@ Troubleshooting rápido para `contents_api` com `GH_CONTENTS_CREATE_FAILED` (`ht
 
 1. validar `GH_API_VERSION` no formato `YYYY-MM-DD` (ex.: `2022-11-28`); o runtime também tenta converter `dd/mm/yyyy` automaticamente para reduzir falhas 400;
 2. confirmar `GH_OWNER`, `GH_REPO`, `GH_BRANCH` e `GH_BASE_PATH` sem espaços/valores inválidos;
-3. verificar no DEBUG o detalhe `err=...` do evento `GH_CONTENTS_CREATE_FAILED` (mensagem curta da API);
-4. se necessário, testar o mesmo token via `curl` em `GET /repos/{owner}/{repo}` para excluir problemas de permissões.
-5. se `GH_API_VERSION` vier em formato não canónico, o DEBUG passa a emitir `GH_CONFIG` (ALERTA) com `raw` e `normalized` para facilitar correção na folha Config.
+3. confirmar a sequência `GH_CONTENTS_CREATE_START -> GH_CONTENTS_CREATE_PAYLOAD_CHECK -> GH_CONTENTS_CREATE_REQUEST_READY` antes do `PUT`;
+4. verificar no DEBUG o detalhe `err=...` do evento `GH_CONTENTS_CREATE_FAILED` (mensagem curta da API), incluindo `endpoint_short/api_version/response_body_excerpt`;
+5. se necessário, testar o mesmo token via `curl` em `GET /repos/{owner}/{repo}` para excluir problemas de permissões.
+6. se `GH_API_VERSION` vier em formato não canónico, o DEBUG passa a emitir `GH_CONFIG` (ALERTA) com `raw` e `normalized` para facilitar correção na folha Config.
+
 
 ## 3.3 Seguimento
 

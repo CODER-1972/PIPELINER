@@ -596,3 +596,6 @@ Se começar a ficar demasiado grande:
 - Em falhas `GH_CONTENTS_CREATE_FAILED`/`GH_CONTENTS_UPDATE_FAILED`, incluir no detalhe DEBUG pelo menos `http_status`, resumo curto de `message` da API e uma ação sugerida por classe de erro (400/401/403/404/422), evitando logs genéricos sem direção de correção.
 - Em headers HTTP com versões de API configuráveis (ex.: `GH_API_VERSION`), normalizar formatos comuns de entrada (ex.: `dd/mm/yyyy` -> `yyyy-mm-dd`) e aplicar fallback seguro para evitar `400 Bad Request` por erro de formato.
 - Quando houver normalização automática de configuração sensível a formato (ex.: `GH_API_VERSION`), emitir `ALERTA` explícito em `GH_CONFIG` com valores `raw` e `normalized` para orientar correção no Config sem bloquear execução.
+- Em fluxos `contents_api` de create, executar validação pré-`PUT` e registar sempre `GH_CONTENTS_CREATE_PAYLOAD_CHECK` + `GH_CONTENTS_CREATE_REQUEST_READY` com resumo sanitizado (sem token/base64 completo) para permitir diagnóstico sem inspeção de código.
+
+- Em `contents_api`, manter builders distintos para `create` e `update` (ou branch condicional explicitamente verificável) para garantir que `sha` nunca entra no create e para facilitar auditoria de regressões no payload.
