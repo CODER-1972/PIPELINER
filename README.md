@@ -133,6 +133,17 @@ Regra prática do token: se `GH_TOKEN_ENV` estiver vazio, inválido, ou com valo
 
 No update de `PATCH /git/refs/heads/{branch}`, conflitos HTTP `409` são tratados explicitamente como concorrência: quando `GH_RETRY_ON_CONFLICT=true`, o fluxo reinicia desde a leitura de HEAD até ao limite de `GH_MAX_RETRIES`, registando eventos canónicos `GH_REF_CONFLICT`, `GH_RETRY_ATTEMPT`, `GH_REF_UPDATED` e `GH_DONE_FAIL`.
 
+### Modos de upload GitHub (`GH_UPLOAD_MODE`)
+
+- `tree_commit` (default): fluxo Git Data API em lote (`ref -> blobs -> tree -> commit -> update ref`). Este modo lê sempre o `HEAD` da branch antes do commit incremental.
+- `contents_api`: fluxo serial por ficheiro via `PUT /repos/{owner}/{repo}/contents/{path}`.
+  - se o ficheiro existe, o runtime obtém `sha` do ficheiro e faz update com esse `sha`;
+  - se não existe, faz create sem `sha`;
+  - por defeito **não** lê `HEAD` da branch (apenas em troubleshooting explícito, quando necessário).
+
+Eventos comuns de rastreabilidade no DEBUG: `GH_UPLOAD_START`, `GH_MODE_SELECTED`, `GH_UPLOAD_DONE` e `GH_UPLOAD_FAILED`, com resumo de sucessos/falhas/retries por execução.
+No `contents_api`, o runtime também regista fases por ficheiro (`GH_CONTENTS_CREATE_START`/`GH_CONTENTS_UPDATE_START`) e falha terminal por item (`GH_FILE_FAILED`) para troubleshooting granular.
+
 ### Quadro resumido `GH_*` (defaults e valores permitidos)
 
 | Chave (`Config`) | Default | Valores permitidos / intervalo |
@@ -153,6 +164,7 @@ No update de `PATCH /git/refs/heads/{branch}`, conflitos HTTP `409` são tratado
 | `GH_MAX_FILES` | `200` | `1..1000` |
 | `GH_MAX_FILE_MB` | `50` | `1..200` |
 | `GH_MAX_RETRIES` | `3` | `0..10` |
+| `GH_CONTENTS_BATCH_POLICY` | `fail_fast` | `fail_fast` ou `best_effort` |
 
 Fallback de token (ordem exata):
 
