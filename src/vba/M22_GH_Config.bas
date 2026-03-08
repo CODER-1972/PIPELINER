@@ -9,6 +9,10 @@ Option Explicit
 ' - Resolver enable/token de forma deterministica para o facade M21.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Melhora diagnostico de token para casos Environ$ vazio
+'   - Passa a reportar token_source com escopo efetivo (PROCESS/USER/SYSTEM) quando encontrado.
+'   - Melhora fallback de erro para tentar GH_TOKEN e GITHUB_TOKEN via helper unificado.
+'   - Adiciona helper deterministico de selftest para validar precedencia env/alias/config sem depender do host.
 ' - 2026-03-08 | Codex | Torna resolucao de token mais robusta em Excel/Windows
 '   - Mantem leitura primaria via Environ$(GH_TOKEN_ENV), com fallback para USER/SYSTEM via WScript.Shell.
 '   - Adiciona fallback entre aliases GH_TOKEN e GITHUB_TOKEN quando a variavel configurada vier vazia.
@@ -48,6 +52,8 @@ Option Explicit
 '   - Resolve token priorizando GH_TOKEN quando indicado e devolve a fonte para auditoria.
 ' - GH_Config_ReadEnvVar(envKey As String, Optional ByRef scopeUsed As String = "") As String
 '   - Le variavel de ambiente em PROCESS/USER/SYSTEM para evitar falso vazio quando o Excel nao herda sessao.
+' - GH_Config_SelfTest_ResolveTokenFromValues(envKeyRaw As String, envMain As String, envGH As String, envGithub As String, configToken As String, ByRef sourceUsed As String) As String
+'   - Helper deterministico de precedencia para testes de token sem depender de variaveis reais do host.
 ' - GH_Config_ResolveUploadMode(cfg As Object, reason As String, Optional wasDefaulted As Boolean = False) As String
 '   - Normaliza upload_mode e valida apenas tree_commit/contents_api com fallback seguro.
 ' =============================================================================
@@ -231,15 +237,17 @@ Public Function GH_Config_ResolveToken(Optional ByRef sourceUsed As String = "")
     End If
 
     Dim tkn As String
-    tkn = GH_Config_ReadEnvVar(envKey)
+    Dim scopeUsed As String
+    tkn = GH_Config_ReadEnvVar(envKey, scopeUsed)
+    If tkn <> "" Then sourceUsed = "ENV:" & envKey & "@" & scopeUsed
 
     If tkn = "" Then
         If StrComp(envKey, "GH_TOKEN", vbTextCompare) = 0 Then
-            tkn = GH_Config_ReadEnvVar("GITHUB_TOKEN")
-            If tkn <> "" Then sourceUsed = "ENV:GITHUB_TOKEN (alias)"
+            tkn = GH_Config_ReadEnvVar("GITHUB_TOKEN", scopeUsed)
+            If tkn <> "" Then sourceUsed = "ENV:GITHUB_TOKEN (alias)@" & scopeUsed
         ElseIf StrComp(envKey, "GITHUB_TOKEN", vbTextCompare) = 0 Then
-            tkn = GH_Config_ReadEnvVar("GH_TOKEN")
-            If tkn <> "" Then sourceUsed = "ENV:GH_TOKEN (alias)"
+            tkn = GH_Config_ReadEnvVar("GH_TOKEN", scopeUsed)
+            If tkn <> "" Then sourceUsed = "ENV:GH_TOKEN (alias)@" & scopeUsed
         End If
     End If
 
@@ -256,12 +264,56 @@ Public Function GH_Config_ResolveToken(Optional ByRef sourceUsed As String = "")
     Exit Function
 
 Fallback:
-    GH_Config_ResolveToken = Trim$(CStr(Environ$("GH_TOKEN")))
+    tkn = GH_Config_ReadEnvVar("GH_TOKEN", scopeUsed)
+    If tkn = "" Then tkn = GH_Config_ReadEnvVar("GITHUB_TOKEN", scopeUsed)
+    GH_Config_ResolveToken = tkn
     If GH_Config_ResolveToken <> "" Then
-        sourceUsed = "ENV:GH_TOKEN (error_fallback)"
+        sourceUsed = "ENV:error_fallback@" & scopeUsed
     Else
         sourceUsed = "nao_resolvido"
     End If
+End Function
+
+Public Function GH_Config_SelfTest_ResolveTokenFromValues( _
+    ByVal envKeyRaw As String, _
+    ByVal envMain As String, _
+    ByVal envGH As String, _
+    ByVal envGithub As String, _
+    ByVal configToken As String, _
+    Optional ByRef sourceUsed As String = "") As String
+
+    Dim envKey As String
+    envKey = Trim$(envKeyRaw)
+    If envKey = "" Or UCase$(envKey) = "AMBIENTE" Or UCase$(envKey) = "ENVIRONMENT" Then
+        envKey = "GH_TOKEN"
+        sourceUsed = "ENV:GH_TOKEN (fallback)"
+    Else
+        sourceUsed = "ENV:" & envKey
+    End If
+
+    Dim tkn As String
+    tkn = Trim$(envMain)
+
+    If tkn = "" Then
+        If StrComp(envKey, "GH_TOKEN", vbTextCompare) = 0 Then
+            tkn = Trim$(envGithub)
+            If tkn <> "" Then sourceUsed = "ENV:GITHUB_TOKEN (alias)"
+        ElseIf StrComp(envKey, "GITHUB_TOKEN", vbTextCompare) = 0 Then
+            tkn = Trim$(envGH)
+            If tkn <> "" Then sourceUsed = "ENV:GH_TOKEN (alias)"
+        End If
+    End If
+
+    If tkn = "" Then
+        tkn = Trim$(configToken)
+        If tkn <> "" Then
+            sourceUsed = "CONFIG:GH_TOKEN_CONFIG"
+        Else
+            sourceUsed = sourceUsed & " -> vazio"
+        End If
+    End If
+
+    GH_Config_SelfTest_ResolveTokenFromValues = tkn
 End Function
 
 Private Function GH_Config_ReadEnvVar(ByVal envKey As String, Optional ByRef scopeUsed As String = "") As String
