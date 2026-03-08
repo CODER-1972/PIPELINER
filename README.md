@@ -129,7 +129,8 @@ Também suporta exportação opcional de debug para GitHub (Git Data API) no fim
 
 Configuração recomendada (folha `Config`, formato Key/Value): `GH_OWNER`, `GH_REPO`, `GH_BRANCH`, `GH_API_BASE`, `GH_TOKEN_ENV`, `GH_TOKEN_CONFIG`, `GH_COMMIT_MESSAGE_TEMPLATE`, `GH_BASE_PATH`, `GH_API_VERSION`, `GH_USER_AGENT`, `GH_RETRY_ON_CONFLICT`, `GH_MAX_RETRIES`.
 
-Regra prática do token: se `GH_TOKEN_ENV` estiver vazio, inválido, ou com valor `Ambiente`/`Environment` (case-insensitive), o VBA tenta automaticamente `ENV("GH_TOKEN")`.
+Regra prática do token: se `GH_TOKEN_ENV` estiver vazio, inválido, ou com valor `Ambiente`/`Environment` (case-insensitive), o VBA tenta automaticamente `GH_TOKEN`.
+Se `Environ$(...)` vier vazio no Excel, o runtime também tenta ler `USER`/`SYSTEM` via `WScript.Shell.Environment` e aplica fallback de alias entre `GH_TOKEN` e `GITHUB_TOKEN`.
 
 No update de `PATCH /git/refs/heads/{branch}`, conflitos HTTP `409` são tratados explicitamente como concorrência: quando `GH_RETRY_ON_CONFLICT=true`, o fluxo reinicia desde a leitura de HEAD até ao limite de `GH_MAX_RETRIES`, registando eventos canónicos `GH_REF_CONFLICT`, `GH_RETRY_ATTEMPT`, `GH_REF_UPDATED` e `GH_DONE_FAIL`.
 
@@ -152,7 +153,7 @@ No `contents_api`, o runtime também regista fases por ficheiro (`GH_CONTENTS_CR
 | `GH_REPO` | `pipeliner-data` | texto não vazio |
 | `GH_BRANCH` | `main` | branch existente |
 | `GH_API_BASE` | `https://api.github.com` | URL válida |
-| `GH_TOKEN_ENV` | `GITHUB_TOKEN` | nome de variável de ambiente |
+| `GH_TOKEN_ENV` | `GITHUB_TOKEN` | nome de variável de ambiente (`GH_TOKEN` também suportada) |
 | `GH_TOKEN_CONFIG` | vazio | vazio ou token |
 | `GH_COMMIT_MESSAGE_TEMPLATE` | `PIPELINER run {{RUN_ID}}` | template com placeholders |
 | `GH_BASE_PATH` | `pipeliner_runs` | path relativo sem `/` inicial |
@@ -169,7 +170,10 @@ No `contents_api`, o runtime também regista fases por ficheiro (`GH_CONTENTS_CR
 Fallback de token (ordem exata):
 
 1. tenta ler `ENV(GH_TOKEN_ENV)` (por defeito: `ENV("GITHUB_TOKEN")`);
-2. se vazio, usa `GH_TOKEN_CONFIG` (fallback local no workbook).
+2. se vazio, tenta fallback de alias (`GH_TOKEN` <-> `GITHUB_TOKEN`) e lookup por escopo `USER`/`SYSTEM`;
+3. se ainda vazio, usa `GH_TOKEN_CONFIG` (fallback local no workbook).
+
+> Dica de diagnóstico no Windows: se acabou de criar/alterar a variável, feche e reabra o Excel para renovar o ambiente do processo.
 
 > **Segurança (produção):** evitar guardar token em claro no workbook. Preferir sempre variável de ambiente (`GH_TOKEN_ENV`) e deixar `GH_TOKEN_CONFIG` vazio, usando este último apenas para testes controlados.
 

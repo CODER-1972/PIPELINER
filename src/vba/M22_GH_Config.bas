@@ -9,6 +9,10 @@ Option Explicit
 ' - Resolver enable/token de forma deterministica para o facade M21.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Torna resolucao de token mais robusta em Excel/Windows
+'   - Mantem leitura primaria via Environ$(GH_TOKEN_ENV), com fallback para USER/SYSTEM via WScript.Shell.
+'   - Adiciona fallback entre aliases GH_TOKEN e GITHUB_TOKEN quando a variavel configurada vier vazia.
+'   - Mantem token_source explicito (sem expor segredo) para diagnostico acionavel no DEBUG.
 ' - 2026-03-08 | Codex | Preserva deteccao de default no GH_UPLOAD_MODE
 '   - Remove default antecipado em GH_Config_Load para permitir logging GH_UPLOAD_MODE_DEFAULTED no runtime.
 '   - Mantem fallback para tree_commit apenas na resolucao final de modo.
@@ -42,6 +46,8 @@ Option Explicit
 '   - Helper para concatenar campos em falta nas mensagens de validacao GH_*.
 ' - GH_Config_ResolveToken(Optional ByRef sourceUsed As String = "") As String
 '   - Resolve token priorizando GH_TOKEN quando indicado e devolve a fonte para auditoria.
+' - GH_Config_ReadEnvVar(envKey As String, Optional ByRef scopeUsed As String = "") As String
+'   - Le variavel de ambiente em PROCESS/USER/SYSTEM para evitar falso vazio quando o Excel nao herda sessao.
 ' - GH_Config_ResolveUploadMode(cfg As Object, reason As String, Optional wasDefaulted As Boolean = False) As String
 '   - Normaliza upload_mode e valida apenas tree_commit/contents_api com fallback seguro.
 ' =============================================================================
@@ -225,7 +231,17 @@ Public Function GH_Config_ResolveToken(Optional ByRef sourceUsed As String = "")
     End If
 
     Dim tkn As String
-    tkn = Trim$(CStr(Environ$(envKey)))
+    tkn = GH_Config_ReadEnvVar(envKey)
+
+    If tkn = "" Then
+        If StrComp(envKey, "GH_TOKEN", vbTextCompare) = 0 Then
+            tkn = GH_Config_ReadEnvVar("GITHUB_TOKEN")
+            If tkn <> "" Then sourceUsed = "ENV:GITHUB_TOKEN (alias)"
+        ElseIf StrComp(envKey, "GITHUB_TOKEN", vbTextCompare) = 0 Then
+            tkn = GH_Config_ReadEnvVar("GH_TOKEN")
+            If tkn <> "" Then sourceUsed = "ENV:GH_TOKEN (alias)"
+        End If
+    End If
 
     If tkn = "" Then
         tkn = Trim$(GH_Config_Get("GH_TOKEN_CONFIG", ""))
@@ -246,6 +262,42 @@ Fallback:
     Else
         sourceUsed = "nao_resolvido"
     End If
+End Function
+
+Private Function GH_Config_ReadEnvVar(ByVal envKey As String, Optional ByRef scopeUsed As String = "") As String
+    On Error GoTo Fallback
+
+    Dim keyTrim As String
+    keyTrim = Trim$(envKey)
+    If keyTrim = "" Then Exit Function
+
+    Dim valueText As String
+    valueText = Trim$(CStr(Environ$(keyTrim)))
+    If valueText <> "" Then
+        scopeUsed = "PROCESS"
+        GH_Config_ReadEnvVar = valueText
+        Exit Function
+    End If
+
+    Dim sh As Object
+    Set sh = CreateObject("WScript.Shell")
+
+    valueText = Trim$(CStr(sh.Environment("USER").Item(keyTrim)))
+    If valueText <> "" Then
+        scopeUsed = "USER"
+        GH_Config_ReadEnvVar = valueText
+        Exit Function
+    End If
+
+    valueText = Trim$(CStr(sh.Environment("SYSTEM").Item(keyTrim)))
+    If valueText <> "" Then
+        scopeUsed = "SYSTEM"
+        GH_Config_ReadEnvVar = valueText
+        Exit Function
+    End If
+
+Fallback:
+    GH_Config_ReadEnvVar = ""
 End Function
 
 Private Function GH_Config_IsEnabledByPanel(ByVal painelAutoSave As String) As Boolean
