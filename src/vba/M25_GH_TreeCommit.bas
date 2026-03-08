@@ -9,6 +9,9 @@ Option Explicit
 ' - Reutilizar HTTP/Blob/Logger mantendo M21 como facade de compatibilidade.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Retry em conflito 409 no update de ref
+'   - Implementa loop de retentativa com GH_RETRY_ON_CONFLICT e GH_MAX_RETRIES no update da branch.
+'   - Regista eventos GH_REF_FETCH_START, GH_REF_CONFLICT_409 e GH_RETRY_SCHEDULED para troubleshooting.
 ' - 2026-03-07 | Codex | Corrige sintaxe JSON em payloads Git Data API
 '   - Corrige escaping de aspas nas chaves `tree` e `parents` em requests de create tree/commit.
 '   - Elimina `Compile error: Syntax error` causado por literais JSON malformadas.
@@ -33,7 +36,8 @@ Public Function GH_TreeCommit_CommitFiles( _
     ByVal files As Collection, _
     ByVal pipelineNome As String, _
     ByRef commitSha As String, _
-    ByRef errReason As String) As Boolean
+    ByRef errReason As String, _
+    Optional ByRef retryCount As Long = 0) As Boolean
 
     On Error GoTo EH
 
@@ -53,6 +57,16 @@ Public Function GH_TreeCommit_CommitFiles( _
         Exit Function
     End If
 
+    retryCount = 0
+
+    Dim allowRetry As Boolean
+    allowRetry = GH_Config_GetBoolean(cfg, "retry_on_conflict", True)
+
+    Dim maxRetries As Long
+    maxRetries = GH_Config_GetLong(cfg, "max_retries", 3)
+    If maxRetries < 0 Then maxRetries = 0
+
+RetryFromHead:
     Dim headSha As String
     Dim baseTreeSha As String
     If Not GH_TreeCommit_LoadHeadAndBaseTree(cfg, pipelineNome, headSha, baseTreeSha, errReason) Then Exit Function
@@ -75,7 +89,16 @@ Public Function GH_TreeCommit_CommitFiles( _
 
     If Not GH_TreeCommit_CreateCommit(cfg, pipelineNome, headSha, treeSha, commitSha, errReason) Then Exit Function
 
-    If Not GH_TreeCommit_UpdateRef(cfg, pipelineNome, commitSha, errReason) Then Exit Function
+    Dim updateStatus As Long
+    If Not GH_TreeCommit_UpdateRef(cfg, pipelineNome, commitSha, errReason, updateStatus) Then
+        If updateStatus = 409 And allowRetry And retryCount < maxRetries Then
+            retryCount = retryCount + 1
+            Call GH_LogWarn(0, pipelineNome, "GH_REF_CONFLICT_409", "Conflito 409 ao atualizar ref.", "retry=" & CStr(retryCount) & "/" & CStr(maxRetries))
+            Call GH_LogInfo(0, pipelineNome, "GH_RETRY_SCHEDULED", "Nova tentativa apos conflito de ref.", "retry=" & CStr(retryCount))
+            GoTo RetryFromHead
+        End If
+        Exit Function
+    End If
 
     GH_TreeCommit_CommitFiles = True
     Exit Function
@@ -130,6 +153,8 @@ Private Function GH_TreeCommit_LoadHeadAndBaseTree( _
     Dim statusCode As Long
     Dim responseText As String
     Dim httpErr As String
+
+    Call GH_LogInfo(0, pipelineNome, "GH_REF_FETCH_START", "A obter HEAD da branch.", "branch=" & GH_Config_GetString(cfg, "branch"))
 
     If Not GH_HTTP_SendJson("GET", headRefUrl, cfg, "", statusCode, responseText, httpErr, pipelineNome) Then
         errReason = "Falha a obter HEAD ref"
@@ -239,9 +264,12 @@ Private Function GH_TreeCommit_UpdateRef( _
     ByVal cfg As Object, _
     ByVal pipelineNome As String, _
     ByVal commitSha As String, _
-    ByRef errReason As String) As Boolean
+    ByRef errReason As String, _
+    Optional ByRef statusCodeOut As Long = 0) As Boolean
 
     Dim req As String
+    statusCodeOut = 0
+
     req = "{""sha"":""" & commitSha & """,""force"":" & LCase$(CStr(GH_Config_GetBoolean(cfg, "force_update", False))) & "}"
 
     Dim statusCode As Long
@@ -254,7 +282,8 @@ Private Function GH_TreeCommit_UpdateRef( _
           GH_TreeCommit_UrlEncode(GH_Config_GetString(cfg, "branch"))
 
     If Not GH_HTTP_SendJson("PATCH", url, cfg, req, statusCode, responseText, httpErr, pipelineNome) Then
-        errReason = "Falha a atualizar ref"
+        statusCodeOut = statusCode
+        errReason = "Falha a atualizar ref (status=" & CStr(statusCode) & ")"
         Exit Function
     End If
 
