@@ -9,6 +9,8 @@ Option Explicit
 ' - Garantir mensagens curtas, sem segredos e com sugestoes acionaveis.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Adiciona alertas de diagnostico para conteudo/binario em contents_api
+'   - Inclui codigos para risco de codificacao textual em payload e limite de local_size_bytes para binarios.
 ' - 2026-03-08 | Codex | Adiciona eventos de validacao pre-PUT no create
 '   - Inclui codigos GH_CONTENTS_CREATE_PAYLOAD_CHECK/REQUEST_READY e invalidacoes de payload/base64/json.
 ' - 2026-03-08 | Codex | Completa taxonomia de eventos contents_api por fase
@@ -76,6 +78,8 @@ Public Const GH_EVT_CONTENTS_CREATE_INVALID_CONTENT As String = "GH_CONTENTS_CRE
 Public Const GH_EVT_CONTENTS_CREATE_INVALID_BASE64 As String = "GH_CONTENTS_CREATE_INVALID_BASE64"
 Public Const GH_EVT_CONTENTS_CREATE_UNEXPECTED_SHA As String = "GH_CONTENTS_CREATE_UNEXPECTED_SHA"
 Public Const GH_EVT_CONTENTS_CREATE_JSON_INVALID As String = "GH_CONTENTS_CREATE_JSON_INVALID"
+Public Const GH_EVT_CONTENTS_ENCODING_RISK As String = "GH_CONTENTS_ENCODING_RISK"
+Public Const GH_EVT_CONTENTS_LOCAL_SIZE_LIMIT As String = "GH_CONTENTS_LOCAL_SIZE_LIMIT"
 Public Const GH_EVT_FILE_FAILED As String = "GH_FILE_FAILED"
 
 Public Sub GH_LogInfo(ByVal stepNo As Long, ByVal pipelineNome As String, ByVal eventCode As String, ByVal message As String, Optional ByVal suggestion As String = "")

@@ -599,3 +599,4 @@ Se começar a ficar demasiado grande:
 - Em fluxos `contents_api` de create, executar validação pré-`PUT` e registar sempre `GH_CONTENTS_CREATE_PAYLOAD_CHECK` + `GH_CONTENTS_CREATE_REQUEST_READY` com resumo sanitizado (sem token/base64 completo) para permitir diagnóstico sem inspeção de código.
 
 - Em `contents_api`, manter builders distintos para `create` e `update` (ou branch condicional explicitamente verificável) para garantir que `sha` nunca entra no create e para facilitar auditoria de regressões no payload.
+- Em `contents_api`, quando `file_kind` sugerir binário, emitir `ALERTA` explícito no DEBUG indicando que `GH_Blob_Base64FromText(contentText)` é estratégia textual e que `local_size_bytes` (`LenB`) é apenas estimativa, com sugestão para validar bytes/tamanho real em disco.
