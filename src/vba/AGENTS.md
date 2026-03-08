@@ -458,6 +458,7 @@ Quando alterar prompts/catálogos:
 - FILES: continua compatível (flags, effective_mode, limites, logs).
 - Não foi introduzida dependência que exija Office apps ausentes sem fallback.
 - Não há segredos/versionamento indevido.
+- Quando houver regra operacional explícita de naming/path (ex.: template de pastas Git), validar no código final o formato **efetivo em runtime** e não apenas defaults/documentação, para evitar regressões por configuração legacy.
 - Todas as alterações que atualizem ou modifiquem o funcionamento devem levar a uma revisão e atualização do ficheiro README, e isso deve ser reportado no chat.
 - Todos os erros detectados no VBA, se puderem ser detectados, devem levar a uma atualização no ficheiro src\vba\AGENTS.md, com a revisão e o enunciar de regras ou princípios agnósticos que evitem a repetição do erro.
 
