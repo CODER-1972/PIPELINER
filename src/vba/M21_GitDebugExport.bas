@@ -9,12 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
-' - 2026-03-08 | Codex | Exporta bloco completo (5 linhas) no catalogo para GitHub
-'   - Altera `catalogo_prompts_executadas.csv` para incluir as 5 linhas do bloco de cada prompt executada.
-'   - Mantem ordem de execucao por pipeline e acrescenta metadados de folha/linha para auditoria.
-' - 2026-03-08 | Codex | Acrescenta coluna de numeracao no DEBUG exportado
-'   - `DEBUG.csv` passa a incluir a primeira coluna `row_number` com o numero da linha original da folha.
-'   - Mantem comportamento anterior para as restantes folhas exportadas sem alterar layout.
+' - 2026-03-08 | Codex | Corrige derivacao de PROMPT_NAME/VERSION para pasta remota Git
+'   - Passa a montar PROMPT_NAME no formato <pipelineIndex><ordem>_<nomeCurto> (ex.: 701_WF_PROMPT_AUDIT).
+'   - Adiciona fallback por nome da pipeline para resolver o primeiro Prompt ID quando o indice nao estiver disponivel.
 ' - 2026-03-08 | Codex | Corrige export do catalogo para refletir bloco completo do prompt
 '   - Substitui CSV reduzido (7 colunas) por export completo com colunas A:K e campos Next/INPUTS/OUTPUTS.
 '   - Faz lookup robusto da linha do prompt por ID com normalizacao (CR/LF/TAB/NBSP) para evitar falhas por caracteres invisiveis.
@@ -67,6 +64,8 @@ Option Explicit
 '   - Normaliza GH_API_VERSION para diagnostico/log sem alterar compatibilidade do Config.
 ' - GitDebug_BuildRunFolder(cfg As Object, pipelineNome As String, pipelineIndex As Long) As String (Private Function)
 '   - Resolve pasta remota por run e aplica estrutura canonica obrigatoria pipeline/prompt/versao/data.
+' - GitDebug_FirstPromptIdFromPainel(pipelineIndex As Long, pipelineNome As String) As String (Private Function)
+'   - Resolve o primeiro Prompt ID ativo na lista da pipeline por indice ou fallback por nome no PAINEL.
 ' - JsonPick(body As String, keyName As String) As String (Private Function)
 '   - Extrai valor string de chave JSON simples para compatibilidade de parsing em M21.
 ' =============================================================================
@@ -189,13 +188,13 @@ Private Function GitDebug_BuildRunFolder(ByVal cfg As Object, ByVal pipelineNome
     ignored = GH_Config_GetString(cfg, "run_folder_template", "")
 
     Dim firstPromptId As String
-    firstPromptId = GitDebug_FirstPromptIdFromPainel(pipelineIndex)
+    firstPromptId = GitDebug_FirstPromptIdFromPainel(pipelineIndex, pipelineNome)
 
     Dim safePipeline As String
     safePipeline = GitDebug_SanitizePathPart(pipelineNome)
 
     Dim safePromptName As String
-    safePromptName = GitDebug_SanitizePathPart(GitDebug_PromptNameFromId(firstPromptId))
+    safePromptName = GitDebug_SanitizePathPart(GitDebug_PromptNameFromId(firstPromptId, pipelineIndex))
 
     Dim safeVersion As String
     safeVersion = GitDebug_SanitizePathPart(GitDebug_PromptVersionFromId(firstPromptId))
@@ -228,18 +227,17 @@ Private Function GitDebug_SanitizePathTemplate(ByVal templatePath As String) As 
     GitDebug_SanitizePathTemplate = out
 End Function
 
-Private Function GitDebug_FirstPromptIdFromPainel(ByVal pipelineIndex As Long) As String
+Private Function GitDebug_FirstPromptIdFromPainel(ByVal pipelineIndex As Long, ByVal pipelineNome As String) As String
     On Error GoTo EH
 
     Const LIST_START_ROW As Long = 9
-
-    If pipelineIndex < 1 Or pipelineIndex > 10 Then Exit Function
 
     Dim wsPainel As Worksheet
     Set wsPainel = ThisWorkbook.Worksheets("PAINEL")
 
     Dim colIniciar As Long
-    colIniciar = 2 + (pipelineIndex - 1) * 2
+    colIniciar = GitDebug_ResolvePainelStartColumn(wsPainel, pipelineIndex, pipelineNome)
+    If colIniciar = 0 Then Exit Function
 
     Dim r As Long
     For r = LIST_START_ROW To LIST_START_ROW + 400
@@ -257,15 +255,59 @@ EH:
     GitDebug_FirstPromptIdFromPainel = ""
 End Function
 
-Private Function GitDebug_PromptNameFromId(ByVal promptId As String) As String
+Private Function GitDebug_PromptNameFromId(ByVal promptId As String, ByVal pipelineIndex As Long) As String
     Dim parts() As String
     parts = Split(Trim$(promptId), "/")
 
+    Dim promptLabel As String
     If UBound(parts) >= 2 Then
-        GitDebug_PromptNameFromId = Trim$(parts(2))
+        promptLabel = Trim$(parts(2))
+    End If
+
+    Dim stepCode As String
+    If UBound(parts) >= 1 Then
+        stepCode = GitDebug_KeepDigitsOnly(Trim$(parts(1)))
+    End If
+
+    If pipelineIndex > 0 And stepCode <> "" And promptLabel <> "" Then
+        GitDebug_PromptNameFromId = CStr(pipelineIndex) & stepCode & "_" & promptLabel
+    Else
+        GitDebug_PromptNameFromId = promptLabel
     End If
 
     If GitDebug_PromptNameFromId = "" Then GitDebug_PromptNameFromId = "PROMPT_DESCONHECIDO"
+End Function
+
+Private Function GitDebug_ResolvePainelStartColumn(ByVal wsPainel As Worksheet, ByVal pipelineIndex As Long, ByVal pipelineNome As String) As Long
+    If pipelineIndex >= 1 And pipelineIndex <= 10 Then
+        GitDebug_ResolvePainelStartColumn = 2 + (pipelineIndex - 1) * 2
+        Exit Function
+    End If
+
+    Dim targetName As String
+    targetName = UCase$(Trim$(pipelineNome))
+    If targetName = "" Then Exit Function
+
+    Dim idx As Long
+    For idx = 1 To 10
+        Dim candidateCol As Long
+        candidateCol = 2 + (idx - 1) * 2
+        If UCase$(Trim$(CStr(wsPainel.Cells(1, candidateCol).Value))) = targetName Then
+            GitDebug_ResolvePainelStartColumn = candidateCol
+            Exit Function
+        End If
+    Next idx
+End Function
+
+Private Function GitDebug_KeepDigitsOnly(ByVal textValue As String) As String
+    Dim i As Long
+    Dim ch As String
+    For i = 1 To Len(textValue)
+        ch = Mid$(textValue, i, 1)
+        If ch >= "0" And ch <= "9" Then
+            GitDebug_KeepDigitsOnly = GitDebug_KeepDigitsOnly & ch
+        End If
+    Next i
 End Function
 
 Private Function GitDebug_PromptVersionFromId(ByVal promptId As String) As String
