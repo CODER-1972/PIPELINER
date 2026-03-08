@@ -9,6 +9,8 @@ Option Explicit
 ' - Garantir mensagens curtas, sem segredos e com sugestoes acionaveis.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Completa taxonomia de eventos contents_api por fase
+'   - Adiciona codigos para inicio de create/update e falha por ficheiro no fluxo serial.
 ' - 2026-03-08 | Codex | Expande eventos GH para dispatch por upload mode
 '   - Adiciona codigos canonicos GH_UPLOAD_START/GH_MODE_SELECTED/GH_UPLOAD_DONE/GH_UPLOAD_FAILED.
 '   - Inclui eventos GH_CONTENTS_* e GH_REF_CONFLICT_409/GH_RETRY_SCHEDULED para rastreabilidade.
@@ -63,6 +65,9 @@ Public Const GH_EVT_CONTENTS_CREATE_OK As String = "GH_CONTENTS_CREATE_OK"
 Public Const GH_EVT_CONTENTS_CREATE_FAILED As String = "GH_CONTENTS_CREATE_FAILED"
 Public Const GH_EVT_CONTENTS_UPDATE_OK As String = "GH_CONTENTS_UPDATE_OK"
 Public Const GH_EVT_CONTENTS_UPDATE_FAILED As String = "GH_CONTENTS_UPDATE_FAILED"
+Public Const GH_EVT_CONTENTS_CREATE_START As String = "GH_CONTENTS_CREATE_START"
+Public Const GH_EVT_CONTENTS_UPDATE_START As String = "GH_CONTENTS_UPDATE_START"
+Public Const GH_EVT_FILE_FAILED As String = "GH_FILE_FAILED"
 
 Public Sub GH_LogInfo(ByVal stepNo As Long, ByVal pipelineNome As String, ByVal eventCode As String, ByVal message As String, Optional ByVal suggestion As String = "")
     Call Debug_Registar(stepNo, pipelineNome, "INFO", "", eventCode, message, suggestion)

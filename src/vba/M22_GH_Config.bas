@@ -9,6 +9,9 @@ Option Explicit
 ' - Resolver enable/token de forma deterministica para o facade M21.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Preserva deteccao de default no GH_UPLOAD_MODE
+'   - Remove default antecipado em GH_Config_Load para permitir logging GH_UPLOAD_MODE_DEFAULTED no runtime.
+'   - Mantem fallback para tree_commit apenas na resolucao final de modo.
 ' - 2026-03-08 | Codex | Resolve modo de upload GH_UPLOAD_MODE com validacao canonica
 '   - Adiciona helper GH_Config_ResolveUploadMode com default tree_commit quando vazio.
 '   - Marca explicitamente valores invalidos para abortar com erro acionavel no runtime.
@@ -51,7 +54,7 @@ Public Function GH_Config_Load(ByVal painelAutoSave As String) As Object
     cfg.CompareMode = 1
 
     cfg("enabled") = GH_Config_IsEnabledByPanel(painelAutoSave)
-    cfg("upload_mode") = LCase$(GH_Config_Get("GH_UPLOAD_MODE", "tree_commit"))
+    cfg("upload_mode") = LCase$(Trim$(GH_Config_Get("GH_UPLOAD_MODE", "")))
     cfg("batch_mode") = LCase$(GH_Config_Get("GH_BATCH_MODE", "tree_commit"))
 
     cfg("owner") = GH_Config_Get("GH_OWNER", "")

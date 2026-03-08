@@ -93,8 +93,8 @@ RetryFromHead:
     If Not GH_TreeCommit_UpdateRef(cfg, pipelineNome, commitSha, errReason, updateStatus) Then
         If updateStatus = 409 And allowRetry And retryCount < maxRetries Then
             retryCount = retryCount + 1
-            Call GH_LogWarn(0, pipelineNome, "GH_REF_CONFLICT_409", "Conflito 409 ao atualizar ref.", "retry=" & CStr(retryCount) & "/" & CStr(maxRetries))
-            Call GH_LogInfo(0, pipelineNome, "GH_RETRY_SCHEDULED", "Nova tentativa apos conflito de ref.", "retry=" & CStr(retryCount))
+            Call GH_LogWarn(0, pipelineNome, GH_EVT_REF_CONFLICT_409, "Conflito 409 ao atualizar ref.", "retry=" & CStr(retryCount) & "/" & CStr(maxRetries))
+            Call GH_LogInfo(0, pipelineNome, GH_EVT_RETRY_SCHEDULED, "Nova tentativa apos conflito de ref.", "retry=" & CStr(retryCount))
             GoTo RetryFromHead
         End If
         Exit Function
@@ -154,7 +154,7 @@ Private Function GH_TreeCommit_LoadHeadAndBaseTree( _
     Dim responseText As String
     Dim httpErr As String
 
-    Call GH_LogInfo(0, pipelineNome, "GH_REF_FETCH_START", "A obter HEAD da branch.", "branch=" & GH_Config_GetString(cfg, "branch"))
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_REF_FETCH_START, "A obter HEAD da branch.", "branch=" & GH_Config_GetString(cfg, "branch"))
 
     If Not GH_HTTP_SendJson("GET", headRefUrl, cfg, "", statusCode, responseText, httpErr, pipelineNome) Then
         errReason = "Falha a obter HEAD ref"

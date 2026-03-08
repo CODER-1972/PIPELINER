@@ -9,6 +9,9 @@ Option Explicit
 ' - Registar eventos canonicos de progresso/erro no DEBUG sem expor segredos.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Reforca observabilidade por fase no contents_api
+'   - Regista eventos de inicio GH_CONTENTS_CREATE_START/GH_CONTENTS_UPDATE_START e GH_FILE_FAILED.
+'   - Valida path remoto vazio antes da chamada HTTP para evitar requests invalidos.
 ' - 2026-03-08 | Codex | Implementa modo contents_api com dispatch operacional
 '   - Adiciona rotina GH_ContentsApi_UploadFiles para create/update serial por ficheiro.
 '   - Implementa probe de existencia por path e captura de sha para updates seguros.
@@ -41,7 +44,7 @@ Public Function GH_ContentsApi_UploadFiles( _
     policy = LCase$(Trim$(GH_Config_GetString(cfg, "contents_batch_policy", "fail_fast")))
     If policy <> "best_effort" Then policy = "fail_fast"
 
-    Call GH_LogInfo(0, pipelineNome, "GH_CONTENTS_BATCH_START", "Inicio do lote contents_api.", "files=" & CStr(files.Count) & " | policy=" & policy)
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_CONTENTS_BATCH_START, "Inicio do lote contents_api.", "files=" & CStr(files.Count) & " | policy=" & policy)
 
     Dim i As Long
     For i = 1 To files.Count
@@ -51,7 +54,17 @@ Public Function GH_ContentsApi_UploadFiles( _
         Dim repoPath As String
         repoPath = GH_ContentsApi_NormalizeRepoPath(CStr(item("path")))
 
-        Call GH_LogInfo(0, pipelineNome, "GH_FILE_BEGIN", "Processar ficheiro via contents_api.", "path=" & repoPath & " | idx=" & CStr(i))
+        If repoPath = "" Then
+            failCount = failCount + 1
+            Call GH_LogError(0, pipelineNome, GH_EVT_FILE_FAILED, "Path remoto invalido para contents_api.", "idx=" & CStr(i) & " | path_vazio")
+            If policy = "fail_fast" Then
+                errReason = "Path remoto vazio no item " & CStr(i)
+                Exit Function
+            End If
+            GoTo ContinueLoop
+        End If
+
+        Call GH_LogInfo(0, pipelineNome, GH_EVT_FILE_BEGIN, "Processar ficheiro via contents_api.", "path=" & repoPath & " | idx=" & CStr(i))
 
         Dim existsOnRepo As Boolean
         Dim fileSha As String
@@ -59,7 +72,8 @@ Public Function GH_ContentsApi_UploadFiles( _
 
         If Not GH_ContentsApi_ReadFileShaIfExists(cfg, repoPath, pipelineNome, existsOnRepo, fileSha, probeReason) Then
             failCount = failCount + 1
-            Call GH_LogError(0, pipelineNome, "GH_FILE_PROBE_FAILED", "Falha no probe do ficheiro remoto.", "path=" & repoPath & " | " & probeReason)
+            Call GH_LogError(0, pipelineNome, GH_EVT_FILE_PROBE_FAILED, "Falha no probe do ficheiro remoto.", "path=" & repoPath & " | " & probeReason)
+            Call GH_LogError(0, pipelineNome, GH_EVT_FILE_FAILED, "Ficheiro falhou no probe remoto.", "path=" & repoPath)
             If policy = "fail_fast" Then
                 errReason = "Probe falhou: " & repoPath
                 Exit Function
@@ -80,7 +94,8 @@ Public Function GH_ContentsApi_UploadFiles( _
         If existsOnRepo Then
             If fileSha = "" Then
                 failCount = failCount + 1
-                Call GH_LogError(0, pipelineNome, "GH_FILE_SHA_MISSING_FOR_UPDATE", "Ficheiro existe sem sha para update.", "path=" & repoPath)
+                Call GH_LogError(0, pipelineNome, GH_EVT_FILE_SHA_MISSING_FOR_UPDATE, "Ficheiro existe sem sha para update.", "path=" & repoPath)
+                Call GH_LogError(0, pipelineNome, GH_EVT_FILE_FAILED, "Ficheiro falhou por sha ausente em update.", "path=" & repoPath)
                 If policy = "fail_fast" Then
                     errReason = "sha em falta para update: " & repoPath
                     Exit Function
@@ -88,9 +103,11 @@ Public Function GH_ContentsApi_UploadFiles( _
                 GoTo ContinueLoop
             End If
 
+            Call GH_LogInfo(0, pipelineNome, GH_EVT_CONTENTS_UPDATE_START, "Inicio de update via Contents API.", "path=" & repoPath & " | sha=" & GH_ContentsApi_ShortSha(fileSha))
             If Not GH_HTTP_SendJson("PUT", upsertUrl, cfg, reqBody, upsertStatus, upsertResp, upsertErr, pipelineNome) Then
                 failCount = failCount + 1
-                Call GH_LogError(0, pipelineNome, "GH_CONTENTS_UPDATE_FAILED", "Falha no update via Contents API.", "path=" & repoPath & " | http_status=" & CStr(upsertStatus))
+                Call GH_LogError(0, pipelineNome, GH_EVT_CONTENTS_UPDATE_FAILED, "Falha no update via Contents API.", "path=" & repoPath & " | http_status=" & CStr(upsertStatus))
+                Call GH_LogError(0, pipelineNome, GH_EVT_FILE_FAILED, "Ficheiro falhou no update via contents_api.", "path=" & repoPath)
                 If policy = "fail_fast" Then
                     errReason = "Update falhou: " & repoPath & " (status=" & CStr(upsertStatus) & ")"
                     Exit Function
@@ -99,11 +116,13 @@ Public Function GH_ContentsApi_UploadFiles( _
             End If
 
             successCount = successCount + 1
-            Call GH_LogInfo(0, pipelineNome, "GH_CONTENTS_UPDATE_OK", "Update concluido via Contents API.", "path=" & repoPath & " | sha=" & GH_ContentsApi_ShortSha(GH_TreeCommit_JsonPick(upsertResp, "sha")))
+            Call GH_LogInfo(0, pipelineNome, GH_EVT_CONTENTS_UPDATE_OK, "Update concluido via Contents API.", "path=" & repoPath & " | sha=" & GH_ContentsApi_ShortSha(GH_TreeCommit_JsonPick(upsertResp, "sha")))
         Else
+            Call GH_LogInfo(0, pipelineNome, GH_EVT_CONTENTS_CREATE_START, "Inicio de create via Contents API.", "path=" & repoPath)
             If Not GH_HTTP_SendJson("PUT", upsertUrl, cfg, reqBody, upsertStatus, upsertResp, upsertErr, pipelineNome) Then
                 failCount = failCount + 1
-                Call GH_LogError(0, pipelineNome, "GH_CONTENTS_CREATE_FAILED", "Falha no create via Contents API.", "path=" & repoPath & " | http_status=" & CStr(upsertStatus))
+                Call GH_LogError(0, pipelineNome, GH_EVT_CONTENTS_CREATE_FAILED, "Falha no create via Contents API.", "path=" & repoPath & " | http_status=" & CStr(upsertStatus))
+                Call GH_LogError(0, pipelineNome, GH_EVT_FILE_FAILED, "Ficheiro falhou no create via contents_api.", "path=" & repoPath)
                 If policy = "fail_fast" Then
                     errReason = "Create falhou: " & repoPath & " (status=" & CStr(upsertStatus) & ")"
                     Exit Function
@@ -112,15 +131,15 @@ Public Function GH_ContentsApi_UploadFiles( _
             End If
 
             successCount = successCount + 1
-            Call GH_LogInfo(0, pipelineNome, "GH_CONTENTS_CREATE_OK", "Create concluido via Contents API.", "path=" & repoPath & " | sha=" & GH_ContentsApi_ShortSha(GH_TreeCommit_JsonPick(upsertResp, "sha")))
+            Call GH_LogInfo(0, pipelineNome, GH_EVT_CONTENTS_CREATE_OK, "Create concluido via Contents API.", "path=" & repoPath & " | sha=" & GH_ContentsApi_ShortSha(GH_TreeCommit_JsonPick(upsertResp, "sha")))
         End If
 
-        Call GH_LogInfo(0, pipelineNome, "GH_FILE_DONE", "Ficheiro concluido via contents_api.", "path=" & repoPath)
+        Call GH_LogInfo(0, pipelineNome, GH_EVT_FILE_DONE, "Ficheiro concluido via contents_api.", "path=" & repoPath)
 
 ContinueLoop:
     Next i
 
-    Call GH_LogInfo(0, pipelineNome, "GH_CONTENTS_BATCH_DONE", "Lote contents_api terminado.", "success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | policy=" & policy)
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_CONTENTS_BATCH_DONE, "Lote contents_api terminado.", "success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | policy=" & policy)
 
     GH_ContentsApi_UploadFiles = (failCount = 0)
     If Not GH_ContentsApi_UploadFiles Then
@@ -144,7 +163,7 @@ Private Function GH_ContentsApi_ReadFileShaIfExists( _
     fileSha = ""
     errReason = ""
 
-    Call GH_LogInfo(0, pipelineNome, "GH_FILE_PROBE_START", "Probe do ficheiro remoto.", "path=" & repoPath)
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_FILE_PROBE_START, "Probe do ficheiro remoto.", "path=" & repoPath)
 
     Dim statusCode As Long
     Dim responseText As String
@@ -156,9 +175,9 @@ Private Function GH_ContentsApi_ReadFileShaIfExists( _
     If GH_HTTP_SendJson("GET", url, cfg, "", statusCode, responseText, httpErr, pipelineNome) Then
         existsOnRepo = True
         fileSha = GH_TreeCommit_JsonPick(responseText, "sha")
-        Call GH_LogInfo(0, pipelineNome, "GH_FILE_EXISTS_YES", "Ficheiro remoto existente.", "path=" & repoPath)
+        Call GH_LogInfo(0, pipelineNome, GH_EVT_FILE_EXISTS_YES, "Ficheiro remoto existente.", "path=" & repoPath)
         If fileSha <> "" Then
-            Call GH_LogInfo(0, pipelineNome, "GH_FILE_SHA_OK", "SHA do ficheiro remoto obtido.", "path=" & repoPath & " | sha=" & GH_ContentsApi_ShortSha(fileSha))
+            Call GH_LogInfo(0, pipelineNome, GH_EVT_FILE_SHA_OK, "SHA do ficheiro remoto obtido.", "path=" & repoPath & " | sha=" & GH_ContentsApi_ShortSha(fileSha))
         End If
         GH_ContentsApi_ReadFileShaIfExists = True
         Exit Function
@@ -166,7 +185,7 @@ Private Function GH_ContentsApi_ReadFileShaIfExists( _
 
     If statusCode = 404 Then
         existsOnRepo = False
-        Call GH_LogWarn(0, pipelineNome, "GH_FILE_EXISTS_NO", "Ficheiro remoto ainda nao existe.", "path=" & repoPath)
+        Call GH_LogWarn(0, pipelineNome, GH_EVT_FILE_EXISTS_NO, "Ficheiro remoto ainda nao existe.", "path=" & repoPath)
         GH_ContentsApi_ReadFileShaIfExists = True
         Exit Function
     End If

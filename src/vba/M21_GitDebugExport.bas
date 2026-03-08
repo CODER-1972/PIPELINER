@@ -9,6 +9,8 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Enriquecimento de contexto em GH_MODE_SELECTED
+'   - Inclui owner/repo/branch/remote_folder/total_files/token_source para auditoria imediata no DEBUG.
 ' - 2026-03-08 | Codex | Ativa dispatch por GH_UPLOAD_MODE no runtime principal
 '   - Adiciona selecao explicita de modo (tree_commit|contents_api) com default e erro para valor invalido.
 '   - Regista eventos de inicio/fim com resumo (sucessos/falhas/retries) sem expor segredos.
@@ -94,23 +96,23 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     Dim uploadMode As String
     uploadMode = GH_Config_ResolveUploadMode(cfg, uploadModeReason, uploadModeDefaulted)
     If uploadMode = "" Then
-        Call GH_LogError(0, pipelineNome, "GH_UPLOAD_MODE_INVALID", "Modo de upload invalido.", uploadModeReason)
-        Call GH_LogError(0, pipelineNome, "GH_UPLOAD_FAILED", "Falha no auto-upload de debug.", "upload_mode_invalido")
+        Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD_MODE_INVALID, "Modo de upload invalido.", uploadModeReason)
+        Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD_FAILED, "Falha no auto-upload de debug.", "upload_mode_invalido")
         Exit Sub
     End If
 
     If uploadModeDefaulted Then
-        Call GH_LogWarn(0, pipelineNome, "GH_UPLOAD_MODE_DEFAULTED", "GH_UPLOAD_MODE vazio; aplicado default.", "upload_mode=tree_commit")
+        Call GH_LogWarn(0, pipelineNome, GH_EVT_UPLOAD_MODE_DEFAULTED, "GH_UPLOAD_MODE vazio; aplicado default.", "upload_mode=tree_commit")
     End If
 
-    Call GH_LogInfo(0, pipelineNome, "GH_UPLOAD_START", "Inicio do upload GitHub.", "upload_mode=" & uploadMode & " | remote_folder=" & remoteFolder & " | total_files=" & CStr(files.Count) & " | token_source=" & GH_Config_GetString(cfg, "token_source", "desconhecida"))
-    Call GH_LogInfo(0, pipelineNome, "GH_MODE_SELECTED", "Modo de upload selecionado.", "upload_mode=" & uploadMode)
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD_START, "Inicio do upload GitHub.", "upload_mode=" & uploadMode & " | remote_folder=" & remoteFolder & " | total_files=" & CStr(files.Count) & " | token_source=" & GH_Config_GetString(cfg, "token_source", "desconhecida"))
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_MODE_SELECTED, "Modo de upload selecionado.", "upload_mode=" & uploadMode & " | owner=" & GH_Config_GetString(cfg, "owner") & " | repo=" & GH_Config_GetString(cfg, "repo") & " | branch=" & GH_Config_GetString(cfg, "branch") & " | remote_folder=" & remoteFolder & " | total_files=" & CStr(files.Count) & " | token_source=" & GH_Config_GetString(cfg, "token_source", "desconhecida"))
 
     Dim successCount As Long
     Dim failCount As Long
     Dim retryCount As Long
     If Not GitDebug_RunUploadByMode(cfg, files, pipelineNome, uploadMode, reason, successCount, failCount, retryCount) Then
-        Call GH_LogError(0, pipelineNome, "GH_UPLOAD_FAILED", "Falha no auto-upload de debug.", reason & " | upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount))
+        Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD_FAILED, "Falha no auto-upload de debug.", reason & " | upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount))
         Exit Sub
     End If
 
@@ -121,7 +123,7 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     Call GitDebug_WriteLinkToHistorico(pipelineNome, webUrl)
     Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Link registado em Seguimento/HISTORICO.", webUrl)
 
-    Call GH_LogInfo(0, pipelineNome, "GH_UPLOAD_DONE", "Debug export publicado no GitHub.", "upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount) & " | " & webUrl)
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD_DONE, "Debug export publicado no GitHub.", "upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount) & " | " & webUrl)
     Exit Sub
 
 EH:

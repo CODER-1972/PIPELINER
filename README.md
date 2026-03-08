@@ -142,6 +142,7 @@ No update de `PATCH /git/refs/heads/{branch}`, conflitos HTTP `409` são tratado
   - por defeito **não** lê `HEAD` da branch (apenas em troubleshooting explícito, quando necessário).
 
 Eventos comuns de rastreabilidade no DEBUG: `GH_UPLOAD_START`, `GH_MODE_SELECTED`, `GH_UPLOAD_DONE` e `GH_UPLOAD_FAILED`, com resumo de sucessos/falhas/retries por execução.
+No `contents_api`, o runtime também regista fases por ficheiro (`GH_CONTENTS_CREATE_START`/`GH_CONTENTS_UPDATE_START`) e falha terminal por item (`GH_FILE_FAILED`) para troubleshooting granular.
 
 ### Quadro resumido `GH_*` (defaults e valores permitidos)
 
