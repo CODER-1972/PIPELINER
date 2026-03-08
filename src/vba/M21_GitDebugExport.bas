@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Forca estrutura canonica de pasta remota para uploads Git
+'   - Garante path no formato [PIPELINE_NAME]/[PROMPT_NAME]/[VERSION]/[YYYY-MM-DD HHDD] em todas as execucoes.
+'   - Ignora templates legacy fora do padrao para evitar regressao de organizacao no GitHub.
 ' - 2026-03-08 | Codex | Ajusta template default da pasta GitHub para hierarquia pipeline/prompt/versao
 '   - Define default de run folder como {{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{RUN_STAMP}}.
 '   - Extrai prompt/version a partir do primeiro Prompt ID da lista da pipeline no PAINEL (com fallback seguro).
@@ -53,7 +56,7 @@ Option Explicit
 ' - GitDebug_NormalizeApiVersionForDiag(rawValue As String) As String (Private Function)
 '   - Normaliza GH_API_VERSION para diagnostico/log sem alterar compatibilidade do Config.
 ' - GitDebug_BuildRunFolder(cfg As Object, pipelineNome As String, pipelineIndex As Long) As String (Private Function)
-'   - Resolve pasta remota por run com placeholders de pipeline/prompt/versao e timestamp.
+'   - Resolve pasta remota por run e aplica estrutura canonica obrigatoria pipeline/prompt/versao/data.
 ' - JsonPick(body As String, keyName As String) As String (Private Function)
 '   - Extrai valor string de chave JSON simples para compatibilidade de parsing em M21.
 ' =============================================================================
@@ -172,8 +175,8 @@ Private Function GitDebug_NormalizeApiVersionForDiag(ByVal rawValue As String) A
 End Function
 
 Private Function GitDebug_BuildRunFolder(ByVal cfg As Object, ByVal pipelineNome As String, ByVal pipelineIndex As Long) As String
-    Dim tpl As String
-    tpl = Trim$(GH_Config_GetString(cfg, "run_folder_template", "{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{RUN_STAMP}}"))
+    Dim ignored As String
+    ignored = GH_Config_GetString(cfg, "run_folder_template", "")
 
     Dim firstPromptId As String
     firstPromptId = GitDebug_FirstPromptIdFromPainel(pipelineIndex)
@@ -187,28 +190,11 @@ Private Function GitDebug_BuildRunFolder(ByVal cfg As Object, ByVal pipelineNome
     Dim safeVersion As String
     safeVersion = GitDebug_SanitizePathPart(GitDebug_PromptVersionFromId(firstPromptId))
 
-    Dim runStamp As String
-    runStamp = Format$(Now, "yyyy-mm-dd") & " " & Format$(Now, "hhnn")
-
     Dim runStampHhdd As String
     runStampHhdd = Format$(Now, "yyyy-mm-dd") & " " & Format$(Now, "hhdd")
 
-    If tpl = "" Then
-        GitDebug_BuildRunFolder = safePipeline & "/" & safePromptName & "/" & safeVersion & "/" & runStamp
-        Exit Function
-    End If
-
-    tpl = Replace(tpl, "{{YYYY}}", Format$(Now, "yyyy"))
-    tpl = Replace(tpl, "{{MM}}", Format$(Now, "mm"))
-    tpl = Replace(tpl, "{{DD}}", Format$(Now, "dd"))
-    tpl = Replace(tpl, "{{HHMM}}", Format$(Now, "hhnn"))
-    tpl = Replace(tpl, "{{PIPELINE_NAME}}", safePipeline)
-    tpl = Replace(tpl, "{{PROMPT_NAME}}", safePromptName)
-    tpl = Replace(tpl, "{{VERSION}}", safeVersion)
-    tpl = Replace(tpl, "{{RUN_STAMP}}", runStamp)
-    tpl = Replace(tpl, "{{YYYY-MM-DD HHDD}}", runStampHhdd)
-
-    GitDebug_BuildRunFolder = GitDebug_SanitizePathTemplate(tpl)
+    GitDebug_BuildRunFolder = GitDebug_SanitizePathTemplate( _
+        safePipeline & "/" & safePromptName & "/" & safeVersion & "/" & runStampHhdd)
 End Function
 
 Private Function GitDebug_SanitizePathTemplate(ByVal templatePath As String) As String
@@ -846,7 +832,7 @@ Private Function GitDebug_Config_Definitions() As Collection
     Call GitDebug_Config_Add(defs, "GH_BINARY_MODE", "base64", "Encoding recomendado para ficheiros binarios.", "base64")
 
     Call GitDebug_Config_Add(defs, "GH_BASE_PATH", "pipeliner_runs", "Pasta base no repo para agrupar execucoes.", "path relativo sem / inicial")
-    Call GitDebug_Config_Add(defs, "GH_RUN_FOLDER_TEMPLATE", "{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{RUN_STAMP}}", "Template opcional da subpasta do run (placeholders de pipeline/prompt/versao/data).", "ex.: {{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{RUN_STAMP}}")
+    Call GitDebug_Config_Add(defs, "GH_RUN_FOLDER_TEMPLATE", "{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}", "Template de referencia da subpasta do run (estrutura canonica obrigatoria).", "formato fixo: {{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}")
     Call GitDebug_Config_Add(defs, "GH_LOG_FOLDER", "logs", "Subpasta para logs complementares (quando aplicavel).", "path relativo")
 
     Call GitDebug_Config_Add(defs, "GH_RETRY_ON_CONFLICT", "true", "Se true, tenta novamente quando o HEAD muda durante commit.", "true | false")
