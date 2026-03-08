@@ -9,6 +9,9 @@ Option Explicit
 ' - Resolver enable/token de forma deterministica para o facade M21.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Resolve modo de upload GH_UPLOAD_MODE com validacao canonica
+'   - Adiciona helper GH_Config_ResolveUploadMode com default tree_commit quando vazio.
+'   - Marca explicitamente valores invalidos para abortar com erro acionavel no runtime.
 ' - 2026-03-07 | Codex | Preferencia de token por ambiente GH_TOKEN
 '   - Se GH_TOKEN_ENV estiver vazio, "Ambiente"/"Environment" ou erro, usa variavel de ambiente GH_TOKEN.
 '   - Expoe token_source no cfg para auditoria no DEBUG sem revelar segredo.
@@ -36,6 +39,8 @@ Option Explicit
 '   - Helper para concatenar campos em falta nas mensagens de validacao GH_*.
 ' - GH_Config_ResolveToken(Optional ByRef sourceUsed As String = "") As String
 '   - Resolve token priorizando GH_TOKEN quando indicado e devolve a fonte para auditoria.
+' - GH_Config_ResolveUploadMode(cfg As Object, reason As String, Optional wasDefaulted As Boolean = False) As String
+'   - Normaliza upload_mode e valida apenas tree_commit/contents_api com fallback seguro.
 ' =============================================================================
 
 Private Const SHEET_CONFIG As String = "Config"
@@ -74,8 +79,36 @@ Public Function GH_Config_Load(ByVal painelAutoSave As String) As Object
     cfg("debug_mode") = GH_Config_ToBoolean(GH_Config_Get("GH_DEBUG_MODE", "true"), True)
     cfg("log_http") = GH_Config_ToBoolean(GH_Config_Get("GH_LOG_HTTP", "false"), False)
     cfg("log_blob_sha") = GH_Config_ToBoolean(GH_Config_Get("GH_LOG_BLOB_SHA", "true"), True)
+    cfg("retry_on_conflict") = GH_Config_ToBoolean(GH_Config_Get("GH_RETRY_ON_CONFLICT", "true"), True)
+    cfg("max_retries") = GH_Config_ToLong(GH_Config_Get("GH_MAX_RETRIES", "3"), 3)
+    cfg("contents_batch_policy") = LCase$(Trim$(GH_Config_Get("GH_CONTENTS_BATCH_POLICY", "fail_fast")))
 
     Set GH_Config_Load = cfg
+End Function
+
+Public Function GH_Config_ResolveUploadMode( _
+    ByVal cfg As Object, _
+    ByRef reason As String, _
+    Optional ByRef wasDefaulted As Boolean = False) As String
+
+    reason = ""
+    wasDefaulted = False
+
+    Dim modeValue As String
+    modeValue = LCase$(Trim$(GH_Config_GetString(cfg, "upload_mode", "")))
+
+    If modeValue = "" Then
+        modeValue = "tree_commit"
+        wasDefaulted = True
+    End If
+
+    Select Case modeValue
+        Case "tree_commit", "contents_api"
+            GH_Config_ResolveUploadMode = modeValue
+        Case Else
+            reason = "GH_UPLOAD_MODE invalido: " & modeValue & " | [ACTION] Usar tree_commit ou contents_api."
+            GH_Config_ResolveUploadMode = ""
+    End Select
 End Function
 
 Public Function GH_Config_Validate(ByVal cfg As Object, ByRef reason As String) As Boolean
