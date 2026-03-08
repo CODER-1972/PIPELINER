@@ -9,6 +9,14 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Alerta explicito quando GH_API_VERSION e normalizado
+'   - Emite GH_CONFIG (ALERTA) quando valor em Config nao estiver no formato canonico yyyy-mm-dd.
+'   - Mostra raw/normalizado no detalhe para diagnostico rapido sem interromper o fluxo.
+' - 2026-03-08 | Codex | Enriquecimento de contexto em GH_MODE_SELECTED
+'   - Inclui owner/repo/branch/remote_folder/total_files/token_source para auditoria imediata no DEBUG.
+' - 2026-03-08 | Codex | Ativa dispatch por GH_UPLOAD_MODE no runtime principal
+'   - Adiciona selecao explicita de modo (tree_commit|contents_api) com default e erro para valor invalido.
+'   - Regista eventos de inicio/fim com resumo (sucessos/falhas/retries) sem expor segredos.
 ' - 2026-03-07 | Codex | Corrige erro de compilacao por dependencia JsonPick ausente
 '   - Adiciona helper local `JsonPick` para extrair valores string de chaves top-level em respostas GitHub.
 '   - Elimina `Compile error: Sub or Function not defined` reportado no VBE durante compile.
@@ -36,6 +44,10 @@ Option Explicit
 '   - Macro rapida para instalar parametros minimos GH_* com defaults e explicacao para leigos.
 ' - GitDebug_LogFilesForUpload(pipelineNome As String, remoteFolder As String, files As Collection) (Private Sub)
 '   - Regista path remoto e nome dos ficheiros preparados para upload GitHub.
+' - GitDebug_RunUploadByMode(cfg As Object, files As Collection, pipelineNome As String, uploadMode As String, reason As String, successCount As Long, failCount As Long, retryCount As Long) As Boolean
+'   - Faz dispatch operacional entre tree_commit e contents_api com rastreabilidade.
+' - GitDebug_NormalizeApiVersionForDiag(rawValue As String) As String (Private Function)
+'   - Normaliza GH_API_VERSION para diagnostico/log sem alterar compatibilidade do Config.
 ' - JsonPick(body As String, keyName As String) As String (Private Function)
 '   - Extrai valor string de chave JSON simples para compatibilidade de parsing em M21.
 ' =============================================================================
@@ -62,6 +74,14 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
 
     Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Fonte do token GitHub resolvida.", "token_source=" & GH_Config_GetString(cfg, "token_source", "desconhecida"))
 
+    Dim apiVersionRaw As String
+    Dim apiVersionNormalized As String
+    apiVersionRaw = GH_Config_GetString(cfg, "api_version", "")
+    apiVersionNormalized = GitDebug_NormalizeApiVersionForDiag(apiVersionRaw)
+    If Trim$(apiVersionRaw) <> "" And StrComp(Trim$(apiVersionRaw), apiVersionNormalized, vbTextCompare) <> 0 Then
+        Call GH_LogWarn(0, pipelineNome, GH_EVT_CONFIG, "GH_API_VERSION normalizado para formato canonico.", "raw=" & Trim$(apiVersionRaw) & " | normalized=" & apiVersionNormalized & " | action=Preferir YYYY-MM-DD na Config.")
+    End If
+
     Dim ghFolder As String
     ghFolder = GitDebug_BuildRunFolder(cfg, pipelineNome)
     If Trim$(ghFolder) = "" Then
@@ -84,9 +104,28 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     If files Is Nothing Or files.Count = 0 Then Exit Sub
     Call GitDebug_LogFilesForUpload(pipelineNome, remoteFolder, files)
 
-    Dim commitSha As String
-    If Not GH_TreeCommit_CommitFiles(cfg, files, pipelineNome, commitSha, reason) Then
-        Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD, "Falha no auto-upload de debug.", reason)
+    Dim uploadModeReason As String
+    Dim uploadModeDefaulted As Boolean
+    Dim uploadMode As String
+    uploadMode = GH_Config_ResolveUploadMode(cfg, uploadModeReason, uploadModeDefaulted)
+    If uploadMode = "" Then
+        Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD_MODE_INVALID, "Modo de upload invalido.", uploadModeReason)
+        Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD_FAILED, "Falha no auto-upload de debug.", "upload_mode_invalido")
+        Exit Sub
+    End If
+
+    If uploadModeDefaulted Then
+        Call GH_LogWarn(0, pipelineNome, GH_EVT_UPLOAD_MODE_DEFAULTED, "GH_UPLOAD_MODE vazio; aplicado default.", "upload_mode=tree_commit")
+    End If
+
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD_START, "Inicio do upload GitHub.", "upload_mode=" & uploadMode & " | remote_folder=" & remoteFolder & " | total_files=" & CStr(files.Count) & " | token_source=" & GH_Config_GetString(cfg, "token_source", "desconhecida"))
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_MODE_SELECTED, "Modo de upload selecionado.", "upload_mode=" & uploadMode & " | owner=" & GH_Config_GetString(cfg, "owner") & " | repo=" & GH_Config_GetString(cfg, "repo") & " | branch=" & GH_Config_GetString(cfg, "branch") & " | remote_folder=" & remoteFolder & " | total_files=" & CStr(files.Count) & " | token_source=" & GH_Config_GetString(cfg, "token_source", "desconhecida"))
+
+    Dim successCount As Long
+    Dim failCount As Long
+    Dim retryCount As Long
+    If Not GitDebug_RunUploadByMode(cfg, files, pipelineNome, uploadMode, reason, successCount, failCount, retryCount) Then
+        Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD_FAILED, "Falha no auto-upload de debug.", reason & " | upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount))
         Exit Sub
     End If
 
@@ -97,12 +136,34 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     Call GitDebug_WriteLinkToHistorico(pipelineNome, webUrl)
     Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Link registado em Seguimento/HISTORICO.", webUrl)
 
-    Call GH_LogInfo(0, pipelineNome, GH_EVT_REF_UPDATED, "Debug export publicado no GitHub.", webUrl)
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD_DONE, "Debug export publicado no GitHub.", "upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount) & " | " & webUrl)
     Exit Sub
 
 EH:
     Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD, "Falha no auto-upload de debug: " & Err.Description, "Validar parametros GH_* e conectividade com api.github.com.")
 End Sub
+
+Private Function GitDebug_NormalizeApiVersionForDiag(ByVal rawValue As String) As String
+    Dim valueText As String
+    valueText = Trim$(rawValue)
+
+    If valueText = "" Then
+        GitDebug_NormalizeApiVersionForDiag = "2022-11-28"
+        Exit Function
+    End If
+
+    If valueText Like "####-##-##" Then
+        GitDebug_NormalizeApiVersionForDiag = valueText
+        Exit Function
+    End If
+
+    If valueText Like "##/##/####" Then
+        GitDebug_NormalizeApiVersionForDiag = Right$(valueText, 4) & "-" & Mid$(valueText, 4, 2) & "-" & Left$(valueText, 2)
+        Exit Function
+    End If
+
+    GitDebug_NormalizeApiVersionForDiag = "2022-11-28"
+End Function
 
 Private Function GitDebug_BuildRunFolder(ByVal cfg As Object, ByVal pipelineNome As String) As String
     Dim tpl As String
@@ -200,6 +261,40 @@ Private Sub GitDebug_LogFilesForUpload(ByVal pipelineNome As String, ByVal remot
 EH:
     Call GH_LogWarn(0, pipelineNome, GH_EVT_UPLOAD, "Falha ao listar ficheiros de upload no DEBUG.", "err=" & CStr(Err.Number) & " | " & Left$(Err.Description, 180))
 End Sub
+
+Private Function GitDebug_RunUploadByMode( _
+    ByVal cfg As Object, _
+    ByVal files As Collection, _
+    ByVal pipelineNome As String, _
+    ByVal uploadMode As String, _
+    ByRef reason As String, _
+    ByRef successCount As Long, _
+    ByRef failCount As Long, _
+    ByRef retryCount As Long) As Boolean
+
+    reason = ""
+    successCount = 0
+    failCount = 0
+    retryCount = 0
+
+    Select Case LCase$(Trim$(uploadMode))
+        Case "tree_commit"
+            Dim commitSha As String
+            If Not GH_TreeCommit_CommitFiles(cfg, files, pipelineNome, commitSha, reason, retryCount) Then
+                failCount = files.Count
+                Exit Function
+            End If
+            successCount = files.Count
+            GitDebug_RunUploadByMode = True
+
+        Case "contents_api"
+            GitDebug_RunUploadByMode = GH_ContentsApi_UploadFiles(cfg, files, pipelineNome, successCount, failCount, retryCount, reason)
+
+        Case Else
+            reason = "Modo de upload nao suportado: " & uploadMode
+            GitDebug_RunUploadByMode = False
+    End Select
+End Function
 
 Private Function BuildPainelPipelineInfo(ByVal pipelineIndex As Long) As String
     On Error GoTo EH
@@ -647,6 +742,7 @@ Private Function GitDebug_Config_Definitions() As Collection
     Call GitDebug_Config_Add(defs, "GH_COMMIT_MESSAGE_TEMPLATE", "PIPELINER run {{RUN_ID}}", "Template da mensagem de commit. {{RUN_ID}} e substituido no runtime.", "template com placeholders")
 
     Call GitDebug_Config_Add(defs, "GH_BATCH_MODE", "tree_commit", "Modo de upload em batch para este modulo.", "tree_commit")
+    Call GitDebug_Config_Add(defs, "GH_CONTENTS_BATCH_POLICY", "fail_fast", "Politica de lote para contents_api (aborta no 1o erro ou continua).", "fail_fast | best_effort")
     Call GitDebug_Config_Add(defs, "GH_MAX_FILES", "200", "Numero maximo de ficheiros por commit (protecao).", "1..1000")
     Call GitDebug_Config_Add(defs, "GH_MAX_FILE_MB", "50", "Tamanho maximo por ficheiro (MB).", "1..200")
     Call GitDebug_Config_Add(defs, "GH_ENCODING_TEXT", "utf-8", "Encoding dos ficheiros de texto enviados para blobs.", "utf-8")
