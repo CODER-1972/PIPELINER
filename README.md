@@ -213,6 +213,11 @@ Cada célula de `Funcionalidade` passa a incluir, numa segunda linha em **negrit
 Quando `OUTPUT_EXECUTE: LOAD_CSV(...)` falha por ficheiro não resolvido, o DEBUG regista antes um alerta complementar `CI_PROOF_MNT_DATA_MISSING` com contexto compacto (`exec_file`, `output_exists`, `has_no_citation`, `has_container_empty`, `has_download_fail`, `has_list_fail`, `eligible`, etc.) para correlacionar causa provável com sinais M10 (incluindo seleção `selected/eligible` no fallback por listagem), sem substituir o erro funcional final `OUTPUT_EXECUTE_FILE_NOT_FOUND`.
 Cada célula de `Funcionalidade` passa a incluir, numa segunda linha em **negrito** (`ACAO EM CURSO:`), uma lista sistemática da(s) ação(ões) operacional(is) em execução no momento, podendo combinar várias ações no mesmo registo (ex.: validação de contrato + listagem/seleção de container + download + persistência + mitigação por timeout/retry). Sempre que disponível, é anexado contexto específico por chave (ex.: `filename=...`, `resolvedPath=...`, `stage=...`, `container_id=...`, `file_id=...`, `http_status=...`, `elapsed_ms=...`, `payload_len=...`, `dlErr=...`).
 
+Após cada prompt executada no `RUN` da pipeline, o sistema também grava um espelho do `DEBUG` no catálogo da própria prompt, na coluna **Notas para o desenvolvimento** (coluna J):
+- linha +1 do bloco recebe `DEBUG [dd-mm-yyyy hh:mm]` em negrito;
+- linha +2 recebe todo o conteúdo atual do DEBUG numa única célula TSV (colunas separadas por tab), sem `text wrap`;
+- ambas as células ficam com fundo salmão claro e substituem conteúdo anterior.
+
 Também existe suporte a um botão de utilidade na própria folha `DEBUG` para gerar um pacote de diagnóstico “copiar/colar” para chat:
 - macro `DebugClipboard_InstalarBotao` cria/atualiza o botão `Copiar pacote diagnóstico` (idempotente);
 - macro `DebugClipboard_CopiarPacoteDiagnostico` compõe, em texto único, os blocos de catálogo dos `Prompt ID` encontrados no DEBUG + tabela completa de `DEBUG` + tabela completa de `Seguimento`;
