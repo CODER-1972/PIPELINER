@@ -8,6 +8,10 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-08 | Codex | Espelho do DEBUG no catalogo apos cada prompt executada
+'   - Copia a tabela DEBUG para uma unica celula TSV sem wrap em Notas para desenvolvimento (linha +2 do bloco).
+'   - Escreve cabecalho "DEBUG [dd-mm-yyyy hh:mm]" a negrito em Notas para desenvolvimento (linha +1) e aplica fundo salmao claro.
+'   - Regista no DEBUG sucesso/alerta/erro da persistencia para diagnostico leigo.
 ' - 2026-03-07 | Codex | Feedback visual do toggle Git LOG no PAINEL
 '   - Aplica fundo azul claro acinzentado + texto a negrito quando Git LOG estiver ON.
 '   - Repoe estilo padrao do botao quando Git LOG estiver OFF.
@@ -107,6 +111,7 @@ Option Explicit
 ' - Painel_Click_SetDefault (Sub): rotina publica do modulo.
 ' - Painel_Click_CriarMapa (Sub): rotina publica do modulo.
 ' - Painel_LogStepStage (Private Sub): breadcrumb de fase no DEBUG para troubleshooting pre-API.
+' - Painel_EspelharDebugNoCatalogo (Private Sub): grava snapshot TSV do DEBUG no bloco da prompt executada.
 ' - Painel_RegistarFalhaNoSeguimento (Private Sub): fallback de auditoria no Seguimento para erros inesperados.
 ' =============================================================================
 
@@ -1164,6 +1169,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, resultado.httpStatus, resultado.responseId, _
             textoSeguimento, pipelineNome, "", filesUsedResumo, filesOpsResumo, fileIds)
         Call Painel_LogStepStage(passo, prompt.Id, "step_completed", "http=" & CStr(resultado.httpStatus) & " | response_id=" & Left$(Trim$(resultado.responseId), 24))
+        Call Painel_EspelharDebugNoCatalogo(passo, prompt.Id)
 
         ' ================================
         ' CONTEXTKV - REGISTAR + CAPTURAR
@@ -2351,6 +2357,137 @@ Private Function Painel_SanitizarNomeFicheiro(ByVal s As String) As String
 End Function
 
 ' ---- ABAB (array de 4 ultimos IDs) ----
+
+
+Private Sub Painel_EspelharDebugNoCatalogo(ByVal passo As Long, ByVal promptId As String)
+    On Error GoTo TrataErro
+
+    Dim pid As String
+    pid = Trim$(promptId)
+    If pid = "" Then
+        Call Debug_Registar(passo, "[SEM_PROMPT_ID]", "ALERTA", "", "DEBUG_SNAPSHOT", _
+            "Nao foi possivel gravar o espelho do DEBUG no catalogo porque o Prompt ID esta vazio.", _
+            "Sugestao: confirme se o catalogo tem IDs validos na coluna A.")
+        Exit Sub
+    End If
+
+    Dim wsCatalogo As Worksheet
+    Dim wsDebug As Worksheet
+    Set wsCatalogo = Painel_ObterFolhaCatalogoPorPromptId(pid)
+    If wsCatalogo Is Nothing Then
+        Call Debug_Registar(passo, pid, "ALERTA", "", "DEBUG_SNAPSHOT", _
+            "Nao foi possivel localizar a folha de catalogo para guardar o DEBUG desta prompt.", _
+            "Sugestao: confirme se o prefixo do ID corresponde exatamente ao nome da folha.")
+        Exit Sub
+    End If
+
+    Set wsDebug = ThisWorkbook.Worksheets(SHEET_DEBUG)
+
+    Dim rowId As Long
+    rowId = Painel_LocalizarLinhaPromptNoCatalogo(wsCatalogo, pid)
+    If rowId = 0 Then
+        Call Debug_Registar(passo, pid, "ALERTA", "", "DEBUG_SNAPSHOT", _
+            "A prompt foi executada, mas nao foi encontrada no catalogo para escrever o espelho do DEBUG.", _
+            "Sugestao: valide se o ID existe na coluna A da folha de catalogo.")
+        Exit Sub
+    End If
+
+    Dim headerCell As Range
+    Dim bodyCell As Range
+    Set headerCell = wsCatalogo.Cells(rowId + 1, 10)
+    Set bodyCell = wsCatalogo.Cells(rowId + 2, 10)
+
+    Dim snapshotTsv As String
+    snapshotTsv = Painel_DebugSheetToTsv(wsDebug)
+    If Trim$(snapshotTsv) = "" Then
+        snapshotTsv = "[DEBUG vazio no momento da gravacao]"
+        Call Debug_Registar(passo, pid, "ALERTA", "", "DEBUG_SNAPSHOT", _
+            "O DEBUG estava vazio e foi gravado um marcador informativo no catalogo.", _
+            "Sugestao: confirme se a execucao estava a registar eventos no DEBUG.")
+    End If
+
+    headerCell.Value = "DEBUG [" & Format$(Now, "dd-mm-yyyy hh:mm") & "]"
+    headerCell.Font.Bold = True
+    headerCell.WrapText = False
+
+    bodyCell.Value = snapshotTsv
+    bodyCell.Font.Bold = False
+    bodyCell.WrapText = False
+
+    Dim salmonLight As Long
+    salmonLight = RGB(255, 204, 153)
+    headerCell.Interior.Color = salmonLight
+    bodyCell.Interior.Color = salmonLight
+
+    Call Debug_Registar(passo, pid, "INFO", "", "DEBUG_SNAPSHOT", _
+        "DEBUG consolidado no catalogo com sucesso para consulta rapida.", _
+        "Foi atualizado o bloco de Notas para desenvolvimento (linhas 2 e 3 da prompt), substituindo conteudo anterior.")
+    Exit Sub
+
+TrataErro:
+    Call Debug_Registar(passo, pid, "ERRO", "", "DEBUG_SNAPSHOT", _
+        "Falha ao gravar o espelho do DEBUG no catalogo: " & Err.Description, _
+        "Sugestao: verifique se a folha de catalogo nao esta protegida e se a coluna J esta editavel.")
+End Sub
+
+Private Function Painel_ObterFolhaCatalogoPorPromptId(ByVal promptId As String) As Worksheet
+    Dim prefixo As String
+    Dim posSep As Long
+    posSep = InStr(1, Trim$(promptId), "/")
+
+    If posSep > 1 Then
+        prefixo = Left$(Trim$(promptId), posSep - 1)
+    Else
+        prefixo = Trim$(promptId)
+    End If
+
+    If prefixo = "" Then Exit Function
+
+    On Error Resume Next
+    Set Painel_ObterFolhaCatalogoPorPromptId = ThisWorkbook.Worksheets(prefixo)
+    On Error GoTo 0
+End Function
+
+Private Function Painel_LocalizarLinhaPromptNoCatalogo(ByVal wsCatalogo As Worksheet, ByVal promptId As String) As Long
+    Dim lastRow As Long
+    lastRow = wsCatalogo.Cells(wsCatalogo.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 2 Then Exit Function
+
+    Dim i As Long
+    For i = 2 To lastRow
+        If Trim$(CStr(wsCatalogo.Cells(i, 1).Value)) = Trim$(promptId) Then
+            Painel_LocalizarLinhaPromptNoCatalogo = i
+            Exit Function
+        End If
+    Next i
+End Function
+
+Private Function Painel_DebugSheetToTsv(ByVal wsDebug As Worksheet) As String
+    Dim lastRow As Long
+    Dim lastCol As Long
+    Dim r As Long
+    Dim c As Long
+    Dim lineTxt As String
+    Dim acc As String
+
+    lastRow = wsDebug.Cells(wsDebug.Rows.Count, 1).End(xlUp).Row
+    If lastRow < 1 Then Exit Function
+
+    lastCol = wsDebug.Cells(1, wsDebug.Columns.Count).End(xlToLeft).Column
+    If lastCol < 1 Then Exit Function
+
+    For r = 1 To lastRow
+        lineTxt = ""
+        For c = 1 To lastCol
+            If c > 1 Then lineTxt = lineTxt & vbTab
+            lineTxt = lineTxt & Replace(CStr(wsDebug.Cells(r, c).Value), vbTab, " ")
+        Next c
+        If r > 1 Then acc = acc & vbLf
+        acc = acc & lineTxt
+    Next r
+
+    Painel_DebugSheetToTsv = acc
+End Function
 
 Private Sub Painel_AtualizarUltimos4(ByRef ultimos4() As String, ByVal atual As String)
     ultimos4(1) = ultimos4(2)
