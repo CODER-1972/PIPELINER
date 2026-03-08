@@ -120,7 +120,7 @@ Também suporta exportação opcional de debug para GitHub (Git Data API) no fim
 - no arranque/fim do export, o DEBUG regista INFO/ALERTA para `run_folder`, `remote_folder` e gravação de link em `Seguimento/HISTÓRICO`.
 - em cada execução de upload Git, o DEBUG regista a fonte do token (`token_source`) e a `path` de cada ficheiro enviado.
 - publicação de `DEBUG.csv`, `catalogo_prompts_executadas.csv`, `Seguimento.csv` e `painel_pipeline.txt`;
-- composição da pasta remota por run em `GH_BASE_PATH/GH_LOG_FOLDER/<run_folder>`, onde `<run_folder>` por default segue `{{YYYY}}-{{MM}}-{{SS}} - {{HHMM}} - [{{PIPELINE_NAME}}]`;
+- composição da pasta remota por run em `GH_BASE_PATH/GH_LOG_FOLDER/<run_folder>`, onde `<run_folder>` segue obrigatoriamente `{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}`;
 - atualização da coluna `GIT_DEBUG` nas folhas `Seguimento` e `HISTÓRICO` com o link da pasta remota.
 - no arranque/fim do export, o DEBUG regista INFO/ALERTA para `run_folder`, `remote_folder` e gravação de link em `Seguimento/HISTÓRICO`.
 - macro `GitDebug_Config_InstalarParametros` para preencher/atualizar na folha `Config` as chaves `GH_*` com `default`, explicação pedagógica (coluna C) e valores/intervalos possíveis (coluna E), sem forçar overwrite dos valores atuais por defeito.
@@ -162,7 +162,7 @@ Se `file_kind=binary`, o DEBUG emite alertas (`GH_CONTENTS_ENCODING_RISK` e `GH_
 | `GH_COMMIT_MESSAGE_TEMPLATE` | `PIPELINER run {{RUN_ID}}` | template com placeholders |
 | `GH_BASE_PATH` | `pipeliner_runs` | path relativo sem `/` inicial |
 | `GH_LOG_FOLDER` | `logs` | subpasta relativa (ex.: `logs`) |
-| `GH_RUN_FOLDER_TEMPLATE` | `{{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]` | placeholders: `{{YYYY}}`, `{{MM}}`, `{{DD}}`, `{{HHMM}}`, `{{PIPELINE_NAME}}` |
+| `GH_RUN_FOLDER_TEMPLATE` | `{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}` | formato canónico aplicado pelo runtime (compatível com organização de pastas por pipeline/prompt/versão/data) |
 | `GH_API_VERSION` | `2022-11-28` | formato `YYYY-MM-DD` |
 | `GH_USER_AGENT` | `PIPELINER-VBA` | texto não vazio |
 | `GH_FORCE_UPDATE` | `false` | `true` ou `false` |

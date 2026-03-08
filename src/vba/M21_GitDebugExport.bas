@@ -15,6 +15,13 @@ Option Explicit
 ' - 2026-03-08 | Codex | Acrescenta coluna de numeracao no DEBUG exportado
 '   - `DEBUG.csv` passa a incluir a primeira coluna `row_number` com o numero da linha original da folha.
 '   - Mantem comportamento anterior para as restantes folhas exportadas sem alterar layout.
+' - 2026-03-08 | Codex | Corrige export do catalogo para refletir bloco completo do prompt
+'   - Substitui CSV reduzido (7 colunas) por export completo com colunas A:K e campos Next/INPUTS/OUTPUTS.
+'   - Faz lookup robusto da linha do prompt por ID com normalizacao (CR/LF/TAB/NBSP) para evitar falhas por caracteres invisiveis.
+' - 2026-03-08 | Codex | Ajusta template default da pasta GitHub para hierarquia pipeline/prompt/versao
+'   - Define default de run folder como {{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{RUN_STAMP}}.
+'   - Extrai prompt/version a partir do primeiro Prompt ID da lista da pipeline no PAINEL (com fallback seguro).
+'   - Adiciona placeholder {{YYYY-MM-DD HHDD}} por compatibilidade com templates legados de timestamp.
 ' - 2026-03-08 | Codex | Alerta explicito quando GH_API_VERSION e normalizado
 '   - Emite GH_CONFIG (ALERTA) quando valor em Config nao estiver no formato canonico yyyy-mm-dd.
 '   - Mostra raw/normalizado no detalhe para diagnostico rapido sem interromper o fluxo.
@@ -58,6 +65,8 @@ Option Explicit
 '   - Faz dispatch operacional entre tree_commit e contents_api com rastreabilidade.
 ' - GitDebug_NormalizeApiVersionForDiag(rawValue As String) As String (Private Function)
 '   - Normaliza GH_API_VERSION para diagnostico/log sem alterar compatibilidade do Config.
+' - GitDebug_BuildRunFolder(cfg As Object, pipelineNome As String, pipelineIndex As Long) As String (Private Function)
+'   - Resolve pasta remota por run e aplica estrutura canonica obrigatoria pipeline/prompt/versao/data.
 ' - JsonPick(body As String, keyName As String) As String (Private Function)
 '   - Extrai valor string de chave JSON simples para compatibilidade de parsing em M21.
 ' =============================================================================
@@ -93,9 +102,9 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     End If
 
     Dim ghFolder As String
-    ghFolder = GitDebug_BuildRunFolder(cfg, pipelineNome)
+    ghFolder = GitDebug_BuildRunFolder(cfg, pipelineNome, pipelineIndex)
     If Trim$(ghFolder) = "" Then
-        Call GH_LogWarn(0, pipelineNome, GH_EVT_CONFIG, "run_folder_template gerou pasta vazia; aplicado fallback.", "[ACTION] Ajuste GH_RUN_FOLDER_TEMPLATE (use {{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]).")
+        Call GH_LogWarn(0, pipelineNome, GH_EVT_CONFIG, "run_folder_template gerou pasta vazia; aplicado fallback.", "[ACTION] Ajuste GH_RUN_FOLDER_TEMPLATE (use {{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{RUN_STAMP}}).")
     Else
         Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Run folder resolvida.", "run_folder=" & ghFolder)
     End If
@@ -175,25 +184,99 @@ Private Function GitDebug_NormalizeApiVersionForDiag(ByVal rawValue As String) A
     GitDebug_NormalizeApiVersionForDiag = "2022-11-28"
 End Function
 
-Private Function GitDebug_BuildRunFolder(ByVal cfg As Object, ByVal pipelineNome As String) As String
-    Dim tpl As String
-    tpl = Trim$(GH_Config_GetString(cfg, "run_folder_template", "{{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]"))
+Private Function GitDebug_BuildRunFolder(ByVal cfg As Object, ByVal pipelineNome As String, ByVal pipelineIndex As Long) As String
+    Dim ignored As String
+    ignored = GH_Config_GetString(cfg, "run_folder_template", "")
+
+    Dim firstPromptId As String
+    firstPromptId = GitDebug_FirstPromptIdFromPainel(pipelineIndex)
 
     Dim safePipeline As String
     safePipeline = GitDebug_SanitizePathPart(pipelineNome)
 
-    If tpl = "" Then
-        GitDebug_BuildRunFolder = Format$(Now, "yyyy-mm-dd") & " - " & Format$(Now, "hhnn") & " - [" & safePipeline & "]"
-        Exit Function
+    Dim safePromptName As String
+    safePromptName = GitDebug_SanitizePathPart(GitDebug_PromptNameFromId(firstPromptId))
+
+    Dim safeVersion As String
+    safeVersion = GitDebug_SanitizePathPart(GitDebug_PromptVersionFromId(firstPromptId))
+
+    Dim runStampHhdd As String
+    runStampHhdd = Format$(Now, "yyyy-mm-dd") & " " & Format$(Now, "hhdd")
+
+    GitDebug_BuildRunFolder = GitDebug_SanitizePathTemplate( _
+        safePipeline & "/" & safePromptName & "/" & safeVersion & "/" & runStampHhdd)
+End Function
+
+Private Function GitDebug_SanitizePathTemplate(ByVal templatePath As String) As String
+    Dim normalized As String
+    normalized = Replace(Trim$(templatePath), "\", "/")
+
+    Dim parts() As String
+    parts = Split(normalized, "/")
+
+    Dim i As Long
+    Dim out As String
+    For i = LBound(parts) To UBound(parts)
+        Dim part As String
+        part = GitDebug_SanitizePathPart(parts(i))
+        If part <> "" Then
+            If out <> "" Then out = out & "/"
+            out = out & part
+        End If
+    Next i
+
+    GitDebug_SanitizePathTemplate = out
+End Function
+
+Private Function GitDebug_FirstPromptIdFromPainel(ByVal pipelineIndex As Long) As String
+    On Error GoTo EH
+
+    Const LIST_START_ROW As Long = 9
+
+    If pipelineIndex < 1 Or pipelineIndex > 10 Then Exit Function
+
+    Dim wsPainel As Worksheet
+    Set wsPainel = ThisWorkbook.Worksheets("PAINEL")
+
+    Dim colIniciar As Long
+    colIniciar = 2 + (pipelineIndex - 1) * 2
+
+    Dim r As Long
+    For r = LIST_START_ROW To LIST_START_ROW + 400
+        Dim promptId As String
+        promptId = Trim$(CStr(wsPainel.Cells(r, colIniciar).Value))
+        If promptId = "" Then Exit For
+        If UCase$(promptId) <> "STOP" Then
+            GitDebug_FirstPromptIdFromPainel = promptId
+            Exit Function
+        End If
+    Next r
+
+    Exit Function
+EH:
+    GitDebug_FirstPromptIdFromPainel = ""
+End Function
+
+Private Function GitDebug_PromptNameFromId(ByVal promptId As String) As String
+    Dim parts() As String
+    parts = Split(Trim$(promptId), "/")
+
+    If UBound(parts) >= 2 Then
+        GitDebug_PromptNameFromId = Trim$(parts(2))
     End If
 
-    tpl = Replace(tpl, "{{YYYY}}", Format$(Now, "yyyy"))
-    tpl = Replace(tpl, "{{MM}}", Format$(Now, "mm"))
-    tpl = Replace(tpl, "{{DD}}", Format$(Now, "dd"))
-    tpl = Replace(tpl, "{{HHMM}}", Format$(Now, "hhnn"))
-    tpl = Replace(tpl, "{{PIPELINE_NAME}}", safePipeline)
+    If GitDebug_PromptNameFromId = "" Then GitDebug_PromptNameFromId = "PROMPT_DESCONHECIDO"
+End Function
 
-    GitDebug_BuildRunFolder = GitDebug_SanitizePathPart(tpl)
+Private Function GitDebug_PromptVersionFromId(ByVal promptId As String) As String
+    Dim parts() As String
+    parts = Split(Trim$(promptId), "/")
+
+    If UBound(parts) >= 3 Then
+        GitDebug_PromptVersionFromId = Trim$(parts(3))
+    End If
+
+    If GitDebug_PromptVersionFromId = "" Then GitDebug_PromptVersionFromId = "VERSAO_DESCONHECIDA"
 End Function
 
 Private Function GitDebug_BuildRemoteFolder(ByVal cfg As Object, ByVal ghFolder As String) As String
@@ -445,6 +528,138 @@ Private Function FindPromptRowById(ByVal ws As Worksheet, ByVal promptId As Stri
     Dim found As Range
     Set found = ws.Columns(1).Find(What:=promptId, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
     If Not found Is Nothing Then FindPromptRowById = found.Row
+End Function
+
+Private Function BuildExecutedCatalogCsvRow(ByVal promptId As String) As String
+    Dim p As PromptDefinicao
+    p = Catalogo_ObterPromptPorID(promptId)
+
+    Dim catalogo As String
+    catalogo = PrefixFromId(promptId)
+
+    Dim nextPrompt As String
+    Dim nextPromptDefault As String
+    Dim nextPromptAllowed As String
+    Dim descricaoTextual As String
+    Dim inputsText As String
+    Dim outputsText As String
+
+    Call Catalogo_ReadBlockMetadata(promptId, nextPrompt, nextPromptDefault, nextPromptAllowed, descricaoTextual, inputsText, outputsText)
+
+    BuildExecutedCatalogCsvRow = CsvRow(Array( _
+        promptId, _
+        catalogo, _
+        p.NomeCurto, _
+        p.NomeDescritivo, _
+        p.textoPrompt, _
+        p.modelo, _
+        p.modos, _
+        CStr(p.storage), _
+        p.ConfigExtra, _
+        p.Comentarios, _
+        p.NotasDev, _
+        p.HistoricoVersoes, _
+        nextPrompt, _
+        nextPromptDefault, _
+        nextPromptAllowed, _
+        descricaoTextual, _
+        inputsText, _
+        outputsText))
+End Function
+
+Private Sub Catalogo_ReadBlockMetadata(ByVal promptId As String, ByRef nextPrompt As String, ByRef nextPromptDefault As String, ByRef nextPromptAllowed As String, ByRef descricaoTextual As String, ByRef inputsText As String, ByRef outputsText As String)
+    On Error GoTo EH
+
+    Dim ws As Worksheet
+    Dim rowPrompt As Long
+    Set ws = Catalogo_FindPromptRow(promptId, rowPrompt)
+    If ws Is Nothing Or rowPrompt <= 0 Then Exit Sub
+
+    nextPrompt = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 1, 2).Value), "Next PROMPT:")
+    nextPromptDefault = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 2, 2).Value), "Next PROMPT default:")
+    nextPromptAllowed = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 3, 2).Value), "Next PROMPT allowed:")
+
+    descricaoTextual = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 1, 3).Value), "Descricao textual:")
+    If descricaoTextual = "" Then descricaoTextual = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 1, 3).Value), "Descrição textual:")
+
+    inputsText = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 2, 3).Value), "INPUTS:")
+    outputsText = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 3, 3).Value), "OUTPUTS:")
+
+    If descricaoTextual = "" Then descricaoTextual = Trim$(CStr(ws.Cells(rowPrompt + 1, 4).Value))
+    If inputsText = "" Then inputsText = Trim$(CStr(ws.Cells(rowPrompt + 2, 4).Value))
+    If outputsText = "" Then outputsText = Trim$(CStr(ws.Cells(rowPrompt + 3, 4).Value))
+    Exit Sub
+
+EH:
+    nextPrompt = ""
+    nextPromptDefault = ""
+    nextPromptAllowed = ""
+    descricaoTextual = ""
+    inputsText = ""
+    outputsText = ""
+End Sub
+
+Private Function Catalogo_FindPromptRow(ByVal promptId As String, ByRef rowPrompt As Long) As Worksheet
+    rowPrompt = 0
+
+    Dim folha As String
+    folha = PrefixFromId(promptId)
+    If folha = "" Then Exit Function
+
+    On Error Resume Next
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(folha)
+    On Error GoTo 0
+    If ws Is Nothing Then Exit Function
+
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+
+    Dim lookupRaw As String
+    lookupRaw = Trim$(promptId)
+    Dim lookupNorm As String
+    lookupNorm = NormalizePromptIdForLookup(lookupRaw)
+
+    Dim r As Long
+    For r = 2 To lastRow
+        Dim idRaw As String
+        idRaw = Trim$(CStr(ws.Cells(r, 1).Value))
+        If StrComp(idRaw, lookupRaw, vbTextCompare) = 0 Then
+            rowPrompt = r
+            Set Catalogo_FindPromptRow = ws
+            Exit Function
+        End If
+
+        If lookupNorm <> "" Then
+            If StrComp(NormalizePromptIdForLookup(idRaw), lookupNorm, vbTextCompare) = 0 Then
+                rowPrompt = r
+                Set Catalogo_FindPromptRow = ws
+                Exit Function
+            End If
+        End If
+    Next r
+End Function
+
+Private Function NormalizePromptIdForLookup(ByVal textValue As String) As String
+    Dim s As String
+    s = Trim$(CStr(textValue))
+    s = Replace(s, vbCr, "")
+    s = Replace(s, vbLf, "")
+    s = Replace(s, vbTab, "")
+    s = Replace(s, ChrW$(160), "")
+    NormalizePromptIdForLookup = Trim$(s)
+End Function
+
+Private Function Catalogo_ValueAfterLabel(ByVal cellText As String, ByVal labelText As String) As String
+    Dim raw As String
+    raw = Trim$(cellText)
+    If raw = "" Then Exit Function
+
+    If LCase$(Left$(raw, Len(labelText))) = LCase$(labelText) Then
+        Catalogo_ValueAfterLabel = Trim$(Mid$(raw, Len(labelText) + 1))
+    Else
+        Catalogo_ValueAfterLabel = ""
+    End If
 End Function
 
 Private Function PrefixFromId(ByVal promptId As String) As String
@@ -837,7 +1052,7 @@ Private Function GitDebug_Config_Definitions() As Collection
     Call GitDebug_Config_Add(defs, "GH_BINARY_MODE", "base64", "Encoding recomendado para ficheiros binarios.", "base64")
 
     Call GitDebug_Config_Add(defs, "GH_BASE_PATH", "pipeliner_runs", "Pasta base no repo para agrupar execucoes.", "path relativo sem / inicial")
-    Call GitDebug_Config_Add(defs, "GH_RUN_FOLDER_TEMPLATE", "{{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]", "Template opcional da subpasta do run (placeholders de data/pipeline).", "ex.: {{YYYY}}-{{MM}}-{{DD}} - {{HHMM}} - [{{PIPELINE_NAME}}]")
+    Call GitDebug_Config_Add(defs, "GH_RUN_FOLDER_TEMPLATE", "{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}", "Template de referencia da subpasta do run (estrutura canonica obrigatoria).", "formato fixo: {{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}")
     Call GitDebug_Config_Add(defs, "GH_LOG_FOLDER", "logs", "Subpasta para logs complementares (quando aplicavel).", "path relativo")
 
     Call GitDebug_Config_Add(defs, "GH_RETRY_ON_CONFLICT", "true", "Se true, tenta novamente quando o HEAD muda durante commit.", "true | false")

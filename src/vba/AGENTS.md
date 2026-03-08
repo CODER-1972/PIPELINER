@@ -458,6 +458,7 @@ Quando alterar prompts/catálogos:
 - FILES: continua compatível (flags, effective_mode, limites, logs).
 - Não foi introduzida dependência que exija Office apps ausentes sem fallback.
 - Não há segredos/versionamento indevido.
+- Quando houver regra operacional explícita de naming/path (ex.: template de pastas Git), validar no código final o formato **efetivo em runtime** e não apenas defaults/documentação, para evitar regressões por configuração legacy.
 - Todas as alterações que atualizem ou modifiquem o funcionamento devem levar a uma revisão e atualização do ficheiro README, e isso deve ser reportado no chat.
 - Todos os erros detectados no VBA, se puderem ser detectados, devem levar a uma atualização no ficheiro src\vba\AGENTS.md, com a revisão e o enunciar de regras ou princípios agnósticos que evitem a repetição do erro.
 
@@ -601,3 +602,6 @@ Se começar a ficar demasiado grande:
 
 - Em `contents_api`, manter builders distintos para `create` e `update` (ou branch condicional explicitamente verificável) para garantir que `sha` nunca entra no create e para facilitar auditoria de regressões no payload.
 - Em `contents_api`, quando `file_kind` sugerir binário, emitir `ALERTA` explícito no DEBUG indicando que `GH_Blob_Base64FromText(contentText)` é estratégia textual e que `local_size_bytes` (`LenB`) é apenas estimativa, com sugestão para validar bytes/tamanho real em disco.
+
+- No export `catalogo_prompts_executadas.csv`, manter paridade com o bloco do catálogo: além das colunas principais (A:K), incluir `Next PROMPT/default/allowed` e `Descrição textual/INPUTS/OUTPUTS`; evitar CSV reduzido que perca contexto operacional.
+- Em lookup de linhas de catálogo por `prompt_id` para export/auditoria, aplicar fallback de normalização (`CR/LF`, `TAB`, `NBSP`) quando a comparação exata falhar, para tolerar caracteres invisíveis sem degradar os dados exportados.
