@@ -145,6 +145,7 @@ No update de `PATCH /git/refs/heads/{branch}`, conflitos HTTP `409` são tratado
 Eventos comuns de rastreabilidade no DEBUG: `GH_UPLOAD_START`, `GH_MODE_SELECTED`, `GH_UPLOAD_DONE` e `GH_UPLOAD_FAILED`, com resumo de sucessos/falhas/retries por execução.
 No `contents_api`, o runtime também regista fases por ficheiro (`GH_CONTENTS_CREATE_START`/`GH_CONTENTS_UPDATE_START`), validação pré-`PUT` (`GH_CONTENTS_CREATE_PAYLOAD_CHECK`/`GH_CONTENTS_CREATE_REQUEST_READY`) e falha terminal por item (`GH_FILE_FAILED`) para troubleshooting granular.
 Além disso, `GH_FILE_BEGIN` passa a incluir `file_kind=text|binary` e `local_size_bytes=...`, e o payload pode incluir `author/committer` quando `GH_COMMIT_AUTHOR_NAME` + `GH_COMMIT_AUTHOR_EMAIL` estiverem preenchidos.
+Se `file_kind=binary`, o DEBUG emite alertas (`GH_CONTENTS_ENCODING_RISK` e `GH_CONTENTS_LOCAL_SIZE_LIMIT`) para sinalizar que o fluxo atual usa `GH_Blob_Base64FromText(contentText)` e que `local_size_bytes` é estimativa de string (`LenB`), não tamanho real em disco para binários externos.
 
 ### Quadro resumido `GH_*` (defaults e valores permitidos)
 

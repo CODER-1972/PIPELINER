@@ -12,6 +12,9 @@ Option Explicit
 ' - 2026-03-08 | Codex | Remove literais JSON com aspas escapadas em validacao de create
 '   - Substitui deteccoes InStr(""""chave"""") por GH_TreeCommit_JsonPick para evitar erro de compilacao por aspas truncadas.
 '   - Mantem o mesmo diagnostico (has_sha/has_committer/has_author) com parser JSON ja usado no modulo.
+' - 2026-03-08 | Codex | Adiciona alertas para risco de codificacao textual em conteudo binario
+'   - Regista ALERTA quando file_kind=binary porque o payload usa GH_Blob_Base64FromText(contentText).
+'   - Regista ALERTA quando local_size_bytes e estimativa de string (LenB), nao tamanho real em disco para binarios externos.
 ' - 2026-03-08 | Codex | Reforca diagnostico por ficheiro e payload create/update
 '   - Separa builders de payload para create e update, omitindo branch vazio e suportando author/committer opcionais.
 '   - Acrescenta diagnostico file_kind/local_size_bytes no inicio de cada ficheiro para troubleshooting de 400 no contents_api.
@@ -40,6 +43,8 @@ Option Explicit
 '   - Valida payload de create e regista resumo sanitizado pre-PUT no DEBUG.
 ' - GH_ContentsApi_BuildCreateBody/GH_ContentsApi_BuildUpdateBody(...)
 '   - Montam JSON de create/update com regras explicitas por operacao e metadados opcionais de autoria.
+' - GH_ContentsApi_LogContentDiagnostics(...) (Sub)
+'   - Emite alertas acionaveis quando o conteudo parece binario e o upload usa estrategia textual/base64 por string.
 ' =============================================================================
 
 Public Function GH_ContentsApi_UploadFiles( _
@@ -83,6 +88,7 @@ Public Function GH_ContentsApi_UploadFiles( _
         End If
 
         Call GH_LogInfo(0, pipelineNome, GH_EVT_FILE_BEGIN, "Processar ficheiro via contents_api.", "path=" & repoPath & " | idx=" & CStr(i) & " | " & GH_ContentsApi_FileDiag(CStr(item("content"))))
+        Call GH_ContentsApi_LogContentDiagnostics(pipelineNome, repoPath, CStr(item("content")))
 
         Dim existsOnRepo As Boolean
         Dim fileSha As String
@@ -470,6 +476,21 @@ Private Function GH_ContentsApi_BuildAuthorCommitterJson(ByVal cfg As Object) As
     personJson = "{""name"":""" & GH_Blob_JsonEscape(authorName) & """,""email"":""" & GH_Blob_JsonEscape(authorEmail) & """}"
     GH_ContentsApi_BuildAuthorCommitterJson = ",""author"":" & personJson & ",""committer"":" & personJson
 End Function
+
+Private Sub GH_ContentsApi_LogContentDiagnostics(ByVal pipelineNome As String, ByVal repoPath As String, ByVal contentText As String)
+    If Not GH_ContentsApi_LooksBinary(contentText) Then Exit Sub
+
+    Dim details As String
+    details = "path=" & repoPath & " | file_kind=binary | local_size_bytes=" & CStr(LenB(contentText))
+
+    Call GH_LogWarn(0, pipelineNome, GH_EVT_CONTENTS_ENCODING_RISK, _
+                    "Conteudo parece binario, mas payload usa GH_Blob_Base64FromText(contentText).", _
+                    details & " | acao=Validar estrategia de bytes brutos/base64 para binarios externos.")
+
+    Call GH_LogWarn(0, pipelineNome, GH_EVT_CONTENTS_LOCAL_SIZE_LIMIT, _
+                    "local_size_bytes e estimativa de string (LenB), nao tamanho real em disco.", _
+                    details & " | acao=Correlacionar com tamanho real do ficheiro quando houver upload binario externo.")
+End Sub
 
 Private Function GH_ContentsApi_FileDiag(ByVal contentText As String) As String
     Dim fileKind As String
