@@ -184,6 +184,13 @@ Checklist rápido quando `Environ$("GH_TOKEN")` vier vazio:
 
 > **Segurança (produção):** evitar guardar token em claro no workbook. Preferir sempre variável de ambiente (`GH_TOKEN_ENV`) e deixar `GH_TOKEN_CONFIG` vazio, usando este último apenas para testes controlados.
 
+Troubleshooting rápido para `contents_api` com `GH_CONTENTS_CREATE_FAILED` (`http_status=400`):
+
+1. validar `GH_API_VERSION` no formato `YYYY-MM-DD` (ex.: `2022-11-28`; `28/11/2022` tende a falhar);
+2. confirmar `GH_OWNER`, `GH_REPO`, `GH_BRANCH` e `GH_BASE_PATH` sem espaços/valores inválidos;
+3. verificar no DEBUG o detalhe `err=...` do evento `GH_CONTENTS_CREATE_FAILED` (mensagem curta da API);
+4. se necessário, testar o mesmo token via `curl` em `GET /repos/{owner}/{repo}` para excluir problemas de permissões.
+
 
 ## 3.3 Seguimento
 

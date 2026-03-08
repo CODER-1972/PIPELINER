@@ -9,6 +9,9 @@ Option Explicit
 ' - Registar eventos canonicos de progresso/erro no DEBUG sem expor segredos.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Melhora diagnostico de falhas HTTP 400/403 no contents_api
+'   - Enriquece GH_CONTENTS_CREATE_FAILED/GH_CONTENTS_UPDATE_FAILED com resumo de erro HTTP e snippet da resposta.
+'   - Adiciona sugestoes acionaveis para 400/401/403/404/422 no proprio detalhe de erro.
 ' - 2026-03-08 | Codex | Reforca observabilidade por fase no contents_api
 '   - Regista eventos de inicio GH_CONTENTS_CREATE_START/GH_CONTENTS_UPDATE_START e GH_FILE_FAILED.
 '   - Valida path remoto vazio antes da chamada HTTP para evitar requests invalidos.
@@ -22,6 +25,8 @@ Option Explicit
 '   - Executa lote serial via Contents API e devolve contadores/sucesso global.
 ' - GH_ContentsApi_ReadFileShaIfExists(cfg, repoPath, pipelineNome, existsOnRepo, fileSha, errReason) As Boolean
 '   - Consulta metadados de um path no branch e devolve sha quando o ficheiro existe.
+' - GH_ContentsApi_BuildHttpDiag(statusCode, httpErr, responseText) As String
+'   - Resume erro HTTP de forma curta/acionavel para DEBUG sem expor segredos.
 ' =============================================================================
 
 Public Function GH_ContentsApi_UploadFiles( _
@@ -88,6 +93,7 @@ Public Function GH_ContentsApi_UploadFiles( _
         Dim upsertResp As String
         Dim upsertErr As String
         Dim upsertUrl As String
+        Dim upsertDiag As String
 
         upsertUrl = GH_ContentsApi_BuildContentUrl(cfg, repoPath)
 
@@ -106,10 +112,11 @@ Public Function GH_ContentsApi_UploadFiles( _
             Call GH_LogInfo(0, pipelineNome, GH_EVT_CONTENTS_UPDATE_START, "Inicio de update via Contents API.", "path=" & repoPath & " | sha=" & GH_ContentsApi_ShortSha(fileSha))
             If Not GH_HTTP_SendJson("PUT", upsertUrl, cfg, reqBody, upsertStatus, upsertResp, upsertErr, pipelineNome) Then
                 failCount = failCount + 1
-                Call GH_LogError(0, pipelineNome, GH_EVT_CONTENTS_UPDATE_FAILED, "Falha no update via Contents API.", "path=" & repoPath & " | http_status=" & CStr(upsertStatus))
+                upsertDiag = GH_ContentsApi_BuildHttpDiag(upsertStatus, upsertErr, upsertResp)
+                Call GH_LogError(0, pipelineNome, GH_EVT_CONTENTS_UPDATE_FAILED, "Falha no update via Contents API.", "path=" & repoPath & " | " & upsertDiag)
                 Call GH_LogError(0, pipelineNome, GH_EVT_FILE_FAILED, "Ficheiro falhou no update via contents_api.", "path=" & repoPath)
                 If policy = "fail_fast" Then
-                    errReason = "Update falhou: " & repoPath & " (status=" & CStr(upsertStatus) & ")"
+                    errReason = "Update falhou: " & repoPath & " (" & upsertDiag & ")"
                     Exit Function
                 End If
                 GoTo ContinueLoop
@@ -121,10 +128,11 @@ Public Function GH_ContentsApi_UploadFiles( _
             Call GH_LogInfo(0, pipelineNome, GH_EVT_CONTENTS_CREATE_START, "Inicio de create via Contents API.", "path=" & repoPath)
             If Not GH_HTTP_SendJson("PUT", upsertUrl, cfg, reqBody, upsertStatus, upsertResp, upsertErr, pipelineNome) Then
                 failCount = failCount + 1
-                Call GH_LogError(0, pipelineNome, GH_EVT_CONTENTS_CREATE_FAILED, "Falha no create via Contents API.", "path=" & repoPath & " | http_status=" & CStr(upsertStatus))
+                upsertDiag = GH_ContentsApi_BuildHttpDiag(upsertStatus, upsertErr, upsertResp)
+                Call GH_LogError(0, pipelineNome, GH_EVT_CONTENTS_CREATE_FAILED, "Falha no create via Contents API.", "path=" & repoPath & " | " & upsertDiag)
                 Call GH_LogError(0, pipelineNome, GH_EVT_FILE_FAILED, "Ficheiro falhou no create via contents_api.", "path=" & repoPath)
                 If policy = "fail_fast" Then
-                    errReason = "Create falhou: " & repoPath & " (status=" & CStr(upsertStatus) & ")"
+                    errReason = "Create falhou: " & repoPath & " (" & upsertDiag & ")"
                     Exit Function
                 End If
                 GoTo ContinueLoop
@@ -192,6 +200,39 @@ Private Function GH_ContentsApi_ReadFileShaIfExists( _
 
     errReason = "status=" & CStr(statusCode)
     If httpErr <> "" Then errReason = errReason & " | " & httpErr
+End Function
+
+Private Function GH_ContentsApi_BuildHttpDiag( _
+    ByVal statusCode As Long, _
+    ByVal httpErr As String, _
+    ByVal responseText As String) As String
+
+    Dim diag As String
+    diag = "http_status=" & CStr(statusCode)
+
+    Dim msg As String
+    msg = Trim$(GH_TreeCommit_JsonPick(responseText, "message"))
+    If msg = "" Then msg = Trim$(httpErr)
+
+    If msg <> "" Then
+        If Len(msg) > 180 Then msg = Left$(msg, 180) & "..."
+        diag = diag & " | err=" & Replace$(msg, "|", "/")
+    End If
+
+    Select Case statusCode
+        Case 400
+            diag = diag & " | action=Validar GH_API_VERSION(YYYY-MM-DD), owner/repo/branch e payload."
+        Case 401
+            diag = diag & " | action=Token invalido/expirado; confirmar scope repo."
+        Case 403
+            diag = diag & " | action=Sem permissao ou limite; confirmar scope Content:write."
+        Case 404
+            diag = diag & " | action=Repo/branch/path inexistente ou sem acesso."
+        Case 422
+            diag = diag & " | action=Payload invalido (sha/branch/message/path); rever resposta."
+    End Select
+
+    GH_ContentsApi_BuildHttpDiag = diag
 End Function
 
 Private Function GH_ContentsApi_BuildUpsertBody(ByVal cfg As Object, ByVal contentText As String, ByVal existingSha As String) As String
