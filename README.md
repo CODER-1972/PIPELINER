@@ -186,11 +186,11 @@ Checklist rápido quando `Environ$("GH_TOKEN")` vier vazio:
 
 Troubleshooting rápido para `contents_api` com `GH_CONTENTS_CREATE_FAILED` (`http_status=400`):
 
-1. validar `GH_API_VERSION` no formato `YYYY-MM-DD` (ex.: `2022-11-28`; `28/11/2022` tende a falhar);
+1. validar `GH_API_VERSION` no formato `YYYY-MM-DD` (ex.: `2022-11-28`); o runtime também tenta converter `dd/mm/yyyy` automaticamente para reduzir falhas 400;
 2. confirmar `GH_OWNER`, `GH_REPO`, `GH_BRANCH` e `GH_BASE_PATH` sem espaços/valores inválidos;
 3. verificar no DEBUG o detalhe `err=...` do evento `GH_CONTENTS_CREATE_FAILED` (mensagem curta da API);
 4. se necessário, testar o mesmo token via `curl` em `GET /repos/{owner}/{repo}` para excluir problemas de permissões.
-
+5. se `GH_API_VERSION` vier em formato não canónico, o DEBUG passa a emitir `GH_CONFIG` (ALERTA) com `raw` e `normalized` para facilitar correção na folha Config.
 
 ## 3.3 Seguimento
 

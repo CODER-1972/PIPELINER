@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Alerta explicito quando GH_API_VERSION e normalizado
+'   - Emite GH_CONFIG (ALERTA) quando valor em Config nao estiver no formato canonico yyyy-mm-dd.
+'   - Mostra raw/normalizado no detalhe para diagnostico rapido sem interromper o fluxo.
 ' - 2026-03-08 | Codex | Enriquecimento de contexto em GH_MODE_SELECTED
 '   - Inclui owner/repo/branch/remote_folder/total_files/token_source para auditoria imediata no DEBUG.
 ' - 2026-03-08 | Codex | Ativa dispatch por GH_UPLOAD_MODE no runtime principal
@@ -43,6 +46,8 @@ Option Explicit
 '   - Regista path remoto e nome dos ficheiros preparados para upload GitHub.
 ' - GitDebug_RunUploadByMode(cfg As Object, files As Collection, pipelineNome As String, uploadMode As String, reason As String, successCount As Long, failCount As Long, retryCount As Long) As Boolean
 '   - Faz dispatch operacional entre tree_commit e contents_api com rastreabilidade.
+' - GitDebug_NormalizeApiVersionForDiag(rawValue As String) As String (Private Function)
+'   - Normaliza GH_API_VERSION para diagnostico/log sem alterar compatibilidade do Config.
 ' - JsonPick(body As String, keyName As String) As String (Private Function)
 '   - Extrai valor string de chave JSON simples para compatibilidade de parsing em M21.
 ' =============================================================================
@@ -68,6 +73,14 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     End If
 
     Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Fonte do token GitHub resolvida.", "token_source=" & GH_Config_GetString(cfg, "token_source", "desconhecida"))
+
+    Dim apiVersionRaw As String
+    Dim apiVersionNormalized As String
+    apiVersionRaw = GH_Config_GetString(cfg, "api_version", "")
+    apiVersionNormalized = GitDebug_NormalizeApiVersionForDiag(apiVersionRaw)
+    If Trim$(apiVersionRaw) <> "" And StrComp(Trim$(apiVersionRaw), apiVersionNormalized, vbTextCompare) <> 0 Then
+        Call GH_LogWarn(0, pipelineNome, GH_EVT_CONFIG, "GH_API_VERSION normalizado para formato canonico.", "raw=" & Trim$(apiVersionRaw) & " | normalized=" & apiVersionNormalized & " | action=Preferir YYYY-MM-DD na Config.")
+    End If
 
     Dim ghFolder As String
     ghFolder = GitDebug_BuildRunFolder(cfg, pipelineNome)
@@ -129,6 +142,28 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
 EH:
     Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD, "Falha no auto-upload de debug: " & Err.Description, "Validar parametros GH_* e conectividade com api.github.com.")
 End Sub
+
+Private Function GitDebug_NormalizeApiVersionForDiag(ByVal rawValue As String) As String
+    Dim valueText As String
+    valueText = Trim$(rawValue)
+
+    If valueText = "" Then
+        GitDebug_NormalizeApiVersionForDiag = "2022-11-28"
+        Exit Function
+    End If
+
+    If valueText Like "####-##-##" Then
+        GitDebug_NormalizeApiVersionForDiag = valueText
+        Exit Function
+    End If
+
+    If valueText Like "##/##/####" Then
+        GitDebug_NormalizeApiVersionForDiag = Right$(valueText, 4) & "-" & Mid$(valueText, 4, 2) & "-" & Left$(valueText, 2)
+        Exit Function
+    End If
+
+    GitDebug_NormalizeApiVersionForDiag = "2022-11-28"
+End Function
 
 Private Function GitDebug_BuildRunFolder(ByVal cfg As Object, ByVal pipelineNome As String) As String
     Dim tpl As String
