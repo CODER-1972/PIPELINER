@@ -8,6 +8,10 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-08 | Codex | Espelho DEBUG filtrado por prompt com quebra automatica para 4a linha
+'   - Copia apenas linhas do DEBUG da prompt executada, prefixando cada linha com o numero da linha original.
+'   - Mantem TSV sem wrap na coluna Notas para desenvolvimento e divide entre linhas +2/+3 quando excede o limite da celula.
+'   - Emite alerta quando excede tambem a 4a linha e ocorre truncagem controlada por limite de 32767 caracteres.
 ' - 2026-03-08 | Codex | Espelho do DEBUG no catalogo apos cada prompt executada
 '   - Copia a tabela DEBUG para uma unica celula TSV sem wrap em Notas para desenvolvimento (linha +2 do bloco).
 '   - Escreve cabecalho "DEBUG [dd-mm-yyyy hh:mm]" a negrito em Notas para desenvolvimento (linha +1) e aplica fundo salmao claro.
@@ -2394,34 +2398,52 @@ Private Sub Painel_EspelharDebugNoCatalogo(ByVal passo As Long, ByVal promptId A
 
     Dim headerCell As Range
     Dim bodyCell As Range
+    Dim bodyOverflowCell As Range
     Set headerCell = wsCatalogo.Cells(rowId + 1, 10)
     Set bodyCell = wsCatalogo.Cells(rowId + 2, 10)
+    Set bodyOverflowCell = wsCatalogo.Cells(rowId + 3, 10)
 
     Dim snapshotTsv As String
-    snapshotTsv = Painel_DebugSheetToTsv(wsDebug)
+    snapshotTsv = Painel_DebugSheetToTsvPorPrompt(wsDebug, pid)
     If Trim$(snapshotTsv) = "" Then
-        snapshotTsv = "[DEBUG vazio no momento da gravacao]"
+        snapshotTsv = "[Sem linhas no DEBUG para a prompt " & pid & "]"
         Call Debug_Registar(passo, pid, "ALERTA", "", "DEBUG_SNAPSHOT", _
-            "O DEBUG estava vazio e foi gravado um marcador informativo no catalogo.", _
-            "Sugestao: confirme se a execucao estava a registar eventos no DEBUG.")
+            "Nao foram encontradas linhas no DEBUG para a prompt executada; foi gravado um marcador informativo no catalogo.", _
+            "Sugestao: confirme se o Prompt ID do DEBUG coincide com o ID do catalogo.")
     End If
+
+    Dim bodyLinha3 As String
+    Dim bodyLinha4 As String
+    Dim truncado As Boolean
+    Call Painel_SplitSnapshotEmDuasCelulas(snapshotTsv, 32767, bodyLinha3, bodyLinha4, truncado)
 
     headerCell.Value = "DEBUG [" & Format$(Now, "dd-mm-yyyy hh:mm") & "]"
     headerCell.Font.Bold = True
     headerCell.WrapText = False
 
-    bodyCell.Value = snapshotTsv
+    bodyCell.Value = bodyLinha3
     bodyCell.Font.Bold = False
     bodyCell.WrapText = False
+
+    bodyOverflowCell.Value = bodyLinha4
+    bodyOverflowCell.Font.Bold = False
+    bodyOverflowCell.WrapText = False
 
     Dim salmonLight As Long
     salmonLight = RGB(255, 204, 153)
     headerCell.Interior.Color = salmonLight
     bodyCell.Interior.Color = salmonLight
+    bodyOverflowCell.Interior.Color = salmonLight
 
     Call Debug_Registar(passo, pid, "INFO", "", "DEBUG_SNAPSHOT", _
-        "DEBUG consolidado no catalogo com sucesso para consulta rapida.", _
-        "Foi atualizado o bloco de Notas para desenvolvimento (linhas 2 e 3 da prompt), substituindo conteudo anterior.")
+        "DEBUG consolidado no catalogo com sucesso para consulta rapida (filtrado por Prompt ID).", _
+        "Foi atualizado o bloco de Notas para desenvolvimento (linhas 3 e 4 da prompt), substituindo conteudo anterior.")
+
+    If truncado Then
+        Call Debug_Registar(passo, pid, "ALERTA", "", "DEBUG_SNAPSHOT", _
+            "O espelho do DEBUG excedeu o limite de 2 celulas (linhas 3 e 4) e foi truncado no catalogo.", _
+            "Sugestao: reduzir verbosidade do DEBUG ou consultar a folha DEBUG completa para detalhes adicionais.")
+    End If
     Exit Sub
 
 TrataErro:
@@ -2462,13 +2484,16 @@ Private Function Painel_LocalizarLinhaPromptNoCatalogo(ByVal wsCatalogo As Works
     Next i
 End Function
 
-Private Function Painel_DebugSheetToTsv(ByVal wsDebug As Worksheet) As String
+Private Function Painel_DebugSheetToTsvPorPrompt(ByVal wsDebug As Worksheet, ByVal promptId As String) As String
     Dim lastRow As Long
     Dim lastCol As Long
+    Dim colPrompt As Long
     Dim r As Long
     Dim c As Long
     Dim lineTxt As String
     Dim acc As String
+    Dim valorPrompt As String
+    Dim pid As String
 
     lastRow = wsDebug.Cells(wsDebug.Rows.Count, 1).End(xlUp).Row
     If lastRow < 1 Then Exit Function
@@ -2476,17 +2501,112 @@ Private Function Painel_DebugSheetToTsv(ByVal wsDebug As Worksheet) As String
     lastCol = wsDebug.Cells(1, wsDebug.Columns.Count).End(xlToLeft).Column
     If lastCol < 1 Then Exit Function
 
-    For r = 1 To lastRow
-        lineTxt = ""
+    colPrompt = Painel_FindHeaderColumn(wsDebug, "Prompt ID")
+    pid = Trim$(promptId)
+
+    For r = 2 To lastRow
+        If colPrompt > 0 Then
+            valorPrompt = Trim$(CStr(wsDebug.Cells(r, colPrompt).Value))
+            If UCase$(valorPrompt) <> UCase$(pid) Then GoTo ProximaLinha
+        End If
+
+        lineTxt = CStr(r)
         For c = 1 To lastCol
-            If c > 1 Then lineTxt = lineTxt & vbTab
-            lineTxt = lineTxt & Replace(CStr(wsDebug.Cells(r, c).Value), vbTab, " ")
+            lineTxt = lineTxt & vbTab
+            lineTxt = lineTxt & Painel_DebugSanitizarCampoTsv(CStr(wsDebug.Cells(r, c).Value))
         Next c
-        If r > 1 Then acc = acc & vbLf
+
+        If Len(acc) > 0 Then acc = acc & vbLf
         acc = acc & lineTxt
+ProximaLinha:
     Next r
 
-    Painel_DebugSheetToTsv = acc
+    Painel_DebugSheetToTsvPorPrompt = acc
+End Function
+
+Private Function Painel_DebugSanitizarCampoTsv(ByVal valor As String) As String
+    Dim t As String
+    t = CStr(valor)
+    t = Replace(t, vbTab, " ")
+    t = Replace(t, vbCrLf, " | ")
+    t = Replace(t, vbCr, " | ")
+    t = Replace(t, vbLf, " | ")
+    Painel_DebugSanitizarCampoTsv = t
+End Function
+
+Private Function Painel_FindHeaderColumn(ByVal ws As Worksheet, ByVal headerName As String) As Long
+    Dim lastCol As Long
+    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+    If lastCol < 1 Then Exit Function
+
+    Dim alvo As String
+    alvo = Painel_NormalizeHeaderToken(headerName)
+
+    Dim c As Long
+    Dim atual As String
+    For c = 1 To lastCol
+        atual = Painel_NormalizeHeaderToken(CStr(ws.Cells(1, c).Value))
+        If atual = alvo Then
+            Painel_FindHeaderColumn = c
+            Exit Function
+        End If
+    Next c
+End Function
+
+Private Function Painel_NormalizeHeaderToken(ByVal s As String) As String
+    Dim t As String
+    t = LCase$(Trim$(s))
+    t = Replace(t, "á", "a")
+    t = Replace(t, "à", "a")
+    t = Replace(t, "â", "a")
+    t = Replace(t, "ã", "a")
+    t = Replace(t, "é", "e")
+    t = Replace(t, "ê", "e")
+    t = Replace(t, "í", "i")
+    t = Replace(t, "ó", "o")
+    t = Replace(t, "ô", "o")
+    t = Replace(t, "õ", "o")
+    t = Replace(t, "ú", "u")
+    t = Replace(t, "ç", "c")
+    Painel_NormalizeHeaderToken = t
+End Function
+
+Private Sub Painel_SplitSnapshotEmDuasCelulas(ByVal snapshotTsv As String, ByVal maxChars As Long, ByRef parte1 As String, ByRef parte2 As String, ByRef truncado As Boolean)
+    Dim linhas() As String
+    Dim i As Long
+    Dim linha As String
+
+    parte1 = ""
+    parte2 = ""
+    truncado = False
+
+    If snapshotTsv = "" Then Exit Sub
+
+    linhas = Split(snapshotTsv, vbLf)
+    For i = LBound(linhas) To UBound(linhas)
+        linha = CStr(linhas(i))
+
+        If Not Painel_TentarAcrescentarLinha(parte1, linha, maxChars) Then
+            If Not Painel_TentarAcrescentarLinha(parte2, linha, maxChars) Then
+                truncado = True
+                Exit For
+            End If
+        End If
+    Next i
+End Sub
+
+Private Function Painel_TentarAcrescentarLinha(ByRef baseTxt As String, ByVal linha As String, ByVal maxChars As Long) As Boolean
+    Dim candidato As String
+    If baseTxt = "" Then
+        candidato = linha
+    Else
+        candidato = baseTxt & vbLf & linha
+    End If
+
+    If Len(candidato) <= maxChars Then
+        baseTxt = candidato
+        Painel_TentarAcrescentarLinha = True
+    End If
 End Function
 
 Private Sub Painel_AtualizarUltimos4(ByRef ultimos4() As String, ByVal atual As String)
