@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-08 | Codex | Corrige export do catalogo para refletir bloco completo do prompt
+'   - Substitui CSV reduzido (7 colunas) por export completo com colunas A:K e campos Next/INPUTS/OUTPUTS.
+'   - Faz lookup robusto da linha do prompt por ID com normalizacao (CR/LF/TAB/NBSP) para evitar falhas por caracteres invisiveis.
 ' - 2026-03-08 | Codex | Ajusta template default da pasta GitHub para hierarquia pipeline/prompt/versao
 '   - Define default de run folder como {{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{RUN_STAMP}}.
 '   - Extrai prompt/version a partir do primeiro Prompt ID da lista da pipeline no PAINEL (com fallback seguro).
@@ -459,16 +462,146 @@ Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelin
     Next r
 
     Dim out As String
-    out = "prompt_id,catalogo,nome_curto,nome_descritivo,modelo,modos,storage" & vbCrLf
+    out = "prompt_id,catalogo,nome_curto,nome_descritivo,texto_prompt,modelo,modos,storage,config_extra,comentarios,notas_dev,historico_versoes,next_prompt,next_prompt_default,next_prompt_allowed,descricao_textual,inputs,outputs" & vbCrLf
 
     Dim k As Variant
     For Each k In d.Keys
-        Dim p As PromptDefinicao
-        p = Catalogo_ObterPromptPorID(CStr(k))
-        out = out & CsvRow(Array(p.Id, PrefixFromId(p.Id), p.NomeCurto, p.NomeDescritivo, p.modelo, p.modos, p.storage)) & vbCrLf
+        out = out & BuildExecutedCatalogCsvRow(CStr(k)) & vbCrLf
     Next k
 
     BuildExecutedCatalogCsv = out
+End Function
+
+Private Function BuildExecutedCatalogCsvRow(ByVal promptId As String) As String
+    Dim p As PromptDefinicao
+    p = Catalogo_ObterPromptPorID(promptId)
+
+    Dim catalogo As String
+    catalogo = PrefixFromId(promptId)
+
+    Dim nextPrompt As String
+    Dim nextPromptDefault As String
+    Dim nextPromptAllowed As String
+    Dim descricaoTextual As String
+    Dim inputsText As String
+    Dim outputsText As String
+
+    Call Catalogo_ReadBlockMetadata(promptId, nextPrompt, nextPromptDefault, nextPromptAllowed, descricaoTextual, inputsText, outputsText)
+
+    BuildExecutedCatalogCsvRow = CsvRow(Array( _
+        promptId, _
+        catalogo, _
+        p.NomeCurto, _
+        p.NomeDescritivo, _
+        p.textoPrompt, _
+        p.modelo, _
+        p.modos, _
+        CStr(p.storage), _
+        p.ConfigExtra, _
+        p.Comentarios, _
+        p.NotasDev, _
+        p.HistoricoVersoes, _
+        nextPrompt, _
+        nextPromptDefault, _
+        nextPromptAllowed, _
+        descricaoTextual, _
+        inputsText, _
+        outputsText))
+End Function
+
+Private Sub Catalogo_ReadBlockMetadata(ByVal promptId As String, ByRef nextPrompt As String, ByRef nextPromptDefault As String, ByRef nextPromptAllowed As String, ByRef descricaoTextual As String, ByRef inputsText As String, ByRef outputsText As String)
+    On Error GoTo EH
+
+    Dim ws As Worksheet
+    Dim rowPrompt As Long
+    Set ws = Catalogo_FindPromptRow(promptId, rowPrompt)
+    If ws Is Nothing Or rowPrompt <= 0 Then Exit Sub
+
+    nextPrompt = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 1, 2).Value), "Next PROMPT:")
+    nextPromptDefault = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 2, 2).Value), "Next PROMPT default:")
+    nextPromptAllowed = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 3, 2).Value), "Next PROMPT allowed:")
+
+    descricaoTextual = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 1, 3).Value), "Descricao textual:")
+    If descricaoTextual = "" Then descricaoTextual = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 1, 3).Value), "Descrição textual:")
+
+    inputsText = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 2, 3).Value), "INPUTS:")
+    outputsText = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 3, 3).Value), "OUTPUTS:")
+
+    If descricaoTextual = "" Then descricaoTextual = Trim$(CStr(ws.Cells(rowPrompt + 1, 4).Value))
+    If inputsText = "" Then inputsText = Trim$(CStr(ws.Cells(rowPrompt + 2, 4).Value))
+    If outputsText = "" Then outputsText = Trim$(CStr(ws.Cells(rowPrompt + 3, 4).Value))
+    Exit Sub
+
+EH:
+    nextPrompt = ""
+    nextPromptDefault = ""
+    nextPromptAllowed = ""
+    descricaoTextual = ""
+    inputsText = ""
+    outputsText = ""
+End Sub
+
+Private Function Catalogo_FindPromptRow(ByVal promptId As String, ByRef rowPrompt As Long) As Worksheet
+    rowPrompt = 0
+
+    Dim folha As String
+    folha = PrefixFromId(promptId)
+    If folha = "" Then Exit Function
+
+    On Error Resume Next
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(folha)
+    On Error GoTo 0
+    If ws Is Nothing Then Exit Function
+
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+
+    Dim lookupRaw As String
+    lookupRaw = Trim$(promptId)
+    Dim lookupNorm As String
+    lookupNorm = NormalizePromptIdForLookup(lookupRaw)
+
+    Dim r As Long
+    For r = 2 To lastRow
+        Dim idRaw As String
+        idRaw = Trim$(CStr(ws.Cells(r, 1).Value))
+        If StrComp(idRaw, lookupRaw, vbTextCompare) = 0 Then
+            rowPrompt = r
+            Set Catalogo_FindPromptRow = ws
+            Exit Function
+        End If
+
+        If lookupNorm <> "" Then
+            If StrComp(NormalizePromptIdForLookup(idRaw), lookupNorm, vbTextCompare) = 0 Then
+                rowPrompt = r
+                Set Catalogo_FindPromptRow = ws
+                Exit Function
+            End If
+        End If
+    Next r
+End Function
+
+Private Function NormalizePromptIdForLookup(ByVal textValue As String) As String
+    Dim s As String
+    s = Trim$(CStr(textValue))
+    s = Replace(s, vbCr, "")
+    s = Replace(s, vbLf, "")
+    s = Replace(s, vbTab, "")
+    s = Replace(s, ChrW$(160), "")
+    NormalizePromptIdForLookup = Trim$(s)
+End Function
+
+Private Function Catalogo_ValueAfterLabel(ByVal cellText As String, ByVal labelText As String) As String
+    Dim raw As String
+    raw = Trim$(cellText)
+    If raw = "" Then Exit Function
+
+    If LCase$(Left$(raw, Len(labelText))) = LCase$(labelText) Then
+        Catalogo_ValueAfterLabel = Trim$(Mid$(raw, Len(labelText) + 1))
+    Else
+        Catalogo_ValueAfterLabel = ""
+    End If
 End Function
 
 Private Function PrefixFromId(ByVal promptId As String) As String
