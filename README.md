@@ -113,7 +113,8 @@ Também suporta exportação opcional de debug para GitHub (Git Data API) no fim
 - gatilho por pipeline quando **Auto-guardar ficheiros** contém `sim, todos` ou `debug` (case-insensitive, mesmo com texto adicional) **ou** quando o botão `Git LOG` desse pipeline está em `ON`;
 - quando faltam parâmetros mínimos (`GH_OWNER`, `GH_REPO`, `GH_BRANCH`, token e `GH_BASE_PATH`), o DEBUG regista alerta com instrução de ação para preenchimento na folha `Config`;
 - publicação de `DEBUG.csv`, `catalogo_prompts_executadas.csv`, `Seguimento.csv` e `painel_pipeline.txt`;
-- composição da pasta remota por run em `GH_BASE_PATH/GH_LOG_FOLDER/<run_folder>`, onde `<run_folder>` segue obrigatoriamente `{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}`;
+- `catalogo_prompts_executadas.csv` inclui os campos executáveis do catálogo (A:K) e metadados do bloco (`Next PROMPT`, `default`, `allowed`, `Descrição textual`, `INPUTS`, `OUTPUTS`) para auditoria fiel ao template Excel;
+- composição da pasta remota por run em `GH_BASE_PATH/GH_LOG_FOLDER/<run_folder>`, onde `<run_folder>` por default segue `{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}`;
 - atualização da coluna `GIT_DEBUG` nas folhas `Seguimento` e `HISTÓRICO` com o link da pasta remota.
 - no arranque/fim do export, o DEBUG regista INFO/ALERTA para `run_folder`, `remote_folder` e gravação de link em `Seguimento/HISTÓRICO`.
 - em cada execução de upload Git, o DEBUG regista a fonte do token (`token_source`) e a `path` de cada ficheiro enviado.

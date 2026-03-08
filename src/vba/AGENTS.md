@@ -602,3 +602,6 @@ Se começar a ficar demasiado grande:
 
 - Em `contents_api`, manter builders distintos para `create` e `update` (ou branch condicional explicitamente verificável) para garantir que `sha` nunca entra no create e para facilitar auditoria de regressões no payload.
 - Em `contents_api`, quando `file_kind` sugerir binário, emitir `ALERTA` explícito no DEBUG indicando que `GH_Blob_Base64FromText(contentText)` é estratégia textual e que `local_size_bytes` (`LenB`) é apenas estimativa, com sugestão para validar bytes/tamanho real em disco.
+
+- No export `catalogo_prompts_executadas.csv`, manter paridade com o bloco do catálogo: além das colunas principais (A:K), incluir `Next PROMPT/default/allowed` e `Descrição textual/INPUTS/OUTPUTS`; evitar CSV reduzido que perca contexto operacional.
+- Em lookup de linhas de catálogo por `prompt_id` para export/auditoria, aplicar fallback de normalização (`CR/LF`, `TAB`, `NBSP`) quando a comparação exata falhar, para tolerar caracteres invisíveis sem degradar os dados exportados.
