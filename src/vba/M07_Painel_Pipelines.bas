@@ -8,6 +8,17 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-09 | Codex | Corrige desvio de fluxo no snapshot DEBUG (label de salto)
+'   - Substitui salto para label inexistente por label local `NextRow`, removendo `Compile error: Label not defined`.
+'   - Mantem filtro por Prompt ID/Passo, ignorando apenas linhas fora de contexto no loop de exportacao TSV.
+' - 2026-03-09 | Codex | Snapshot DEBUG focado no contexto da prompt executada
+'   - Filtra linhas por Prompt ID e por Passo (fallback) para manter eventos da prompt mesmo quando o Prompt ID vem vazio.
+'   - Mantem cabecalho da linha 1 e ordem original das linhas do DEBUG no TSV.
+'   - Evita truncagem prematura por ruido de outras prompts ao espelhar apenas o contexto relevante no catalogo.
+' - 2026-03-09 | Codex | Espelho do DEBUG passa a copiar desde a linha 1 e quebra por caracteres
+'   - Remove filtro por Prompt ID no snapshot para refletir integralmente a folha DEBUG no catalogo.
+'   - Inclui a linha 1 (cabecalhos) e preserva a numeracao original das linhas no TSV.
+'   - Divide texto entre linhas 3/4 por comprimento real (32767 chars por celula), continuando no ponto exato da interrupcao.
 ' - 2026-03-08 | Codex | Espelho DEBUG filtrado por prompt com quebra automatica para 4a linha
 '   - Copia apenas linhas do DEBUG da prompt executada, prefixando cada linha com o numero da linha original.
 '   - Mantem TSV sem wrap na coluna Notas para desenvolvimento e divide entre linhas +2/+3 quando excede o limite da celula.
@@ -2404,7 +2415,7 @@ Private Sub Painel_EspelharDebugNoCatalogo(ByVal passo As Long, ByVal promptId A
     Set bodyOverflowCell = wsCatalogo.Cells(rowId + 3, 10)
 
     Dim snapshotTsv As String
-    snapshotTsv = Painel_DebugSheetToTsvPorPrompt(wsDebug, pid)
+    snapshotTsv = Painel_DebugSheetToTsv(wsDebug, passo, pid)
     If Trim$(snapshotTsv) = "" Then
         snapshotTsv = "[Sem linhas no DEBUG para a prompt " & pid & "]"
         Call Debug_Registar(passo, pid, "ALERTA", "", "DEBUG_SNAPSHOT", _
@@ -2436,7 +2447,7 @@ Private Sub Painel_EspelharDebugNoCatalogo(ByVal passo As Long, ByVal promptId A
     bodyOverflowCell.Interior.Color = salmonLight
 
     Call Debug_Registar(passo, pid, "INFO", "", "DEBUG_SNAPSHOT", _
-        "DEBUG consolidado no catalogo com sucesso para consulta rapida (filtrado por Prompt ID).", _
+        "DEBUG consolidado no catalogo com sucesso para consulta rapida.", _
         "Foi atualizado o bloco de Notas para desenvolvimento (linhas 3 e 4 da prompt), substituindo conteudo anterior.")
 
     If truncado Then
@@ -2484,16 +2495,18 @@ Private Function Painel_LocalizarLinhaPromptNoCatalogo(ByVal wsCatalogo As Works
     Next i
 End Function
 
-Private Function Painel_DebugSheetToTsvPorPrompt(ByVal wsDebug As Worksheet, ByVal promptId As String) As String
+Private Function Painel_DebugSheetToTsv(ByVal wsDebug As Worksheet, ByVal passo As Long, ByVal promptId As String) As String
     Dim lastRow As Long
     Dim lastCol As Long
     Dim colPrompt As Long
+    Dim colPasso As Long
     Dim r As Long
     Dim c As Long
     Dim lineTxt As String
     Dim acc As String
-    Dim valorPrompt As String
-    Dim pid As String
+    Dim pidKey As String
+    Dim rowPidKey As String
+    Dim rowPasso As String
 
     lastRow = wsDebug.Cells(wsDebug.Rows.Count, 1).End(xlUp).Row
     If lastRow < 1 Then Exit Function
@@ -2502,12 +2515,31 @@ Private Function Painel_DebugSheetToTsvPorPrompt(ByVal wsDebug As Worksheet, ByV
     If lastCol < 1 Then Exit Function
 
     colPrompt = Painel_FindHeaderColumn(wsDebug, "Prompt ID")
-    pid = Trim$(promptId)
+    colPasso = Painel_FindHeaderColumn(wsDebug, "Passo")
+    pidKey = Painel_NormalizarPromptIdKey(promptId)
 
-    For r = 2 To lastRow
-        If colPrompt > 0 Then
-            valorPrompt = Trim$(CStr(wsDebug.Cells(r, colPrompt).Value))
-            If UCase$(valorPrompt) <> UCase$(pid) Then GoTo ProximaLinha
+    For r = 1 To lastRow
+        If r > 1 Then
+            If colPrompt > 0 Then
+                rowPidKey = Painel_NormalizarPromptIdKey(CStr(wsDebug.Cells(r, colPrompt).Value))
+            Else
+                rowPidKey = ""
+            End If
+
+            If colPasso > 0 Then
+                rowPasso = Trim$(CStr(wsDebug.Cells(r, colPasso).Value))
+            Else
+                rowPasso = ""
+            End If
+
+            If (pidKey <> "" And rowPidKey = pidKey) Then
+                ' inclui por Prompt ID
+            ElseIf (passo > 0 And rowPasso = CStr(passo)) Then
+                ' fallback: inclui por Passo para capturar linhas sem Prompt ID
+            Else
+                ' linha nao pertence ao prompt/passo atual
+                GoTo NextRow
+            End If
         End If
 
         lineTxt = CStr(r)
@@ -2518,10 +2550,10 @@ Private Function Painel_DebugSheetToTsvPorPrompt(ByVal wsDebug As Worksheet, ByV
 
         If Len(acc) > 0 Then acc = acc & vbLf
         acc = acc & lineTxt
-ProximaLinha:
+NextRow:
     Next r
 
-    Painel_DebugSheetToTsvPorPrompt = acc
+    Painel_DebugSheetToTsv = acc
 End Function
 
 Private Function Painel_DebugSanitizarCampoTsv(ByVal valor As String) As String
@@ -2572,42 +2604,19 @@ Private Function Painel_NormalizeHeaderToken(ByVal s As String) As String
 End Function
 
 Private Sub Painel_SplitSnapshotEmDuasCelulas(ByVal snapshotTsv As String, ByVal maxChars As Long, ByRef parte1 As String, ByRef parte2 As String, ByRef truncado As Boolean)
-    Dim linhas() As String
-    Dim i As Long
-    Dim linha As String
-
     parte1 = ""
     parte2 = ""
     truncado = False
 
     If snapshotTsv = "" Then Exit Sub
 
-    linhas = Split(snapshotTsv, vbLf)
-    For i = LBound(linhas) To UBound(linhas)
-        linha = CStr(linhas(i))
+    parte1 = Left$(snapshotTsv, maxChars)
+    If Len(snapshotTsv) > maxChars Then
+        parte2 = Mid$(snapshotTsv, maxChars + 1, maxChars)
+    End If
 
-        If Not Painel_TentarAcrescentarLinha(parte1, linha, maxChars) Then
-            If Not Painel_TentarAcrescentarLinha(parte2, linha, maxChars) Then
-                truncado = True
-                Exit For
-            End If
-        End If
-    Next i
+    truncado = (Len(snapshotTsv) > (maxChars * 2))
 End Sub
-
-Private Function Painel_TentarAcrescentarLinha(ByRef baseTxt As String, ByVal linha As String, ByVal maxChars As Long) As Boolean
-    Dim candidato As String
-    If baseTxt = "" Then
-        candidato = linha
-    Else
-        candidato = baseTxt & vbLf & linha
-    End If
-
-    If Len(candidato) <= maxChars Then
-        baseTxt = candidato
-        Painel_TentarAcrescentarLinha = True
-    End If
-End Function
 
 Private Sub Painel_AtualizarUltimos4(ByRef ultimos4() As String, ByVal atual As String)
     ultimos4(1) = ultimos4(2)
