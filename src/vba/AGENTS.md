@@ -609,3 +609,7 @@ Se começar a ficar demasiado grande:
 - Em derivação de nomes para paths de auditoria Git (ex.: `PROMPT_NAME`/`VERSION`), usar parsing explícito do `Prompt ID` (`<folha>/<ordem>/<nome>/<versão>`) e fallback por nome da pipeline quando o `pipelineIndex` vier inválido; evitar defaults silenciosos `PROMPT_DESCONHECIDO`/`VERSAO_DESCONHECIDA` quando há dados no PAINEL.
 - Antes de fechar merge em modulos `.bas/.cls/.frm`, executar varredura por marcadores `<<<<<<<`, `=======`, `>>>>>>>` e remover conflitos parcialmente resolvidos; estes marcadores podem ocultar helpers e causar `Compile error: Sub or Function not defined`.
 - Quando um helper de lookup de cabecalho (ex.: `HeaderColByName`) for usado no modulo, manter implementacao local ou dependencia publica explícita no mesmo commit; nao deixar call-site sem definicao apos resolver conflitos.
+
+- Em espelhos de logs para células (ex.: DEBUG -> catálogo), evitar segmentação por linha quando há limite de 32767 caracteres por célula; usar chunk por comprimento para continuar exatamente no ponto de corte e só truncar após esgotar todas as células alvo.
+- Em snapshots de DEBUG por prompt, aplicar filtro por `Prompt ID` com fallback por `Passo` para capturar eventos do mesmo step quando o `Prompt ID` vier vazio; isto evita perder linhas relevantes e reduz truncagem por ruído de outros passos.
+- Em espelhos de DEBUG por prompt, tirar snapshot no fecho do passo (e também antes de saídas antecipadas) para incluir logs emitidos após API/NEXT; snapshots precoces tendem a omitir diagnósticos finais da mesma prompt.
