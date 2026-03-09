@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-09 | Codex | Corrige desvio de fluxo no snapshot DEBUG (label de salto)
+'   - Substitui salto para label inexistente por label local `NextRow`, removendo `Compile error: Label not defined`.
+'   - Mantem filtro por Prompt ID/Passo, ignorando apenas linhas fora de contexto no loop de exportacao TSV.
 ' - 2026-03-09 | Codex | Snapshot DEBUG focado no contexto da prompt executada
 '   - Filtra linhas por Prompt ID e por Passo (fallback) para manter eventos da prompt mesmo quando o Prompt ID vem vazio.
 '   - Mantem cabecalho da linha 1 e ordem original das linhas do DEBUG no TSV.
@@ -2534,7 +2537,8 @@ Private Function Painel_DebugSheetToTsv(ByVal wsDebug As Worksheet, ByVal passo 
             ElseIf (passo > 0 And rowPasso = CStr(passo)) Then
                 ' fallback: inclui por Passo para capturar linhas sem Prompt ID
             Else
-                GoTo ProximaLinha
+                ' linha nao pertence ao prompt/passo atual
+                GoTo NextRow
             End If
         End If
 
@@ -2546,6 +2550,7 @@ Private Function Painel_DebugSheetToTsv(ByVal wsDebug As Worksheet, ByVal passo 
 
         If Len(acc) > 0 Then acc = acc & vbLf
         acc = acc & lineTxt
+NextRow:
     Next r
 
     Painel_DebugSheetToTsv = acc
