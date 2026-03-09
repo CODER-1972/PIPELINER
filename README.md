@@ -115,7 +115,9 @@ Também suporta exportação opcional de debug para GitHub (Git Data API) no fim
 - publicação de `DEBUG.csv`, `catalogo_prompts_executadas.csv`, `Seguimento.csv` e `painel_pipeline.txt`;
 - `catalogo_prompts_executadas.csv` espelha o layout físico do catálogo: colunas A:K e blocos de 5 linhas por prompt (linha principal + `Next PROMPT`/`default`/`allowed` + linha em branco), preservando `Descrição textual`, `INPUTS` e `OUTPUTS`;
 - composição da pasta remota por run em `GH_BASE_PATH/GH_LOG_FOLDER/<run_folder>`, onde `<run_folder>` por default segue `{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}`;
-- quando o Prompt ID segue `<Folha>/<ordem>/<nomeCurto>/<versão>`, o runtime deriva `PROMPT_NAME` como `<pipelineIndex><ordem>_<nomeCurto>` (ex.: `PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.4` -> `701_WF_PROMPT_AUDIT`) e `VERSION` como `v1.4`;
+- quando o Prompt ID segue `<Folha>/<ordem>/<nomeCurto>/<versão>`, o runtime deriva `PROMPT_NAME` como `<ordem>_<nomeCurto>` (ex.: `PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.4` -> `01_WF_PROMPT_AUDIT`) e `VERSION` como `v1.4`;
+- se `pipelineIndex` vier inválido no fluxo de export, o runtime tenta resolver a pipeline por nome no `PAINEL` com normalização de espaços invisíveis (`CR/LF/TAB/NBSP`) antes de derivar `PROMPT_NAME`/`VERSION`;
+- na derivação do primeiro Prompt ID no `PAINEL`, o runtime varre a janela inteira da lista (linha 9+) e ignora linhas vazias/entradas sem formato de ID, evitando falso `PROMPT_DESCONHECIDO` quando há separadores visuais na coluna `INICIAR`;
 - atualização da coluna `GIT_DEBUG` nas folhas `Seguimento` e `HISTÓRICO` com o link da pasta remota.
 - no arranque/fim do export, o DEBUG regista INFO/ALERTA para `run_folder`, `remote_folder` e gravação de link em `Seguimento/HISTÓRICO`.
 - após `GH_UPLOAD_DONE`, o runtime faz uma republicação final apenas de `DEBUG.csv` para aproximar o artefacto remoto ao estado final da folha `DEBUG` no fim da rotina.
@@ -184,8 +186,9 @@ Checklist rápido quando `Environ$("GH_TOKEN")` vier vazio:
 
 1. confirmar em PowerShell/CMD que a variável existe no perfil correto (`USER` ou `SYSTEM`);
 2. no VBA (Janela Immediate), testar `? GH_Config_ResolveToken(src): ? src` para ver `token_source` efetivo;
-3. confirmar na folha `Config` que `GH_TOKEN_ENV` aponta para `GH_TOKEN` (ou `GITHUB_TOKEN`) e que `GH_TOKEN_CONFIG` está vazio (ou com PAT real para fallback controlado);
-4. reabrir o Excel e repetir o teste.
+3. para um resumo rápido e sanitizado dos parâmetros GitHub, executar `GH_Config_PrintImmediateReport` na Janela Immediate.
+4. confirmar na folha `Config` que `GH_TOKEN_ENV` aponta para `GH_TOKEN` (ou `GITHUB_TOKEN`) e que `GH_TOKEN_CONFIG` está vazio (ou com PAT real para fallback controlado);
+5. reabrir o Excel e repetir o teste.
 
 > **Segurança (produção):** evitar guardar token em claro no workbook. Preferir sempre variável de ambiente (`GH_TOKEN_ENV`) e deixar `GH_TOKEN_CONFIG` vazio, usando este último apenas para testes controlados.
 
@@ -1054,3 +1057,7 @@ Regra operacional rápida:
 - para literais críticos (nomes de folhas, severidades, chaves de configuração), preferir tokens ASCII e usar fallback com `ChrW$` quando precisar de acentos (ex.: `"HIST" & ChrW$(&HD3) & "RICO"`) para reduzir risco de mojibake entre UTF-8/CP1252.
 - em edições feitas por agentes/LLMs (ex.: Codex), preferir comentários e headers em ASCII puro (sem acentos), mantendo acentos apenas quando forem funcionais.
 - após qualquer edição de módulos `.bas/.cls/.frm`, correr `python scripts/check_vba_encoding.py`; se houver erro de EOL/encoding, normalizar o ficheiro para `cp1252 + CRLF` antes do commit.
+
+### Validação estática de labels `GoTo` (sanity check)
+
+Como prevenção de regressões de compilação no VBE (`Compile error: Label not defined`), foi adicionada à rotina de validação de manutenção uma verificação estática dos módulos VBA para confirmar que saltos `GoTo/GoSub` apontam para labels existentes no mesmo módulo/procedimento.

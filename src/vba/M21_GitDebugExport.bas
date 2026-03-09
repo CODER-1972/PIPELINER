@@ -9,6 +9,33 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-09 | Codex | Remove prefixo do indice no PROMPT_NAME do run folder Git
+'   - Altera derivacao para <ordem>_<nomeCurto> (ex.: 01_WF_PROMPT_AUDIT), sem prefixo do slot da pipeline.
+'   - Mantem fallback por nome da pipeline apenas para resolver Prompt ID, sem impactar o nome final da prompt.
+' - 2026-03-09 | Codex | Tolera linhas vazias/comentarios na lista INICIAR ao derivar Prompt ID
+'   - Deixa de parar na primeira linha vazia e passa a varrer a janela completa da lista para encontrar o primeiro Prompt ID valido.
+'   - Ignora entradas nao-ID (sem formato <folha>/<ordem>/<nome>/<versao>) para reduzir quedas indevidas em PROMPT_DESCONHECIDO.
+' - 2026-03-09 | Codex | Endurece resolucao de Prompt ID no PAINEL para pasta remota Git
+'   - Resolve coluna/slot da pipeline com normalizacao de texto (CR/LF/TAB/NBSP/espacos) e extrai prompt mesmo com variacoes de nome.
+'   - Usa pipelineIndex efetivo apenas para resolver coluna da pipeline no PAINEL e regista alerta diagnostico quando nao encontra Prompt ID.
+' - 2026-03-08 | Codex | Corrige derivacao de PROMPT_NAME/VERSION para pasta remota Git
+'   - Passa a montar PROMPT_NAME no formato <ordem>_<nomeCurto> (ex.: 01_WF_PROMPT_AUDIT).
+'   - Adiciona fallback por nome da pipeline para resolver o primeiro Prompt ID quando o indice nao estiver disponivel.
+' - 2026-03-09 | Codex | Tolera linhas vazias/comentarios na lista INICIAR ao derivar Prompt ID
+'   - Deixa de parar na primeira linha vazia e passa a varrer a janela completa da lista para encontrar o primeiro Prompt ID valido.
+'   - Ignora entradas nao-ID (sem formato <folha>/<ordem>/<nome>/<versao>) para reduzir quedas indevidas em PROMPT_DESCONHECIDO.
+' - 2026-03-09 | Codex | Corrige erro de compilacao em BuildExecutedCatalogCsv
+'   - Declara colecao `orderedIds` e usa dictionary local `seen` para deduplicar Prompt IDs sem `Variable not defined`.
+'   - Fecha a funcao com `End Function` e preserva ordem de execucao ao montar `catalogo_prompts_executadas.csv`.
+' - 2026-03-09 | Codex | Endurece resolucao de Prompt ID no PAINEL para pasta remota Git
+'   - Resolve coluna/slot da pipeline com normalizacao de texto (CR/LF/TAB/NBSP/espacos) e extrai prompt mesmo com variacoes de nome.
+'   - Passa a usar pipelineIndex efetivo (resolvido pelo PAINEL) na derivacao de PROMPT_NAME e regista alerta diagnostico quando nao encontra Prompt ID.
+' - 2026-03-08 | Codex | Corrige derivacao de PROMPT_NAME/VERSION para pasta remota Git
+'   - Passa a montar PROMPT_NAME no formato <pipelineIndex><ordem>_<nomeCurto> (ex.: 701_WF_PROMPT_AUDIT).
+'   - Adiciona fallback por nome da pipeline para resolver o primeiro Prompt ID quando o indice nao estiver disponivel.
+' - 2026-03-09 | Codex | Corrige deteccao de colunas no Seguimento para export do catalogo
+'   - Remove dependencia de helper inexistente (`HeaderColByName`) e usa mapa de cabecalhos local com aliases robustos.
+'   - Garante fallback para devolver sempre cabecalho CSV (evita ficheiro vazio/BOM-only no GitHub).
 ' - 2026-03-09 | Codex | Corrige conflito de merge e helper de cabecalho no export Git
 '   - Remove marcadores `<<<<<<< ======= >>>>>>>` remanescentes no modulo para restaurar compilacao.
 '   - Reintroduz helper local `HeaderColByName` usando `HeaderMap/MapGet` para evitar `Sub or Function not defined`.
@@ -76,10 +103,10 @@ Option Explicit
 '   - Normaliza GH_API_VERSION para diagnostico/log sem alterar compatibilidade do Config.
 ' - GitDebug_BuildRunFolder(cfg As Object, pipelineNome As String, pipelineIndex As Long) As String (Private Function)
 '   - Resolve pasta remota por run e aplica estrutura canonica obrigatoria pipeline/prompt/versao/data.
-' - GitDebug_FirstPromptIdFromPainel(pipelineIndex As Long, pipelineNome As String) As String (Private Function)
-'   - Resolve o primeiro Prompt ID ativo na lista da pipeline por indice ou fallback por nome no PAINEL.
-' - HeaderColByName(ws As Worksheet, headerName As String) As Long (Private Function)
-'   - Resolve indice de coluna por nome do cabecalho para leituras robustas da folha Seguimento.
+' - GitDebug_FirstPromptIdFromPainel(pipelineIndex As Long, pipelineNome As String, resolvedPipelineIndex As Long) As String (Private Function)
+'   - Resolve o primeiro Prompt ID ativo e devolve pipelineIndex efetivo por indice ou fallback por nome no PAINEL.
+' - GitDebug_IsLikelyPromptId(promptId As String) As Boolean (Private Function)
+'   - Valida formato minimo de Prompt ID para ignorar linhas decorativas/comentarios na lista do PAINEL.
 ' - JsonPick(body As String, keyName As String) As String (Private Function)
 '   - Extrai valor string de chave JSON simples para compatibilidade de parsing em M21.
 ' =============================================================================
@@ -243,14 +270,19 @@ Private Function GitDebug_BuildRunFolder(ByVal cfg As Object, ByVal pipelineNome
     Dim ignored As String
     ignored = GH_Config_GetString(cfg, "run_folder_template", "")
 
+    Dim effectivePipelineIndex As Long
     Dim firstPromptId As String
-    firstPromptId = GitDebug_FirstPromptIdFromPainel(pipelineIndex, pipelineNome)
+    firstPromptId = GitDebug_FirstPromptIdFromPainel(pipelineIndex, pipelineNome, effectivePipelineIndex)
+
+    If Trim$(firstPromptId) = "" Then
+        Call GH_LogWarn(0, pipelineNome, GH_EVT_CONFIG, "Nao foi possivel derivar Prompt ID para run_folder.", "pipeline_index_in=" & CStr(pipelineIndex) & " | pipeline_index_effective=" & CStr(effectivePipelineIndex) & " | action=Verifique PAINEL (linha 1 nome; lista INICIAR a partir da linha 9).")
+    End If
 
     Dim safePipeline As String
     safePipeline = GitDebug_SanitizePathPart(pipelineNome)
 
     Dim safePromptName As String
-    safePromptName = GitDebug_SanitizePathPart(GitDebug_PromptNameFromId(firstPromptId, pipelineIndex))
+    safePromptName = GitDebug_SanitizePathPart(GitDebug_PromptNameFromId(firstPromptId, effectivePipelineIndex))
 
     Dim safeVersion As String
     safeVersion = GitDebug_SanitizePathPart(GitDebug_PromptVersionFromId(firstPromptId))
@@ -283,7 +315,7 @@ Private Function GitDebug_SanitizePathTemplate(ByVal templatePath As String) As 
     GitDebug_SanitizePathTemplate = out
 End Function
 
-Private Function GitDebug_FirstPromptIdFromPainel(ByVal pipelineIndex As Long, ByVal pipelineNome As String) As String
+Private Function GitDebug_FirstPromptIdFromPainel(ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByRef resolvedPipelineIndex As Long) As String
     On Error GoTo EH
 
     Const LIST_START_ROW As Long = 9
@@ -292,23 +324,87 @@ Private Function GitDebug_FirstPromptIdFromPainel(ByVal pipelineIndex As Long, B
     Set wsPainel = ThisWorkbook.Worksheets("PAINEL")
 
     Dim colIniciar As Long
-    colIniciar = GitDebug_ResolvePainelStartColumn(wsPainel, pipelineIndex, pipelineNome)
+    colIniciar = GitDebug_ResolvePainelStartColumn(wsPainel, pipelineIndex, pipelineNome, resolvedPipelineIndex)
     If colIniciar = 0 Then Exit Function
 
     Dim r As Long
     For r = LIST_START_ROW To LIST_START_ROW + 400
         Dim promptId As String
         promptId = Trim$(CStr(wsPainel.Cells(r, colIniciar).Value))
-        If promptId = "" Then Exit For
-        If UCase$(promptId) <> "STOP" Then
-            GitDebug_FirstPromptIdFromPainel = promptId
-            Exit Function
+
+        If promptId <> "" Then
+            If UCase$(promptId) <> "STOP" Then
+                If GitDebug_IsLikelyPromptId(promptId) Then
+                    GitDebug_FirstPromptIdFromPainel = promptId
+                    Exit Function
+                End If
+            End If
         End If
     Next r
 
     Exit Function
 EH:
     GitDebug_FirstPromptIdFromPainel = ""
+End Function
+
+Private Function GitDebug_ResolvePainelStartColumn(ByVal wsPainel As Worksheet, ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByRef resolvedPipelineIndex As Long) As Long
+    resolvedPipelineIndex = 0
+
+    If pipelineIndex >= 1 And pipelineIndex <= 10 Then
+        resolvedPipelineIndex = pipelineIndex
+        GitDebug_ResolvePainelStartColumn = 2 + (pipelineIndex - 1) * 2
+        Exit Function
+    End If
+
+    Dim targetName As String
+    targetName = GitDebug_NormalizeCompareToken(pipelineNome)
+    If targetName = "" Then Exit Function
+
+    Dim idx As Long
+    For idx = 1 To 10
+        Dim candidateCol As Long
+        candidateCol = 2 + (idx - 1) * 2
+        If GitDebug_NormalizeCompareToken(CStr(wsPainel.Cells(1, candidateCol).Value)) = targetName Then
+            resolvedPipelineIndex = idx
+            GitDebug_ResolvePainelStartColumn = candidateCol
+            Exit Function
+        End If
+    Next idx
+End Function
+
+Private Function GitDebug_NormalizeCompareToken(ByVal rawText As String) As String
+    Dim s As String
+    s = Trim$(rawText)
+    If s = "" Then Exit Function
+
+    s = Replace(s, vbCr, " ")
+    s = Replace(s, vbLf, " ")
+    s = Replace(s, vbTab, " ")
+    s = Replace(s, ChrW$(160), " ")
+
+    Dim hasDouble As Boolean
+    Do
+        hasDouble = (InStr(1, s, "  ", vbBinaryCompare) > 0)
+        If hasDouble Then s = Replace(s, "  ", " ")
+    Loop While hasDouble
+
+    GitDebug_NormalizeCompareToken = UCase$(Trim$(s))
+End Function
+
+Private Function GitDebug_IsLikelyPromptId(ByVal promptId As String) As Boolean
+    Dim cleaned As String
+    cleaned = Trim$(promptId)
+    If cleaned = "" Then Exit Function
+
+    Dim parts() As String
+    parts = Split(cleaned, "/")
+    If UBound(parts) < 3 Then Exit Function
+
+    If Trim$(parts(0)) = "" Then Exit Function
+    If Trim$(parts(2)) = "" Then Exit Function
+    If Trim$(parts(3)) = "" Then Exit Function
+
+    GitDebug_IsLikelyPromptId = True
 End Function
 
 Private Function GitDebug_PromptNameFromId(ByVal promptId As String, ByVal pipelineIndex As Long) As String
@@ -325,34 +421,13 @@ Private Function GitDebug_PromptNameFromId(ByVal promptId As String, ByVal pipel
         stepCode = GitDebug_KeepDigitsOnly(Trim$(parts(1)))
     End If
 
-    If pipelineIndex > 0 And stepCode <> "" And promptLabel <> "" Then
-        GitDebug_PromptNameFromId = CStr(pipelineIndex) & stepCode & "_" & promptLabel
+    If stepCode <> "" And promptLabel <> "" Then
+        GitDebug_PromptNameFromId = stepCode & "_" & promptLabel
     Else
         GitDebug_PromptNameFromId = promptLabel
     End If
 
     If GitDebug_PromptNameFromId = "" Then GitDebug_PromptNameFromId = "PROMPT_DESCONHECIDO"
-End Function
-
-Private Function GitDebug_ResolvePainelStartColumn(ByVal wsPainel As Worksheet, ByVal pipelineIndex As Long, ByVal pipelineNome As String) As Long
-    If pipelineIndex >= 1 And pipelineIndex <= 10 Then
-        GitDebug_ResolvePainelStartColumn = 2 + (pipelineIndex - 1) * 2
-        Exit Function
-    End If
-
-    Dim targetName As String
-    targetName = UCase$(Trim$(pipelineNome))
-    If targetName = "" Then Exit Function
-
-    Dim idx As Long
-    For idx = 1 To 10
-        Dim candidateCol As Long
-        candidateCol = 2 + (idx - 1) * 2
-        If UCase$(Trim$(CStr(wsPainel.Cells(1, candidateCol).Value))) = targetName Then
-            GitDebug_ResolvePainelStartColumn = candidateCol
-            Exit Function
-        End If
-    Next idx
 End Function
 
 Private Function GitDebug_KeepDigitsOnly(ByVal textValue As String) As String
@@ -527,26 +602,34 @@ EH:
 End Function
 
 Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelineNome As String) As String
+    Dim out As String
+    out = CsvRow(Array("ID", "Nome curto", "Nome descritivo", "Texto prompt", "Modelo", "Modos", "Storage", "Config extra", "Comentarios", "Notas para desenvolvimento", "Historico de versoes")) & vbCrLf
+
+    Dim map As Object
+    Set map = HeaderMap(wsSeg)
+
     Dim cPipe As Long
     Dim cPid As Long
-    cPipe = HeaderColByName(wsSeg, "Pipeline")
-    cPid = HeaderColByName(wsSeg, "Prompt ID")
-    If cPipe = 0 Or cPid = 0 Then Exit Function
+    cPipe = MapGetFirst(map, Array("Pipeline", "pipeline_name", "Nome do Pipeline"))
+    cPid = MapGetFirst(map, Array("Prompt ID", "Prompt Id", "ID Prompt", "prompt_id"))
+
+    If cPipe = 0 Or cPid = 0 Then
+        BuildExecutedCatalogCsv = out
+        Exit Function
+    End If
+
+    Dim seen As Object
+    Set seen = CreateObject("Scripting.Dictionary")
+
+    Dim orderedIds As Collection
+    Set orderedIds = New Collection
 
     Dim lr As Long
     lr = wsSeg.Cells(wsSeg.Rows.Count, cPipe).End(xlUp).Row
 
-    Dim out As String
-    out = "prompt_id,catalogo,catalog_row,block_line_index,col_A_ID,col_B_nome_curto,col_C_nome_descritivo,col_D_prompt,col_E_modelo,col_F_modos,col_G_storage,col_H_config_extra,col_I_comentarios,col_J_notas_dev,col_K_historico" & vbCrLf
-
-    Dim orderedIds As New Collection
-    Dim seen As Object
-    Set seen = CreateObject("Scripting.Dictionary")
-    seen.CompareMode = 1
-
     Dim r As Long
     For r = 2 To lr
-        If Trim$(CStr(wsSeg.Cells(r, cPipe).Value)) = pipelineNome Then
+        If StrComp(Trim$(CStr(wsSeg.Cells(r, cPipe).Value)), Trim$(pipelineNome), vbTextCompare) = 0 Then
             Dim pid As String
             pid = Trim$(CStr(wsSeg.Cells(r, cPid).Value))
             If pid <> "" And UCase$(pid) <> "STOP" Then
@@ -558,58 +641,12 @@ Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelin
         End If
     Next r
 
-    Dim itemPid As Variant
-    For Each itemPid In orderedIds
-        out = out & BuildCatalogPromptBlockCsvRows(CStr(itemPid))
-    Next itemPid
+    Dim k As Variant
+    For Each k In orderedIds
+        out = out & BuildExecutedCatalogCsvBlock(CStr(k))
+    Next k
 
     BuildExecutedCatalogCsv = out
-End Function
-
-Private Function HeaderColByName(ByVal ws As Worksheet, ByVal headerName As String) As Long
-    Dim map As Object
-    Set map = HeaderMap(ws)
-    HeaderColByName = MapGet(map, headerName)
-End Function
-
-Private Function BuildCatalogPromptBlockCsvRows(ByVal promptId As String) As String
-    On Error GoTo EH
-
-    Dim ws As Worksheet
-    Set ws = ResolvePromptSheet(promptId)
-    If ws Is Nothing Then Exit Function
-
-    Dim rowPrompt As Long
-    rowPrompt = FindPromptRowById(ws, promptId)
-    If rowPrompt <= 0 Then Exit Function
-
-    Dim i As Long
-    Dim out As String
-    For i = 0 To 4
-        Dim rowN As Long
-        rowN = rowPrompt + i
-        out = out & CsvRow(Array( _
-            promptId, _
-            ws.Name, _
-            CStr(rowN), _
-            CStr(i + 1), _
-            CStr(ws.Cells(rowN, 1).Value), _
-            CStr(ws.Cells(rowN, 2).Value), _
-            CStr(ws.Cells(rowN, 3).Value), _
-            CStr(ws.Cells(rowN, 4).Value), _
-            CStr(ws.Cells(rowN, 5).Value), _
-            CStr(ws.Cells(rowN, 6).Value), _
-            CStr(ws.Cells(rowN, 7).Value), _
-            CStr(ws.Cells(rowN, 8).Value), _
-            CStr(ws.Cells(rowN, 9).Value), _
-            CStr(ws.Cells(rowN, 10).Value), _
-            CStr(ws.Cells(rowN, 11).Value))) & vbCrLf
-    Next i
-
-    BuildCatalogPromptBlockCsvRows = out
-    Exit Function
-EH:
-    BuildCatalogPromptBlockCsvRows = ""
 End Function
 
 Private Function ResolvePromptSheet(ByVal promptId As String) As Worksheet
@@ -623,12 +660,6 @@ Private Function ResolvePromptSheet(ByVal promptId As String) As Worksheet
     Exit Function
 EH:
     Set ResolvePromptSheet = Nothing
-End Function
-
-Private Function FindPromptRowById(ByVal ws As Worksheet, ByVal promptId As String) As Long
-    Dim found As Range
-    Set found = ws.Columns(1).Find(What:=promptId, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
-    If Not found Is Nothing Then FindPromptRowById = found.Row
 End Function
 
 Private Function BuildExecutedCatalogCsvBlock(ByVal promptId As String) As String
@@ -1050,6 +1081,16 @@ Private Function MapGet(ByVal d As Object, ByVal keyName As String) As Long
         MapGet = 0
     End If
 End Function
+
+Private Function MapGetFirst(ByVal d As Object, ByVal keys As Variant) As Long
+    Dim i As Long
+    For i = LBound(keys) To UBound(keys)
+        MapGetFirst = MapGet(d, CStr(keys(i)))
+        If MapGetFirst > 0 Then Exit Function
+    Next i
+    MapGetFirst = 0
+End Function
+
 
 Private Function GitDebug_SanitizePathPart(ByVal s As String) As String
     Dim out As String

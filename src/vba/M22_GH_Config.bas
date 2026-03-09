@@ -9,6 +9,9 @@ Option Explicit
 ' - Resolver enable/token de forma deterministica para o facade M21.
 '
 ' Atualizacoes:
+' - 2026-03-09 | Codex | Adiciona macro de diagnostico na Immediate Window
+'   - Cria GH_Config_PrintImmediateReport para imprimir resumo sanitizado dos GH_* resolvidos.
+'   - Inclui token_source, upload_mode, owner/repo/branch e estado enabled sem expor segredos.
 ' - 2026-03-08 | Codex | Melhora diagnostico de token para casos Environ$ vazio
 '   - Passa a reportar token_source com escopo efetivo (PROCESS/USER/SYSTEM) quando encontrado.
 '   - Melhora fallback de erro para tentar GH_TOKEN e GITHUB_TOKEN via helper unificado.
@@ -56,9 +59,41 @@ Option Explicit
 '   - Helper deterministico de precedencia para testes de token sem depender de variaveis reais do host.
 ' - GH_Config_ResolveUploadMode(cfg As Object, reason As String, Optional wasDefaulted As Boolean = False) As String
 '   - Normaliza upload_mode e valida apenas tree_commit/contents_api com fallback seguro.
+' - GH_Config_PrintImmediateReport(Optional painelAutoSave As String = "debug")
+'   - Imprime relatorio sanitizado de configuracao GH_* na Immediate Window para troubleshooting rapido.
 ' =============================================================================
 
 Private Const SHEET_CONFIG As String = "Config"
+
+Public Sub GH_Config_PrintImmediateReport(Optional ByVal painelAutoSave As String = "debug")
+    On Error GoTo EH
+
+    Dim cfg As Object
+    Set cfg = GH_Config_Load(painelAutoSave)
+
+    Dim reason As String
+    Dim wasDefaulted As Boolean
+    Dim uploadMode As String
+    uploadMode = GH_Config_ResolveUploadMode(cfg, reason, wasDefaulted)
+
+    Debug.Print "=== GH Config Report (Immediate) ==="
+    Debug.Print "enabled=" & IIf(GH_Config_GetBoolean(cfg, "enabled", False), "true", "false")
+    Debug.Print "owner=" & GH_Config_GetString(cfg, "owner", "")
+    Debug.Print "repo=" & GH_Config_GetString(cfg, "repo", "")
+    Debug.Print "branch=" & GH_Config_GetString(cfg, "branch", "")
+    Debug.Print "base_path=" & GH_Config_GetString(cfg, "base_path", "")
+    Debug.Print "upload_mode=" & uploadMode & IIf(wasDefaulted, " (defaulted)", "")
+    If reason <> "" Then Debug.Print "upload_mode_reason=" & reason
+    Debug.Print "token_source=" & GH_Config_GetString(cfg, "token_source", "nao_resolvido")
+    Debug.Print "token_present=" & IIf(GH_Config_GetString(cfg, "token", "") <> "", "true", "false")
+    Debug.Print "=== /GH Config Report ==="
+    Exit Sub
+
+EH:
+    Debug.Print "=== GH Config Report (Immediate) ERROR ==="
+    Debug.Print "err=" & CStr(Err.Number) & " | " & Err.Description
+End Sub
+
 
 Public Function GH_Config_Load(ByVal painelAutoSave As String) As Object
     Dim cfg As Object
