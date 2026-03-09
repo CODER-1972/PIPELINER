@@ -1056,3 +1056,7 @@ Regra operacional rápida:
 - para literais críticos (nomes de folhas, severidades, chaves de configuração), preferir tokens ASCII e usar fallback com `ChrW$` quando precisar de acentos (ex.: `"HIST" & ChrW$(&HD3) & "RICO"`) para reduzir risco de mojibake entre UTF-8/CP1252.
 - em edições feitas por agentes/LLMs (ex.: Codex), preferir comentários e headers em ASCII puro (sem acentos), mantendo acentos apenas quando forem funcionais.
 - após qualquer edição de módulos `.bas/.cls/.frm`, correr `python scripts/check_vba_encoding.py`; se houver erro de EOL/encoding, normalizar o ficheiro para `cp1252 + CRLF` antes do commit.
+
+### Validação estática de labels `GoTo` (sanity check)
+
+Como prevenção de regressões de compilação no VBE (`Compile error: Label not defined`), foi adicionada à rotina de validação de manutenção uma verificação estática dos módulos VBA para confirmar que saltos `GoTo/GoSub` apontam para labels existentes no mesmo módulo/procedimento.
