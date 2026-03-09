@@ -2546,7 +2546,6 @@ Private Function Painel_DebugSheetToTsv(ByVal wsDebug As Worksheet, ByVal passo 
 
         If Len(acc) > 0 Then acc = acc & vbLf
         acc = acc & lineTxt
-ProximaLinha:
     Next r
 
     Painel_DebugSheetToTsv = acc
