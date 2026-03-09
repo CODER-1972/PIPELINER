@@ -12,6 +12,18 @@ Option Explicit
 ' - 2026-03-09 | Codex | Corrige deteccao de colunas no Seguimento para export do catalogo
 '   - Remove dependencia de helper inexistente (`HeaderColByName`) e usa mapa de cabecalhos local com aliases robustos.
 '   - Garante fallback para devolver sempre cabecalho CSV (evita ficheiro vazio/BOM-only no GitHub).
+' - 2026-03-09 | Codex | Corrige conflito de merge e helper de cabecalho no export Git
+'   - Remove marcadores `<<<<<<< ======= >>>>>>>` remanescentes no modulo para restaurar compilacao.
+'   - Reintroduz helper local `HeaderColByName` usando `HeaderMap/MapGet` para evitar `Sub or Function not defined`.
+' - 2026-03-09 | Codex | Publica DEBUG.csv final apos GH_UPLOAD_DONE para reduzir drift
+'   - Reenvia apenas DEBUG.csv no fim da rotina para aproximar o artefacto remoto ao estado final da folha DEBUG.
+'   - Mantem o upload principal inalterado e trata falha da republicacao final como ALERTA nao bloqueante.
+' - 2026-03-08 | Codex | Alinha export do catalogo ao layout fisico de blocos (5 linhas por prompt)
+'   - Gera `catalogo_prompts_executadas.csv` com colunas A:K (cabecalho do catalogo) e 5 linhas por prompt (ID + Next/default/allowed + linha em branco).
+'   - Preserva a estrutura visual do catalogo para auditoria 1:1 entre Excel e CSV exportado.
+' - 2026-03-08 | Codex | Corrige derivacao de PROMPT_NAME/VERSION para pasta remota Git
+'   - Passa a montar PROMPT_NAME no formato <pipelineIndex><ordem>_<nomeCurto> (ex.: 701_WF_PROMPT_AUDIT).
+'   - Adiciona fallback por nome da pipeline para resolver o primeiro Prompt ID quando o indice nao estiver disponivel.
 ' - 2026-03-08 | Codex | Alinha export do catalogo ao layout fisico de blocos (5 linhas por prompt)
 '   - Gera `catalogo_prompts_executadas.csv` com colunas A:K (cabecalho do catalogo) e 5 linhas por prompt (ID + Next/default/allowed + linha em branco).
 '   - Preserva a estrutura visual do catalogo para auditoria 1:1 entre Excel e CSV exportado.
@@ -55,6 +67,10 @@ Option Explicit
 '   - Preenche/atualiza chaves GH_* na folha Config sem quebra de retrocompatibilidade.
 ' - GitDebug_Config_InstalarMinimos()
 '   - Macro rapida para instalar parametros minimos GH_* com defaults e explicacao para leigos.
+' - BuildExecutedCatalogCsv(wsSeg As Worksheet, pipelineNome As String) As String (Private Function)
+'   - Exporta para CSV os blocos completos (5 linhas) de cada prompt executada na pipeline.
+' - SheetToCsv(ws As Worksheet, Optional includeRowNumber As Boolean = False) As String (Private Function)
+'   - Converte folha para CSV; opcionalmente prefixa `row_number` com o indice da linha.
 ' - GitDebug_LogFilesForUpload(pipelineNome As String, remoteFolder As String, files As Collection) (Private Sub)
 '   - Regista path remoto e nome dos ficheiros preparados para upload GitHub.
 ' - GitDebug_RunUploadByMode(cfg As Object, files As Collection, pipelineNome As String, uploadMode As String, reason As String, successCount As Long, failCount As Long, retryCount As Long) As Boolean
@@ -63,6 +79,10 @@ Option Explicit
 '   - Normaliza GH_API_VERSION para diagnostico/log sem alterar compatibilidade do Config.
 ' - GitDebug_BuildRunFolder(cfg As Object, pipelineNome As String, pipelineIndex As Long) As String (Private Function)
 '   - Resolve pasta remota por run e aplica estrutura canonica obrigatoria pipeline/prompt/versao/data.
+' - GitDebug_FirstPromptIdFromPainel(pipelineIndex As Long, pipelineNome As String) As String (Private Function)
+'   - Resolve o primeiro Prompt ID ativo na lista da pipeline por indice ou fallback por nome no PAINEL.
+' - HeaderColByName(ws As Worksheet, headerName As String) As Long (Private Function)
+'   - Resolve indice de coluna por nome do cabecalho para leituras robustas da folha Seguimento.
 ' - JsonPick(body As String, keyName As String) As String (Private Function)
 '   - Extrai valor string de chave JSON simples para compatibilidade de parsing em M21.
 ' =============================================================================
@@ -152,11 +172,53 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Link registado em Seguimento/HISTORICO.", webUrl)
 
     Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD_DONE, "Debug export publicado no GitHub.", "upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount) & " | " & webUrl)
+
+    Dim finalRefreshReason As String
+    If Not GitDebug_RefreshDebugCsvFinal(cfg, pipelineNome, remoteFolder, uploadMode, finalRefreshReason) Then
+        Call GH_LogWarn(0, pipelineNome, GH_EVT_UPLOAD, "Falha ao republicar DEBUG.csv final no GitHub.", finalRefreshReason)
+    End If
     Exit Sub
 
 EH:
     Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD, "Falha no auto-upload de debug: " & Err.Description, "Validar parametros GH_* e conectividade com api.github.com.")
 End Sub
+
+Private Function GitDebug_RefreshDebugCsvFinal( _
+    ByVal cfg As Object, _
+    ByVal pipelineNome As String, _
+    ByVal remoteFolder As String, _
+    ByVal uploadMode As String, _
+    ByRef reason As String) As Boolean
+
+    On Error GoTo EH
+
+    reason = ""
+
+    Dim wsDebug As Worksheet
+    Set wsDebug = ThisWorkbook.Worksheets(SHEET_DEBUG)
+
+    Dim csvDebugFinal As String
+    csvDebugFinal = SheetToCsv(wsDebug, True)
+
+    Dim files As New Collection
+    files.Add GitFileItem(remoteFolder & "/DEBUG.csv", csvDebugFinal)
+
+    Dim successCount As Long
+    Dim failCount As Long
+    Dim retryCount As Long
+
+    GitDebug_RefreshDebugCsvFinal = GitDebug_RunUploadByMode(cfg, files, pipelineNome, uploadMode, reason, successCount, failCount, retryCount)
+
+    If Not GitDebug_RefreshDebugCsvFinal Then
+        reason = Trim$(reason & " | upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount))
+    End If
+
+    Exit Function
+
+EH:
+    reason = "err=" & CStr(Err.Number) & " | " & Left$(Err.Description, 180)
+    GitDebug_RefreshDebugCsvFinal = False
+End Function
 
 Private Function GitDebug_NormalizeApiVersionForDiag(ByVal rawValue As String) As String
     Dim valueText As String
@@ -185,13 +247,13 @@ Private Function GitDebug_BuildRunFolder(ByVal cfg As Object, ByVal pipelineNome
     ignored = GH_Config_GetString(cfg, "run_folder_template", "")
 
     Dim firstPromptId As String
-    firstPromptId = GitDebug_FirstPromptIdFromPainel(pipelineIndex)
+    firstPromptId = GitDebug_FirstPromptIdFromPainel(pipelineIndex, pipelineNome)
 
     Dim safePipeline As String
     safePipeline = GitDebug_SanitizePathPart(pipelineNome)
 
     Dim safePromptName As String
-    safePromptName = GitDebug_SanitizePathPart(GitDebug_PromptNameFromId(firstPromptId))
+    safePromptName = GitDebug_SanitizePathPart(GitDebug_PromptNameFromId(firstPromptId, pipelineIndex))
 
     Dim safeVersion As String
     safeVersion = GitDebug_SanitizePathPart(GitDebug_PromptVersionFromId(firstPromptId))
@@ -224,18 +286,17 @@ Private Function GitDebug_SanitizePathTemplate(ByVal templatePath As String) As 
     GitDebug_SanitizePathTemplate = out
 End Function
 
-Private Function GitDebug_FirstPromptIdFromPainel(ByVal pipelineIndex As Long) As String
+Private Function GitDebug_FirstPromptIdFromPainel(ByVal pipelineIndex As Long, ByVal pipelineNome As String) As String
     On Error GoTo EH
 
     Const LIST_START_ROW As Long = 9
-
-    If pipelineIndex < 1 Or pipelineIndex > 10 Then Exit Function
 
     Dim wsPainel As Worksheet
     Set wsPainel = ThisWorkbook.Worksheets("PAINEL")
 
     Dim colIniciar As Long
-    colIniciar = 2 + (pipelineIndex - 1) * 2
+    colIniciar = GitDebug_ResolvePainelStartColumn(wsPainel, pipelineIndex, pipelineNome)
+    If colIniciar = 0 Then Exit Function
 
     Dim r As Long
     For r = LIST_START_ROW To LIST_START_ROW + 400
@@ -253,15 +314,59 @@ EH:
     GitDebug_FirstPromptIdFromPainel = ""
 End Function
 
-Private Function GitDebug_PromptNameFromId(ByVal promptId As String) As String
+Private Function GitDebug_PromptNameFromId(ByVal promptId As String, ByVal pipelineIndex As Long) As String
     Dim parts() As String
     parts = Split(Trim$(promptId), "/")
 
+    Dim promptLabel As String
     If UBound(parts) >= 2 Then
-        GitDebug_PromptNameFromId = Trim$(parts(2))
+        promptLabel = Trim$(parts(2))
+    End If
+
+    Dim stepCode As String
+    If UBound(parts) >= 1 Then
+        stepCode = GitDebug_KeepDigitsOnly(Trim$(parts(1)))
+    End If
+
+    If pipelineIndex > 0 And stepCode <> "" And promptLabel <> "" Then
+        GitDebug_PromptNameFromId = CStr(pipelineIndex) & stepCode & "_" & promptLabel
+    Else
+        GitDebug_PromptNameFromId = promptLabel
     End If
 
     If GitDebug_PromptNameFromId = "" Then GitDebug_PromptNameFromId = "PROMPT_DESCONHECIDO"
+End Function
+
+Private Function GitDebug_ResolvePainelStartColumn(ByVal wsPainel As Worksheet, ByVal pipelineIndex As Long, ByVal pipelineNome As String) As Long
+    If pipelineIndex >= 1 And pipelineIndex <= 10 Then
+        GitDebug_ResolvePainelStartColumn = 2 + (pipelineIndex - 1) * 2
+        Exit Function
+    End If
+
+    Dim targetName As String
+    targetName = UCase$(Trim$(pipelineNome))
+    If targetName = "" Then Exit Function
+
+    Dim idx As Long
+    For idx = 1 To 10
+        Dim candidateCol As Long
+        candidateCol = 2 + (idx - 1) * 2
+        If UCase$(Trim$(CStr(wsPainel.Cells(1, candidateCol).Value))) = targetName Then
+            GitDebug_ResolvePainelStartColumn = candidateCol
+            Exit Function
+        End If
+    Next idx
+End Function
+
+Private Function GitDebug_KeepDigitsOnly(ByVal textValue As String) As String
+    Dim i As Long
+    Dim ch As String
+    For i = 1 To Len(textValue)
+        ch = Mid$(textValue, i, 1)
+        If ch >= "0" And ch <= "9" Then
+            GitDebug_KeepDigitsOnly = GitDebug_KeepDigitsOnly & ch
+        End If
+    Next i
 End Function
 
 Private Function GitDebug_PromptVersionFromId(ByVal promptId As String) As String
@@ -309,7 +414,7 @@ Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal
     Set wsSeg = ThisWorkbook.Worksheets(SHEET_SEGUIMENTO)
 
     Dim csvDebug As String
-    csvDebug = SheetToCsv(wsDebug)
+    csvDebug = SheetToCsv(wsDebug, True)
 
     Dim csvSeg As String
     csvSeg = SheetToCsv(wsSeg)
@@ -452,7 +557,12 @@ Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelin
         If StrComp(Trim$(CStr(wsSeg.Cells(r, cPipe).Value)), Trim$(pipelineNome), vbTextCompare) = 0 Then
             Dim pid As String
             pid = Trim$(CStr(wsSeg.Cells(r, cPid).Value))
-            If pid <> "" And UCase$(pid) <> "STOP" Then d(pid) = 1
+            If pid <> "" And UCase$(pid) <> "STOP" Then
+                If Not seen.Exists(pid) Then
+                    seen(pid) = True
+                    orderedIds.Add pid
+                End If
+            End If
         End If
     Next r
 
@@ -461,7 +571,17 @@ Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelin
         out = out & BuildExecutedCatalogCsvBlock(CStr(k))
     Next k
 
-    BuildExecutedCatalogCsv = out
+Private Function ResolvePromptSheet(ByVal promptId As String) As Worksheet
+    On Error GoTo EH
+
+    Dim sheetName As String
+    sheetName = PrefixFromId(promptId)
+    If sheetName = "" Then Exit Function
+
+    Set ResolvePromptSheet = ThisWorkbook.Worksheets(sheetName)
+    Exit Function
+EH:
+    Set ResolvePromptSheet = Nothing
 End Function
 
 Private Function BuildExecutedCatalogCsvBlock(ByVal promptId As String) As String
@@ -532,7 +652,7 @@ Private Sub Catalogo_ReadBlockMetadata(ByVal promptId As String, ByRef nextPromp
     nextPromptAllowed = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 3, 2).Value), "Next PROMPT allowed:")
 
     descricaoTextual = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 1, 3).Value), "Descricao textual:")
-    If descricaoTextual = "" Then descricaoTextual = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 1, 3).Value), "Descrição textual:")
+    If descricaoTextual = "" Then descricaoTextual = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 1, 3).Value), "Descriï¿½ï¿½o textual:")
 
     inputsText = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 2, 3).Value), "INPUTS:")
     outputsText = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 3, 3).Value), "OUTPUTS:")
@@ -624,7 +744,7 @@ Private Function PrefixFromId(ByVal promptId As String) As String
     End If
 End Function
 
-Private Function SheetToCsv(ByVal ws As Worksheet) As String
+Private Function SheetToCsv(ByVal ws As Worksheet, Optional ByVal includeRowNumber As Boolean = False) As String
     Dim lr As Long
     Dim lc As Long
     lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
@@ -632,13 +752,28 @@ Private Function SheetToCsv(ByVal ws As Worksheet) As String
 
     Dim r As Long
     Dim c As Long
+    Dim startRow As Long
     Dim csvLine As String
     Dim out As String
 
-    For r = 1 To lr
-        csvLine = ""
+    If includeRowNumber Then
+        out = CsvEscape("row_number")
         For c = 1 To lc
-            If c > 1 Then csvLine = csvLine & ","
+            out = out & "," & CsvEscape(CStr(ws.Cells(1, c).Value))
+        Next c
+        out = out & vbCrLf
+        startRow = 2
+    Else
+        startRow = 1
+    End If
+
+    For r = startRow To lr
+        csvLine = ""
+        If includeRowNumber Then
+            csvLine = CsvEscape(CStr(r))
+        End If
+        For c = 1 To lc
+            If c > 1 Or includeRowNumber Then csvLine = csvLine & ","
             csvLine = csvLine & CsvEscape(CStr(ws.Cells(r, c).Value))
         Next c
         out = out & csvLine & vbCrLf
@@ -1003,7 +1138,7 @@ Private Function GitDebug_Config_Definitions() As Collection
     Call GitDebug_Config_Add(defs, "GH_LOG_FOLDER", "logs", "Subpasta para logs complementares (quando aplicavel).", "path relativo")
 
     Call GitDebug_Config_Add(defs, "GH_RETRY_ON_CONFLICT", "true", "Se true, tenta novamente quando o HEAD muda durante commit.", "true | false")
-    Call GitDebug_Config_Add(defs, "GH_MAX_RETRIES", "3", "Número máximo de tentativas em conflito 409 ao atualizar refs.", "inteiro >= 1")
+    Call GitDebug_Config_Add(defs, "GH_MAX_RETRIES", "3", "Numero maximo de tentativas em conflito 409 ao atualizar refs.", "inteiro >= 1")
     Call GitDebug_Config_Add(defs, "GH_FORCE_UPDATE", "false", "Se true, faz update forcado da ref (nao recomendado).", "true | false")
 
     Call GitDebug_Config_Add(defs, "GH_DEBUG_MODE", "true", "Liga registos de troubleshooting GH_* no DEBUG.", "true | false")
