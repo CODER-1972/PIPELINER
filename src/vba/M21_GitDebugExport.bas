@@ -9,6 +9,12 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-09 | Codex | Endurece resolucao de Prompt ID no PAINEL para pasta remota Git
+'   - Resolve coluna/slot da pipeline com normalizacao de texto (CR/LF/TAB/NBSP/espacos) e extrai prompt mesmo com variacoes de nome.
+'   - Passa a usar pipelineIndex efetivo (resolvido pelo PAINEL) na derivacao de PROMPT_NAME e regista alerta diagnostico quando nao encontra Prompt ID.
+' - 2026-03-08 | Codex | Corrige derivacao de PROMPT_NAME/VERSION para pasta remota Git
+'   - Passa a montar PROMPT_NAME no formato <pipelineIndex><ordem>_<nomeCurto> (ex.: 701_WF_PROMPT_AUDIT).
+'   - Adiciona fallback por nome da pipeline para resolver o primeiro Prompt ID quando o indice nao estiver disponivel.
 ' - 2026-03-09 | Codex | Corrige deteccao de colunas no Seguimento para export do catalogo
 '   - Remove dependencia de helper inexistente (`HeaderColByName`) e usa mapa de cabecalhos local com aliases robustos.
 '   - Garante fallback para devolver sempre cabecalho CSV (evita ficheiro vazio/BOM-only no GitHub).
@@ -79,10 +85,8 @@ Option Explicit
 '   - Normaliza GH_API_VERSION para diagnostico/log sem alterar compatibilidade do Config.
 ' - GitDebug_BuildRunFolder(cfg As Object, pipelineNome As String, pipelineIndex As Long) As String (Private Function)
 '   - Resolve pasta remota por run e aplica estrutura canonica obrigatoria pipeline/prompt/versao/data.
-' - GitDebug_FirstPromptIdFromPainel(pipelineIndex As Long, pipelineNome As String) As String (Private Function)
-'   - Resolve o primeiro Prompt ID ativo na lista da pipeline por indice ou fallback por nome no PAINEL.
-' - HeaderColByName(ws As Worksheet, headerName As String) As Long (Private Function)
-'   - Resolve indice de coluna por nome do cabecalho para leituras robustas da folha Seguimento.
+' - GitDebug_FirstPromptIdFromPainel(pipelineIndex As Long, pipelineNome As String, resolvedPipelineIndex As Long) As String (Private Function)
+'   - Resolve o primeiro Prompt ID ativo e devolve pipelineIndex efetivo por indice ou fallback por nome no PAINEL.
 ' - JsonPick(body As String, keyName As String) As String (Private Function)
 '   - Extrai valor string de chave JSON simples para compatibilidade de parsing em M21.
 ' =============================================================================
@@ -246,14 +250,19 @@ Private Function GitDebug_BuildRunFolder(ByVal cfg As Object, ByVal pipelineNome
     Dim ignored As String
     ignored = GH_Config_GetString(cfg, "run_folder_template", "")
 
+    Dim effectivePipelineIndex As Long
     Dim firstPromptId As String
-    firstPromptId = GitDebug_FirstPromptIdFromPainel(pipelineIndex, pipelineNome)
+    firstPromptId = GitDebug_FirstPromptIdFromPainel(pipelineIndex, pipelineNome, effectivePipelineIndex)
+
+    If Trim$(firstPromptId) = "" Then
+        Call GH_LogWarn(0, pipelineNome, GH_EVT_CONFIG, "Nao foi possivel derivar Prompt ID para run_folder.", "pipeline_index_in=" & CStr(pipelineIndex) & " | pipeline_index_effective=" & CStr(effectivePipelineIndex) & " | action=Verifique PAINEL (linha 1 nome; lista INICIAR a partir da linha 9).")
+    End If
 
     Dim safePipeline As String
     safePipeline = GitDebug_SanitizePathPart(pipelineNome)
 
     Dim safePromptName As String
-    safePromptName = GitDebug_SanitizePathPart(GitDebug_PromptNameFromId(firstPromptId, pipelineIndex))
+    safePromptName = GitDebug_SanitizePathPart(GitDebug_PromptNameFromId(firstPromptId, effectivePipelineIndex))
 
     Dim safeVersion As String
     safeVersion = GitDebug_SanitizePathPart(GitDebug_PromptVersionFromId(firstPromptId))
@@ -286,7 +295,7 @@ Private Function GitDebug_SanitizePathTemplate(ByVal templatePath As String) As 
     GitDebug_SanitizePathTemplate = out
 End Function
 
-Private Function GitDebug_FirstPromptIdFromPainel(ByVal pipelineIndex As Long, ByVal pipelineNome As String) As String
+Private Function GitDebug_FirstPromptIdFromPainel(ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByRef resolvedPipelineIndex As Long) As String
     On Error GoTo EH
 
     Const LIST_START_ROW As Long = 9
@@ -295,7 +304,7 @@ Private Function GitDebug_FirstPromptIdFromPainel(ByVal pipelineIndex As Long, B
     Set wsPainel = ThisWorkbook.Worksheets("PAINEL")
 
     Dim colIniciar As Long
-    colIniciar = GitDebug_ResolvePainelStartColumn(wsPainel, pipelineIndex, pipelineNome)
+    colIniciar = GitDebug_ResolvePainelStartColumn(wsPainel, pipelineIndex, pipelineNome, resolvedPipelineIndex)
     If colIniciar = 0 Then Exit Function
 
     Dim r As Long
@@ -312,6 +321,50 @@ Private Function GitDebug_FirstPromptIdFromPainel(ByVal pipelineIndex As Long, B
     Exit Function
 EH:
     GitDebug_FirstPromptIdFromPainel = ""
+End Function
+
+Private Function GitDebug_ResolvePainelStartColumn(ByVal wsPainel As Worksheet, ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByRef resolvedPipelineIndex As Long) As Long
+    resolvedPipelineIndex = 0
+
+    If pipelineIndex >= 1 And pipelineIndex <= 10 Then
+        resolvedPipelineIndex = pipelineIndex
+        GitDebug_ResolvePainelStartColumn = 2 + (pipelineIndex - 1) * 2
+        Exit Function
+    End If
+
+    Dim targetName As String
+    targetName = GitDebug_NormalizeCompareToken(pipelineNome)
+    If targetName = "" Then Exit Function
+
+    Dim idx As Long
+    For idx = 1 To 10
+        Dim candidateCol As Long
+        candidateCol = 2 + (idx - 1) * 2
+        If GitDebug_NormalizeCompareToken(CStr(wsPainel.Cells(1, candidateCol).Value)) = targetName Then
+            resolvedPipelineIndex = idx
+            GitDebug_ResolvePainelStartColumn = candidateCol
+            Exit Function
+        End If
+    Next idx
+End Function
+
+Private Function GitDebug_NormalizeCompareToken(ByVal rawText As String) As String
+    Dim s As String
+    s = Trim$(rawText)
+    If s = "" Then Exit Function
+
+    s = Replace(s, vbCr, " ")
+    s = Replace(s, vbLf, " ")
+    s = Replace(s, vbTab, " ")
+    s = Replace(s, ChrW$(160), " ")
+
+    Dim hasDouble As Boolean
+    Do
+        hasDouble = (InStr(1, s, "  ", vbBinaryCompare) > 0)
+        If hasDouble Then s = Replace(s, "  ", " ")
+    Loop While hasDouble
+
+    GitDebug_NormalizeCompareToken = UCase$(Trim$(s))
 End Function
 
 Private Function GitDebug_PromptNameFromId(ByVal promptId As String, ByVal pipelineIndex As Long) As String
@@ -335,27 +388,6 @@ Private Function GitDebug_PromptNameFromId(ByVal promptId As String, ByVal pipel
     End If
 
     If GitDebug_PromptNameFromId = "" Then GitDebug_PromptNameFromId = "PROMPT_DESCONHECIDO"
-End Function
-
-Private Function GitDebug_ResolvePainelStartColumn(ByVal wsPainel As Worksheet, ByVal pipelineIndex As Long, ByVal pipelineNome As String) As Long
-    If pipelineIndex >= 1 And pipelineIndex <= 10 Then
-        GitDebug_ResolvePainelStartColumn = 2 + (pipelineIndex - 1) * 2
-        Exit Function
-    End If
-
-    Dim targetName As String
-    targetName = UCase$(Trim$(pipelineNome))
-    If targetName = "" Then Exit Function
-
-    Dim idx As Long
-    For idx = 1 To 10
-        Dim candidateCol As Long
-        candidateCol = 2 + (idx - 1) * 2
-        If UCase$(Trim$(CStr(wsPainel.Cells(1, candidateCol).Value))) = targetName Then
-            GitDebug_ResolvePainelStartColumn = candidateCol
-            Exit Function
-        End If
-    Next idx
 End Function
 
 Private Function GitDebug_KeepDigitsOnly(ByVal textValue As String) As String
