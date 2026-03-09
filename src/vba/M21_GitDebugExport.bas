@@ -15,6 +15,21 @@ Option Explicit
 ' - 2026-03-08 | Codex | Corrige derivacao de PROMPT_NAME/VERSION para pasta remota Git
 '   - Passa a montar PROMPT_NAME no formato <pipelineIndex><ordem>_<nomeCurto> (ex.: 701_WF_PROMPT_AUDIT).
 '   - Adiciona fallback por nome da pipeline para resolver o primeiro Prompt ID quando o indice nao estiver disponivel.
+' - 2026-03-09 | Codex | Corrige conflito de merge e helper de cabecalho no export Git
+'   - Remove marcadores `<<<<<<< ======= >>>>>>>` remanescentes no modulo para restaurar compilacao.
+'   - Reintroduz helper local `HeaderColByName` usando `HeaderMap/MapGet` para evitar `Sub or Function not defined`.
+' - 2026-03-09 | Codex | Publica DEBUG.csv final apos GH_UPLOAD_DONE para reduzir drift
+'   - Reenvia apenas DEBUG.csv no fim da rotina para aproximar o artefacto remoto ao estado final da folha DEBUG.
+'   - Mantem o upload principal inalterado e trata falha da republicacao final como ALERTA nao bloqueante.
+' - 2026-03-08 | Codex | Alinha export do catalogo ao layout fisico de blocos (5 linhas por prompt)
+'   - Gera `catalogo_prompts_executadas.csv` com colunas A:K (cabecalho do catalogo) e 5 linhas por prompt (ID + Next/default/allowed + linha em branco).
+'   - Preserva a estrutura visual do catalogo para auditoria 1:1 entre Excel e CSV exportado.
+' - 2026-03-08 | Codex | Corrige derivacao de PROMPT_NAME/VERSION para pasta remota Git
+'   - Passa a montar PROMPT_NAME no formato <pipelineIndex><ordem>_<nomeCurto> (ex.: 701_WF_PROMPT_AUDIT).
+'   - Adiciona fallback por nome da pipeline para resolver o primeiro Prompt ID quando o indice nao estiver disponivel.
+' - 2026-03-08 | Codex | Alinha export do catalogo ao layout fisico de blocos (5 linhas por prompt)
+'   - Gera `catalogo_prompts_executadas.csv` com colunas A:K (cabecalho do catalogo) e 5 linhas por prompt (ID + Next/default/allowed + linha em branco).
+'   - Preserva a estrutura visual do catalogo para auditoria 1:1 entre Excel e CSV exportado.
 ' - 2026-03-08 | Codex | Corrige export do catalogo para refletir bloco completo do prompt
 '   - Substitui CSV reduzido (7 colunas) por export completo com colunas A:K e campos Next/INPUTS/OUTPUTS.
 '   - Faz lookup robusto da linha do prompt por ID com normalizacao (CR/LF/TAB/NBSP) para evitar falhas por caracteres invisiveis.
@@ -55,6 +70,10 @@ Option Explicit
 '   - Preenche/atualiza chaves GH_* na folha Config sem quebra de retrocompatibilidade.
 ' - GitDebug_Config_InstalarMinimos()
 '   - Macro rapida para instalar parametros minimos GH_* com defaults e explicacao para leigos.
+' - BuildExecutedCatalogCsv(wsSeg As Worksheet, pipelineNome As String) As String (Private Function)
+'   - Exporta para CSV os blocos completos (5 linhas) de cada prompt executada na pipeline.
+' - SheetToCsv(ws As Worksheet, Optional includeRowNumber As Boolean = False) As String (Private Function)
+'   - Converte folha para CSV; opcionalmente prefixa `row_number` com o indice da linha.
 ' - GitDebug_LogFilesForUpload(pipelineNome As String, remoteFolder As String, files As Collection) (Private Sub)
 '   - Regista path remoto e nome dos ficheiros preparados para upload GitHub.
 ' - GitDebug_RunUploadByMode(cfg As Object, files As Collection, pipelineNome As String, uploadMode As String, reason As String, successCount As Long, failCount As Long, retryCount As Long) As Boolean
@@ -154,11 +173,53 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Link registado em Seguimento/HISTORICO.", webUrl)
 
     Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD_DONE, "Debug export publicado no GitHub.", "upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount) & " | " & webUrl)
+
+    Dim finalRefreshReason As String
+    If Not GitDebug_RefreshDebugCsvFinal(cfg, pipelineNome, remoteFolder, uploadMode, finalRefreshReason) Then
+        Call GH_LogWarn(0, pipelineNome, GH_EVT_UPLOAD, "Falha ao republicar DEBUG.csv final no GitHub.", finalRefreshReason)
+    End If
     Exit Sub
 
 EH:
     Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD, "Falha no auto-upload de debug: " & Err.Description, "Validar parametros GH_* e conectividade com api.github.com.")
 End Sub
+
+Private Function GitDebug_RefreshDebugCsvFinal( _
+    ByVal cfg As Object, _
+    ByVal pipelineNome As String, _
+    ByVal remoteFolder As String, _
+    ByVal uploadMode As String, _
+    ByRef reason As String) As Boolean
+
+    On Error GoTo EH
+
+    reason = ""
+
+    Dim wsDebug As Worksheet
+    Set wsDebug = ThisWorkbook.Worksheets(SHEET_DEBUG)
+
+    Dim csvDebugFinal As String
+    csvDebugFinal = SheetToCsv(wsDebug, True)
+
+    Dim files As New Collection
+    files.Add GitFileItem(remoteFolder & "/DEBUG.csv", csvDebugFinal)
+
+    Dim successCount As Long
+    Dim failCount As Long
+    Dim retryCount As Long
+
+    GitDebug_RefreshDebugCsvFinal = GitDebug_RunUploadByMode(cfg, files, pipelineNome, uploadMode, reason, successCount, failCount, retryCount)
+
+    If Not GitDebug_RefreshDebugCsvFinal Then
+        reason = Trim$(reason & " | upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount))
+    End If
+
+    Exit Function
+
+EH:
+    reason = "err=" & CStr(Err.Number) & " | " & Left$(Err.Description, 180)
+    GitDebug_RefreshDebugCsvFinal = False
+End Function
 
 Private Function GitDebug_NormalizeApiVersionForDiag(ByVal rawValue As String) As String
     Dim valueText As String
@@ -382,7 +443,7 @@ Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal
     Set wsSeg = ThisWorkbook.Worksheets(SHEET_SEGUIMENTO)
 
     Dim csvDebug As String
-    csvDebug = SheetToCsv(wsDebug)
+    csvDebug = SheetToCsv(wsDebug, True)
 
     Dim csvSeg As String
     csvSeg = SheetToCsv(wsSeg)
@@ -498,48 +559,113 @@ EH:
 End Function
 
 Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelineNome As String) As String
-    Dim d As Object
-    Set d = CreateObject("Scripting.Dictionary")
-    d.CompareMode = 1
-
-    Dim hMap As Object
-    Set hMap = HeaderMap(wsSeg)
-
     Dim cPipe As Long
-    cPipe = MapGet(hMap, "pipeline_name")
-
     Dim cPid As Long
-    cPid = MapGet(hMap, "Prompt ID")
+    cPipe = HeaderColByName(wsSeg, "Pipeline")
+    cPid = HeaderColByName(wsSeg, "Prompt ID")
+    If cPipe = 0 Or cPid = 0 Then Exit Function
 
-    Dim lastRow As Long
-    lastRow = wsSeg.Cells(wsSeg.Rows.Count, 1).End(xlUp).Row
+    Dim lr As Long
+    lr = wsSeg.Cells(wsSeg.Rows.Count, cPipe).End(xlUp).Row
+
+    Dim out As String
+    out = "prompt_id,catalogo,catalog_row,block_line_index,col_A_ID,col_B_nome_curto,col_C_nome_descritivo,col_D_prompt,col_E_modelo,col_F_modos,col_G_storage,col_H_config_extra,col_I_comentarios,col_J_notas_dev,col_K_historico" & vbCrLf
+
+    Dim orderedIds As New Collection
+    Dim seen As Object
+    Set seen = CreateObject("Scripting.Dictionary")
+    seen.CompareMode = 1
 
     Dim r As Long
-    For r = 2 To lastRow
+    For r = 2 To lr
         If Trim$(CStr(wsSeg.Cells(r, cPipe).Value)) = pipelineNome Then
             Dim pid As String
             pid = Trim$(CStr(wsSeg.Cells(r, cPid).Value))
-            If pid <> "" And UCase$(pid) <> "STOP" Then d(pid) = 1
+            If pid <> "" And UCase$(pid) <> "STOP" Then
+                If Not seen.Exists(pid) Then
+                    seen(pid) = True
+                    orderedIds.Add pid
+                End If
+            End If
         End If
     Next r
 
-    Dim out As String
-    out = "prompt_id,catalogo,nome_curto,nome_descritivo,texto_prompt,modelo,modos,storage,config_extra,comentarios,notas_dev,historico_versoes,next_prompt,next_prompt_default,next_prompt_allowed,descricao_textual,inputs,outputs" & vbCrLf
-
-    Dim k As Variant
-    For Each k In d.Keys
-        out = out & BuildExecutedCatalogCsvRow(CStr(k)) & vbCrLf
-    Next k
+    Dim itemPid As Variant
+    For Each itemPid In orderedIds
+        out = out & BuildCatalogPromptBlockCsvRows(CStr(itemPid))
+    Next itemPid
 
     BuildExecutedCatalogCsv = out
 End Function
 
-Private Function BuildExecutedCatalogCsvRow(ByVal promptId As String) As String
+Private Function HeaderColByName(ByVal ws As Worksheet, ByVal headerName As String) As Long
+    Dim map As Object
+    Set map = HeaderMap(ws)
+    HeaderColByName = MapGet(map, headerName)
+End Function
+
+Private Function BuildCatalogPromptBlockCsvRows(ByVal promptId As String) As String
+    On Error GoTo EH
+
+    Dim ws As Worksheet
+    Set ws = ResolvePromptSheet(promptId)
+    If ws Is Nothing Then Exit Function
+
+    Dim rowPrompt As Long
+    rowPrompt = FindPromptRowById(ws, promptId)
+    If rowPrompt <= 0 Then Exit Function
+
+    Dim i As Long
+    Dim out As String
+    For i = 0 To 4
+        Dim rowN As Long
+        rowN = rowPrompt + i
+        out = out & CsvRow(Array( _
+            promptId, _
+            ws.Name, _
+            CStr(rowN), _
+            CStr(i + 1), _
+            CStr(ws.Cells(rowN, 1).Value), _
+            CStr(ws.Cells(rowN, 2).Value), _
+            CStr(ws.Cells(rowN, 3).Value), _
+            CStr(ws.Cells(rowN, 4).Value), _
+            CStr(ws.Cells(rowN, 5).Value), _
+            CStr(ws.Cells(rowN, 6).Value), _
+            CStr(ws.Cells(rowN, 7).Value), _
+            CStr(ws.Cells(rowN, 8).Value), _
+            CStr(ws.Cells(rowN, 9).Value), _
+            CStr(ws.Cells(rowN, 10).Value), _
+            CStr(ws.Cells(rowN, 11).Value))) & vbCrLf
+    Next i
+
+    BuildCatalogPromptBlockCsvRows = out
+    Exit Function
+EH:
+    BuildCatalogPromptBlockCsvRows = ""
+End Function
+
+Private Function ResolvePromptSheet(ByVal promptId As String) As Worksheet
+    On Error GoTo EH
+
+    Dim sheetName As String
+    sheetName = PrefixFromId(promptId)
+    If sheetName = "" Then Exit Function
+
+    Set ResolvePromptSheet = ThisWorkbook.Worksheets(sheetName)
+    Exit Function
+EH:
+    Set ResolvePromptSheet = Nothing
+End Function
+
+Private Function FindPromptRowById(ByVal ws As Worksheet, ByVal promptId As String) As Long
+    Dim found As Range
+    Set found = ws.Columns(1).Find(What:=promptId, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
+    If Not found Is Nothing Then FindPromptRowById = found.Row
+End Function
+
+Private Function BuildExecutedCatalogCsvBlock(ByVal promptId As String) As String
     Dim p As PromptDefinicao
     p = Catalogo_ObterPromptPorID(promptId)
-
-    Dim catalogo As String
-    catalogo = PrefixFromId(promptId)
 
     Dim nextPrompt As String
     Dim nextPromptDefault As String
@@ -550,9 +676,11 @@ Private Function BuildExecutedCatalogCsvRow(ByVal promptId As String) As String
 
     Call Catalogo_ReadBlockMetadata(promptId, nextPrompt, nextPromptDefault, nextPromptAllowed, descricaoTextual, inputsText, outputsText)
 
-    BuildExecutedCatalogCsvRow = CsvRow(Array( _
+    Dim out As String
+    out = ""
+
+    out = out & CsvRow(Array( _
         promptId, _
-        catalogo, _
         p.NomeCurto, _
         p.NomeDescritivo, _
         p.textoPrompt, _
@@ -562,13 +690,32 @@ Private Function BuildExecutedCatalogCsvRow(ByVal promptId As String) As String
         p.ConfigExtra, _
         p.Comentarios, _
         p.NotasDev, _
-        p.HistoricoVersoes, _
-        nextPrompt, _
-        nextPromptDefault, _
-        nextPromptAllowed, _
+        p.HistoricoVersoes)) & vbCrLf
+
+    out = out & CsvRow(Array( _
+        "", _
+        "Next PROMPT: " & nextPrompt, _
+        "Descricao textual:", _
         descricaoTextual, _
+        "", "", "", "", "", "", "")) & vbCrLf
+
+    out = out & CsvRow(Array( _
+        "", _
+        "Next PROMPT default: " & nextPromptDefault, _
+        "INPUTS:", _
         inputsText, _
-        outputsText))
+        "", "", "", "", "", "", "")) & vbCrLf
+
+    out = out & CsvRow(Array( _
+        "", _
+        "Next PROMPT allowed: " & nextPromptAllowed, _
+        "OUTPUTS:", _
+        outputsText, _
+        "", "", "", "", "", "", "")) & vbCrLf
+
+    out = out & CsvRow(Array("", "", "", "", "", "", "", "", "", "", "")) & vbCrLf
+
+    BuildExecutedCatalogCsvBlock = out
 End Function
 
 Private Sub Catalogo_ReadBlockMetadata(ByVal promptId As String, ByRef nextPrompt As String, ByRef nextPromptDefault As String, ByRef nextPromptAllowed As String, ByRef descricaoTextual As String, ByRef inputsText As String, ByRef outputsText As String)
@@ -584,7 +731,7 @@ Private Sub Catalogo_ReadBlockMetadata(ByVal promptId As String, ByRef nextPromp
     nextPromptAllowed = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 3, 2).Value), "Next PROMPT allowed:")
 
     descricaoTextual = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 1, 3).Value), "Descricao textual:")
-    If descricaoTextual = "" Then descricaoTextual = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 1, 3).Value), "Descrição textual:")
+    If descricaoTextual = "" Then descricaoTextual = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 1, 3).Value), "Descriï¿½ï¿½o textual:")
 
     inputsText = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 2, 3).Value), "INPUTS:")
     outputsText = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 3, 3).Value), "OUTPUTS:")
@@ -676,7 +823,7 @@ Private Function PrefixFromId(ByVal promptId As String) As String
     End If
 End Function
 
-Private Function SheetToCsv(ByVal ws As Worksheet) As String
+Private Function SheetToCsv(ByVal ws As Worksheet, Optional ByVal includeRowNumber As Boolean = False) As String
     Dim lr As Long
     Dim lc As Long
     lr = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
@@ -684,13 +831,28 @@ Private Function SheetToCsv(ByVal ws As Worksheet) As String
 
     Dim r As Long
     Dim c As Long
+    Dim startRow As Long
     Dim csvLine As String
     Dim out As String
 
-    For r = 1 To lr
-        csvLine = ""
+    If includeRowNumber Then
+        out = CsvEscape("row_number")
         For c = 1 To lc
-            If c > 1 Then csvLine = csvLine & ","
+            out = out & "," & CsvEscape(CStr(ws.Cells(1, c).Value))
+        Next c
+        out = out & vbCrLf
+        startRow = 2
+    Else
+        startRow = 1
+    End If
+
+    For r = startRow To lr
+        csvLine = ""
+        If includeRowNumber Then
+            csvLine = CsvEscape(CStr(r))
+        End If
+        For c = 1 To lc
+            If c > 1 Or includeRowNumber Then csvLine = csvLine & ","
             csvLine = csvLine & CsvEscape(CStr(ws.Cells(r, c).Value))
         Next c
         out = out & csvLine & vbCrLf
@@ -1045,7 +1207,7 @@ Private Function GitDebug_Config_Definitions() As Collection
     Call GitDebug_Config_Add(defs, "GH_LOG_FOLDER", "logs", "Subpasta para logs complementares (quando aplicavel).", "path relativo")
 
     Call GitDebug_Config_Add(defs, "GH_RETRY_ON_CONFLICT", "true", "Se true, tenta novamente quando o HEAD muda durante commit.", "true | false")
-    Call GitDebug_Config_Add(defs, "GH_MAX_RETRIES", "3", "Número máximo de tentativas em conflito 409 ao atualizar refs.", "inteiro >= 1")
+    Call GitDebug_Config_Add(defs, "GH_MAX_RETRIES", "3", "Numero maximo de tentativas em conflito 409 ao atualizar refs.", "inteiro >= 1")
     Call GitDebug_Config_Add(defs, "GH_FORCE_UPDATE", "false", "Se true, faz update forcado da ref (nao recomendado).", "true | false")
 
     Call GitDebug_Config_Add(defs, "GH_DEBUG_MODE", "true", "Liga registos de troubleshooting GH_* no DEBUG.", "true | false")
