@@ -609,3 +609,5 @@ Se começar a ficar demasiado grande:
 - Em derivação de nomes para paths de auditoria Git (ex.: `PROMPT_NAME`/`VERSION`), usar parsing explícito do `Prompt ID` (`<folha>/<ordem>/<nome>/<versão>`) e fallback por nome da pipeline quando o `pipelineIndex` vier inválido; evitar defaults silenciosos `PROMPT_DESCONHECIDO`/`VERSAO_DESCONHECIDA` quando há dados no PAINEL.
 - Antes de fechar merge em modulos `.bas/.cls/.frm`, executar varredura por marcadores `<<<<<<<`, `=======`, `>>>>>>>` e remover conflitos parcialmente resolvidos; estes marcadores podem ocultar helpers e causar `Compile error: Sub or Function not defined`.
 - Quando um helper de lookup de cabecalho (ex.: `HeaderColByName`) for usado no modulo, manter implementacao local ou dependencia publica explícita no mesmo commit; nao deixar call-site sem definicao apos resolver conflitos.
+
+- Em espelhos de logs para células (ex.: DEBUG -> catálogo), evitar segmentação por linha quando há limite de 32767 caracteres por célula; usar chunk por comprimento para continuar exatamente no ponto de corte e só truncar após esgotar todas as células alvo.
