@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-09 | Codex | Corrige erro de compilacao em BuildExecutedCatalogCsv
+'   - Declara colecao `orderedIds` e usa dictionary local `seen` para deduplicar Prompt IDs sem `Variable not defined`.
+'   - Fecha a funcao com `End Function` e preserva ordem de execucao ao montar `catalogo_prompts_executadas.csv`.
 ' - 2026-03-09 | Codex | Endurece resolucao de Prompt ID no PAINEL para pasta remota Git
 '   - Resolve coluna/slot da pipeline com normalizacao de texto (CR/LF/TAB/NBSP/espacos) e extrai prompt mesmo com variacoes de nome.
 '   - Passa a usar pipelineIndex efetivo (resolvido pelo PAINEL) na derivacao de PROMPT_NAME e regista alerta diagnostico quando nao encontra Prompt ID.
@@ -578,8 +581,11 @@ Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelin
         Exit Function
     End If
 
-    Dim d As Object
-    Set d = CreateObject("Scripting.Dictionary")
+    Dim seen As Object
+    Set seen = CreateObject("Scripting.Dictionary")
+
+    Dim orderedIds As Collection
+    Set orderedIds = New Collection
 
     Dim lr As Long
     lr = wsSeg.Cells(wsSeg.Rows.Count, cPipe).End(xlUp).Row
@@ -599,9 +605,12 @@ Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelin
     Next r
 
     Dim k As Variant
-    For Each k In d.Keys
+    For Each k In orderedIds
         out = out & BuildExecutedCatalogCsvBlock(CStr(k))
     Next k
+
+    BuildExecutedCatalogCsv = out
+End Function
 
 Private Function ResolvePromptSheet(ByVal promptId As String) As Worksheet
     On Error GoTo EH
