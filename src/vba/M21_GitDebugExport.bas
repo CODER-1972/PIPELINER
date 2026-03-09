@@ -9,18 +9,18 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
-<<<<<<< codex/count-lines-in-catalogo_prompts_executadas.csv
-' - 2026-03-08 | Codex | Alinha export do catalogo ao layout fisico de blocos (5 linhas por prompt)
-'   - Gera `catalogo_prompts_executadas.csv` com colunas A:K (cabecalho do catalogo) e 5 linhas por prompt (ID + Next/default/allowed + linha em branco).
-'   - Preserva a estrutura visual do catalogo para auditoria 1:1 entre Excel e CSV exportado.
-=======
+' - 2026-03-09 | Codex | Corrige conflito de merge e helper de cabecalho no export Git
+'   - Remove marcadores `<<<<<<< ======= >>>>>>>` remanescentes no modulo para restaurar compilacao.
+'   - Reintroduz helper local `HeaderColByName` usando `HeaderMap/MapGet` para evitar `Sub or Function not defined`.
 ' - 2026-03-09 | Codex | Publica DEBUG.csv final apos GH_UPLOAD_DONE para reduzir drift
 '   - Reenvia apenas DEBUG.csv no fim da rotina para aproximar o artefacto remoto ao estado final da folha DEBUG.
 '   - Mantem o upload principal inalterado e trata falha da republicacao final como ALERTA nao bloqueante.
+' - 2026-03-08 | Codex | Alinha export do catalogo ao layout fisico de blocos (5 linhas por prompt)
+'   - Gera `catalogo_prompts_executadas.csv` com colunas A:K (cabecalho do catalogo) e 5 linhas por prompt (ID + Next/default/allowed + linha em branco).
+'   - Preserva a estrutura visual do catalogo para auditoria 1:1 entre Excel e CSV exportado.
 ' - 2026-03-08 | Codex | Corrige derivacao de PROMPT_NAME/VERSION para pasta remota Git
 '   - Passa a montar PROMPT_NAME no formato <pipelineIndex><ordem>_<nomeCurto> (ex.: 701_WF_PROMPT_AUDIT).
 '   - Adiciona fallback por nome da pipeline para resolver o primeiro Prompt ID quando o indice nao estiver disponivel.
->>>>>>> main
 ' - 2026-03-08 | Codex | Corrige export do catalogo para refletir bloco completo do prompt
 '   - Substitui CSV reduzido (7 colunas) por export completo com colunas A:K e campos Next/INPUTS/OUTPUTS.
 '   - Faz lookup robusto da linha do prompt por ID com normalizacao (CR/LF/TAB/NBSP) para evitar falhas por caracteres invisiveis.
@@ -75,6 +75,8 @@ Option Explicit
 '   - Resolve pasta remota por run e aplica estrutura canonica obrigatoria pipeline/prompt/versao/data.
 ' - GitDebug_FirstPromptIdFromPainel(pipelineIndex As Long, pipelineNome As String) As String (Private Function)
 '   - Resolve o primeiro Prompt ID ativo na lista da pipeline por indice ou fallback por nome no PAINEL.
+' - HeaderColByName(ws As Worksheet, headerName As String) As Long (Private Function)
+'   - Resolve indice de coluna por nome do cabecalho para leituras robustas da folha Seguimento.
 ' - JsonPick(body As String, keyName As String) As String (Private Function)
 '   - Extrai valor string de chave JSON simples para compatibilidade de parsing em M21.
 ' =============================================================================
@@ -522,20 +524,11 @@ EH:
 End Function
 
 Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelineNome As String) As String
-<<<<<<< codex/count-lines-in-catalogo_prompts_executadas.csv
-=======
-    Dim hMap As Object
-    Set hMap = HeaderMap(wsSeg)
-
->>>>>>> main
     Dim cPipe As Long
     Dim cPid As Long
     cPipe = HeaderColByName(wsSeg, "Pipeline")
     cPid = HeaderColByName(wsSeg, "Prompt ID")
     If cPipe = 0 Or cPid = 0 Then Exit Function
-
-    Dim d As Object
-    Set d = CreateObject("Scripting.Dictionary")
 
     Dim lr As Long
     lr = wsSeg.Cells(wsSeg.Rows.Count, cPipe).End(xlUp).Row
@@ -570,6 +563,12 @@ Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelin
     BuildExecutedCatalogCsv = out
 End Function
 
+Private Function HeaderColByName(ByVal ws As Worksheet, ByVal headerName As String) As Long
+    Dim map As Object
+    Set map = HeaderMap(ws)
+    HeaderColByName = MapGet(map, headerName)
+End Function
+
 Private Function BuildCatalogPromptBlockCsvRows(ByVal promptId As String) As String
     On Error GoTo EH
 
@@ -583,14 +582,6 @@ Private Function BuildCatalogPromptBlockCsvRows(ByVal promptId As String) As Str
 
     Dim i As Long
     Dim out As String
-<<<<<<< codex/count-lines-in-catalogo_prompts_executadas.csv
-    out = CsvRow(Array("ID", "Nome curto", "Nome descritivo", "Texto prompt", "Modelo", "Modos", "Storage", "Config extra", "Comentarios", "Notas para desenvolvimento", "Historico de versoes")) & vbCrLf
-
-    Dim k As Variant
-    For Each k In d.Keys
-        out = out & BuildExecutedCatalogCsvBlock(CStr(k))
-    Next k
-=======
     For i = 0 To 4
         Dim rowN As Long
         rowN = rowPrompt + i
@@ -617,7 +608,6 @@ Private Function BuildCatalogPromptBlockCsvRows(ByVal promptId As String) As Str
 EH:
     BuildCatalogPromptBlockCsvRows = ""
 End Function
->>>>>>> main
 
 Private Function ResolvePromptSheet(ByVal promptId As String) As Worksheet
     On Error GoTo EH
@@ -706,7 +696,7 @@ Private Sub Catalogo_ReadBlockMetadata(ByVal promptId As String, ByRef nextPromp
     nextPromptAllowed = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 3, 2).Value), "Next PROMPT allowed:")
 
     descricaoTextual = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 1, 3).Value), "Descricao textual:")
-    If descricaoTextual = "" Then descricaoTextual = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 1, 3).Value), "Descrição textual:")
+    If descricaoTextual = "" Then descricaoTextual = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 1, 3).Value), "Descriï¿½ï¿½o textual:")
 
     inputsText = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 2, 3).Value), "INPUTS:")
     outputsText = Catalogo_ValueAfterLabel(CStr(ws.Cells(rowPrompt + 3, 3).Value), "OUTPUTS:")
@@ -1182,7 +1172,7 @@ Private Function GitDebug_Config_Definitions() As Collection
     Call GitDebug_Config_Add(defs, "GH_LOG_FOLDER", "logs", "Subpasta para logs complementares (quando aplicavel).", "path relativo")
 
     Call GitDebug_Config_Add(defs, "GH_RETRY_ON_CONFLICT", "true", "Se true, tenta novamente quando o HEAD muda durante commit.", "true | false")
-    Call GitDebug_Config_Add(defs, "GH_MAX_RETRIES", "3", "Número máximo de tentativas em conflito 409 ao atualizar refs.", "inteiro >= 1")
+    Call GitDebug_Config_Add(defs, "GH_MAX_RETRIES", "3", "Numero maximo de tentativas em conflito 409 ao atualizar refs.", "inteiro >= 1")
     Call GitDebug_Config_Add(defs, "GH_FORCE_UPDATE", "false", "Se true, faz update forcado da ref (nao recomendado).", "true | false")
 
     Call GitDebug_Config_Add(defs, "GH_DEBUG_MODE", "true", "Liga registos de troubleshooting GH_* no DEBUG.", "true | false")
