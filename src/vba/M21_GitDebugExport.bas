@@ -9,18 +9,16 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
-<<<<<<< codex/count-lines-in-catalogo_prompts_executadas.csv
-' - 2026-03-08 | Codex | Alinha export do catalogo ao layout fisico de blocos (5 linhas por prompt)
-'   - Gera `catalogo_prompts_executadas.csv` com colunas A:K (cabecalho do catalogo) e 5 linhas por prompt (ID + Next/default/allowed + linha em branco).
-'   - Preserva a estrutura visual do catalogo para auditoria 1:1 entre Excel e CSV exportado.
-=======
+
 ' - 2026-03-09 | Codex | Publica DEBUG.csv final apos GH_UPLOAD_DONE para reduzir drift
 '   - Reenvia apenas DEBUG.csv no fim da rotina para aproximar o artefacto remoto ao estado final da folha DEBUG.
 '   - Mantem o upload principal inalterado e trata falha da republicacao final como ALERTA nao bloqueante.
 ' - 2026-03-08 | Codex | Corrige derivacao de PROMPT_NAME/VERSION para pasta remota Git
 '   - Passa a montar PROMPT_NAME no formato <pipelineIndex><ordem>_<nomeCurto> (ex.: 701_WF_PROMPT_AUDIT).
 '   - Adiciona fallback por nome da pipeline para resolver o primeiro Prompt ID quando o indice nao estiver disponivel.
->>>>>>> main
+' - 2026-03-08 | Codex | Alinha export do catalogo ao layout fisico de blocos (5 linhas por prompt)
+'   - Gera `catalogo_prompts_executadas.csv` com colunas A:K (cabecalho do catalogo) e 5 linhas por prompt (ID + Next/default/allowed + linha em branco).
+'   - Preserva a estrutura visual do catalogo para auditoria 1:1 entre Excel e CSV exportado.
 ' - 2026-03-08 | Codex | Corrige export do catalogo para refletir bloco completo do prompt
 '   - Substitui CSV reduzido (7 colunas) por export completo com colunas A:K e campos Next/INPUTS/OUTPUTS.
 '   - Faz lookup robusto da linha do prompt por ID com normalizacao (CR/LF/TAB/NBSP) para evitar falhas por caracteres invisiveis.
@@ -522,12 +520,10 @@ EH:
 End Function
 
 Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelineNome As String) As String
-<<<<<<< codex/count-lines-in-catalogo_prompts_executadas.csv
-=======
+
     Dim hMap As Object
     Set hMap = HeaderMap(wsSeg)
 
->>>>>>> main
     Dim cPipe As Long
     Dim cPid As Long
     cPipe = HeaderColByName(wsSeg, "Pipeline")
@@ -583,14 +579,7 @@ Private Function BuildCatalogPromptBlockCsvRows(ByVal promptId As String) As Str
 
     Dim i As Long
     Dim out As String
-<<<<<<< codex/count-lines-in-catalogo_prompts_executadas.csv
-    out = CsvRow(Array("ID", "Nome curto", "Nome descritivo", "Texto prompt", "Modelo", "Modos", "Storage", "Config extra", "Comentarios", "Notas para desenvolvimento", "Historico de versoes")) & vbCrLf
 
-    Dim k As Variant
-    For Each k In d.Keys
-        out = out & BuildExecutedCatalogCsvBlock(CStr(k))
-    Next k
-=======
     For i = 0 To 4
         Dim rowN As Long
         rowN = rowPrompt + i
@@ -617,7 +606,6 @@ Private Function BuildCatalogPromptBlockCsvRows(ByVal promptId As String) As Str
 EH:
     BuildCatalogPromptBlockCsvRows = ""
 End Function
->>>>>>> main
 
 Private Function ResolvePromptSheet(ByVal promptId As String) As Worksheet
     On Error GoTo EH
