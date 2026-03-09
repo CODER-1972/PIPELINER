@@ -9,12 +9,18 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+<<<<<<< codex/count-lines-in-catalogo_prompts_executadas.csv
+' - 2026-03-08 | Codex | Alinha export do catalogo ao layout fisico de blocos (5 linhas por prompt)
+'   - Gera `catalogo_prompts_executadas.csv` com colunas A:K (cabecalho do catalogo) e 5 linhas por prompt (ID + Next/default/allowed + linha em branco).
+'   - Preserva a estrutura visual do catalogo para auditoria 1:1 entre Excel e CSV exportado.
+=======
 ' - 2026-03-09 | Codex | Publica DEBUG.csv final apos GH_UPLOAD_DONE para reduzir drift
 '   - Reenvia apenas DEBUG.csv no fim da rotina para aproximar o artefacto remoto ao estado final da folha DEBUG.
 '   - Mantem o upload principal inalterado e trata falha da republicacao final como ALERTA nao bloqueante.
 ' - 2026-03-08 | Codex | Corrige derivacao de PROMPT_NAME/VERSION para pasta remota Git
 '   - Passa a montar PROMPT_NAME no formato <pipelineIndex><ordem>_<nomeCurto> (ex.: 701_WF_PROMPT_AUDIT).
 '   - Adiciona fallback por nome da pipeline para resolver o primeiro Prompt ID quando o indice nao estiver disponivel.
+>>>>>>> main
 ' - 2026-03-08 | Codex | Corrige export do catalogo para refletir bloco completo do prompt
 '   - Substitui CSV reduzido (7 colunas) por export completo com colunas A:K e campos Next/INPUTS/OUTPUTS.
 '   - Faz lookup robusto da linha do prompt por ID com normalizacao (CR/LF/TAB/NBSP) para evitar falhas por caracteres invisiveis.
@@ -516,17 +522,23 @@ EH:
 End Function
 
 Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelineNome As String) As String
+<<<<<<< codex/count-lines-in-catalogo_prompts_executadas.csv
+=======
     Dim hMap As Object
     Set hMap = HeaderMap(wsSeg)
 
+>>>>>>> main
     Dim cPipe As Long
-    cPipe = MapGet(hMap, "pipeline_name")
-
     Dim cPid As Long
-    cPid = MapGet(hMap, "Prompt ID")
+    cPipe = HeaderColByName(wsSeg, "Pipeline")
+    cPid = HeaderColByName(wsSeg, "Prompt ID")
+    If cPipe = 0 Or cPid = 0 Then Exit Function
 
-    Dim lastRow As Long
-    lastRow = wsSeg.Cells(wsSeg.Rows.Count, 1).End(xlUp).Row
+    Dim d As Object
+    Set d = CreateObject("Scripting.Dictionary")
+
+    Dim lr As Long
+    lr = wsSeg.Cells(wsSeg.Rows.Count, cPipe).End(xlUp).Row
 
     Dim out As String
     out = "prompt_id,catalogo,catalog_row,block_line_index,col_A_ID,col_B_nome_curto,col_C_nome_descritivo,col_D_prompt,col_E_modelo,col_F_modos,col_G_storage,col_H_config_extra,col_I_comentarios,col_J_notas_dev,col_K_historico" & vbCrLf
@@ -537,7 +549,7 @@ Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelin
     seen.CompareMode = 1
 
     Dim r As Long
-    For r = 2 To lastRow
+    For r = 2 To lr
         If Trim$(CStr(wsSeg.Cells(r, cPipe).Value)) = pipelineNome Then
             Dim pid As String
             pid = Trim$(CStr(wsSeg.Cells(r, cPid).Value))
@@ -571,6 +583,14 @@ Private Function BuildCatalogPromptBlockCsvRows(ByVal promptId As String) As Str
 
     Dim i As Long
     Dim out As String
+<<<<<<< codex/count-lines-in-catalogo_prompts_executadas.csv
+    out = CsvRow(Array("ID", "Nome curto", "Nome descritivo", "Texto prompt", "Modelo", "Modos", "Storage", "Config extra", "Comentarios", "Notas para desenvolvimento", "Historico de versoes")) & vbCrLf
+
+    Dim k As Variant
+    For Each k In d.Keys
+        out = out & BuildExecutedCatalogCsvBlock(CStr(k))
+    Next k
+=======
     For i = 0 To 4
         Dim rowN As Long
         rowN = rowPrompt + i
@@ -597,6 +617,7 @@ Private Function BuildCatalogPromptBlockCsvRows(ByVal promptId As String) As Str
 EH:
     BuildCatalogPromptBlockCsvRows = ""
 End Function
+>>>>>>> main
 
 Private Function ResolvePromptSheet(ByVal promptId As String) As Worksheet
     On Error GoTo EH
@@ -617,12 +638,9 @@ Private Function FindPromptRowById(ByVal ws As Worksheet, ByVal promptId As Stri
     If Not found Is Nothing Then FindPromptRowById = found.Row
 End Function
 
-Private Function BuildExecutedCatalogCsvRow(ByVal promptId As String) As String
+Private Function BuildExecutedCatalogCsvBlock(ByVal promptId As String) As String
     Dim p As PromptDefinicao
     p = Catalogo_ObterPromptPorID(promptId)
-
-    Dim catalogo As String
-    catalogo = PrefixFromId(promptId)
 
     Dim nextPrompt As String
     Dim nextPromptDefault As String
@@ -633,9 +651,11 @@ Private Function BuildExecutedCatalogCsvRow(ByVal promptId As String) As String
 
     Call Catalogo_ReadBlockMetadata(promptId, nextPrompt, nextPromptDefault, nextPromptAllowed, descricaoTextual, inputsText, outputsText)
 
-    BuildExecutedCatalogCsvRow = CsvRow(Array( _
+    Dim out As String
+    out = ""
+
+    out = out & CsvRow(Array( _
         promptId, _
-        catalogo, _
         p.NomeCurto, _
         p.NomeDescritivo, _
         p.textoPrompt, _
@@ -645,13 +665,32 @@ Private Function BuildExecutedCatalogCsvRow(ByVal promptId As String) As String
         p.ConfigExtra, _
         p.Comentarios, _
         p.NotasDev, _
-        p.HistoricoVersoes, _
-        nextPrompt, _
-        nextPromptDefault, _
-        nextPromptAllowed, _
+        p.HistoricoVersoes)) & vbCrLf
+
+    out = out & CsvRow(Array( _
+        "", _
+        "Next PROMPT: " & nextPrompt, _
+        "Descricao textual:", _
         descricaoTextual, _
+        "", "", "", "", "", "", "")) & vbCrLf
+
+    out = out & CsvRow(Array( _
+        "", _
+        "Next PROMPT default: " & nextPromptDefault, _
+        "INPUTS:", _
         inputsText, _
-        outputsText))
+        "", "", "", "", "", "", "")) & vbCrLf
+
+    out = out & CsvRow(Array( _
+        "", _
+        "Next PROMPT allowed: " & nextPromptAllowed, _
+        "OUTPUTS:", _
+        outputsText, _
+        "", "", "", "", "", "", "")) & vbCrLf
+
+    out = out & CsvRow(Array("", "", "", "", "", "", "", "", "", "", "")) & vbCrLf
+
+    BuildExecutedCatalogCsvBlock = out
 End Function
 
 Private Sub Catalogo_ReadBlockMetadata(ByVal promptId As String, ByRef nextPrompt As String, ByRef nextPromptDefault As String, ByRef nextPromptAllowed As String, ByRef descricaoTextual As String, ByRef inputsText As String, ByRef outputsText As String)
