@@ -605,3 +605,5 @@ Se começar a ficar demasiado grande:
 
 - No export `catalogo_prompts_executadas.csv`, manter paridade com o bloco do catálogo: além das colunas principais (A:K), incluir `Next PROMPT/default/allowed` e `Descrição textual/INPUTS/OUTPUTS`; evitar CSV reduzido que perca contexto operacional.
 - Em lookup de linhas de catálogo por `prompt_id` para export/auditoria, aplicar fallback de normalização (`CR/LF`, `TAB`, `NBSP`) quando a comparação exata falhar, para tolerar caracteres invisíveis sem degradar os dados exportados.
+- Em derivação de nomes para paths de auditoria Git (ex.: `PROMPT_NAME`/`VERSION`), usar parsing explícito do `Prompt ID` (`<folha>/<ordem>/<nome>/<versão>`) e fallback por nome da pipeline quando o `pipelineIndex` vier inválido; evitar defaults silenciosos `PROMPT_DESCONHECIDO`/`VERSAO_DESCONHECIDA` quando há dados no PAINEL.
+- Em resolução de pipeline por nome no PAINEL (fallback quando `pipelineIndex` inválido), normalizar tokens de comparação (`Trim`, `CR/LF`, `TAB`, `NBSP`, espaços duplos, `UCase`) para evitar mismatch silencioso e queda para `PROMPT_DESCONHECIDO`/`VERSAO_DESCONHECIDA`.
