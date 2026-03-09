@@ -8,6 +8,10 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-09 | Codex | Snapshot DEBUG atualizado no fecho do passo antes de sair/avancar
+'   - Regrava o espelho no catalogo imediatamente antes de cada saida antecipada do passo.
+'   - Regrava no caminho nominal apos validacoes de NEXT para capturar logs emitidos apos a chamada API.
+'   - Reduz perdas de linhas da prompt causadas por snapshot tirado demasiado cedo no fluxo do passo.
 ' - 2026-03-09 | Codex | Corrige desvio de fluxo no snapshot DEBUG (label de salto)
 '   - Substitui salto para label inexistente por label local `NextRow`, removendo `Compile error: Label not defined`.
 '   - Mantem filtro por Prompt ID/Passo, ignorando apenas linhas fora de contexto no loop de exportacao TSV.
@@ -1184,7 +1188,6 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, resultado.httpStatus, resultado.responseId, _
             textoSeguimento, pipelineNome, "", filesUsedResumo, filesOpsResumo, fileIds)
         Call Painel_LogStepStage(passo, prompt.Id, "step_completed", "http=" & CStr(resultado.httpStatus) & " | response_id=" & Left$(Trim$(resultado.responseId), 24))
-        Call Painel_EspelharDebugNoCatalogo(passo, prompt.Id)
 
         ' ================================
         ' CONTEXTKV - REGISTAR + CAPTURAR
@@ -1205,6 +1208,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 resultado.Erro, _
                 "Sugestao: verifique modelo, quota, payload e configuracao.")
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+            Call Painel_EspelharDebugNoCatalogo(passo, prompt.Id)
             GoTo SaidaLimpa
         End If
 
@@ -1231,6 +1235,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         If proximoEsperado = "" Or Painel_EhSTOP(proximoEsperado) Then
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+            Call Painel_EspelharDebugNoCatalogo(passo, prompt.Id)
             GoTo SaidaLimpa
         End If
 
@@ -1263,6 +1268,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                         "ID na linha seguinte nao permitido e Next PROMPT default esta vazio.", _
                         "Sugestao: defina Next PROMPT default na folha do catalogo.")
                     wsPainel.Cells(nextRow + 1, colIniciar).value = "STOP"
+                    Call Painel_EspelharDebugNoCatalogo(passo, prompt.Id)
                     GoTo SaidaLimpa
                 End If
 
@@ -1280,6 +1286,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                     "Linha seguinte vazia e Next PROMPT default esta vazio.", _
                     "Sugestao: defina Next PROMPT default na folha do catalogo.")
                 wsPainel.Cells(nextRow, colIniciar).value = "STOP"
+                Call Painel_EspelharDebugNoCatalogo(passo, prompt.Id)
                 GoTo SaidaLimpa
             End If
 
@@ -1293,6 +1300,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         proximoFinal = Painel_ValidarAllowedEExistencia(proximoFinal, nextDefault, nextAllowed, passo, atual)
         If proximoFinal = "" Or Painel_EhSTOP(proximoFinal) Then
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+            Call Painel_EspelharDebugNoCatalogo(passo, prompt.Id)
             GoTo SaidaLimpa
         End If
 
@@ -1303,14 +1311,18 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 "Detetada alternancia A-B-A-B. Pipeline interrompida.", _
                 "Sugestao: adicione condicao de saida, restrinja allowed, ou introduza STOP.")
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+            Call Painel_EspelharDebugNoCatalogo(passo, prompt.Id)
             GoTo SaidaLimpa
         End If
+
+        Call Painel_EspelharDebugNoCatalogo(passo, prompt.Id)
 
         atual = proximoFinal
         cursorRow = nextCursorRow
 
         If Painel_EhSTOP(atual) Then
             wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
+            Call Painel_EspelharDebugNoCatalogo(passo, prompt.Id)
             GoTo SaidaLimpa
         End If
 
@@ -1319,6 +1331,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                 "A lista INICIAR excedeu o limite de linhas do PAINEL.", _
                 "Sugestao: aumente LIST_MAX_ROWS no codigo ou reduza a pipeline.")
             wsPainel.Cells(LIST_START_ROW + LIST_MAX_ROWS - 1, colIniciar).value = "STOP"
+            Call Painel_EspelharDebugNoCatalogo(passo, prompt.Id)
             GoTo SaidaLimpa
         End If
 
@@ -2537,8 +2550,7 @@ Private Function Painel_DebugSheetToTsv(ByVal wsDebug As Worksheet, ByVal passo 
             ElseIf (passo > 0 And rowPasso = CStr(passo)) Then
                 ' fallback: inclui por Passo para capturar linhas sem Prompt ID
             Else
-                ' linha nao pertence ao prompt/passo atual
-                GoTo NextRow
+                GoTo ProximaLinha
             End If
         End If
 
