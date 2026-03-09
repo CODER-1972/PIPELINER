@@ -605,3 +605,4 @@ Se começar a ficar demasiado grande:
 
 - No export `catalogo_prompts_executadas.csv`, manter paridade com o bloco do catálogo: além das colunas principais (A:K), incluir `Next PROMPT/default/allowed` e `Descrição textual/INPUTS/OUTPUTS`; evitar CSV reduzido que perca contexto operacional.
 - Em lookup de linhas de catálogo por `prompt_id` para export/auditoria, aplicar fallback de normalização (`CR/LF`, `TAB`, `NBSP`) quando a comparação exata falhar, para tolerar caracteres invisíveis sem degradar os dados exportados.
+- Em exportadores CSV de auditoria (ex.: `catalogo_prompts_executadas.csv`), evitar dependência em helpers não definidos no módulo (`Option Explicit`): preferir helpers locais existentes (`HeaderMap`/`MapGet`) e garantir fallback para devolver pelo menos a linha de cabeçalho (nunca conteúdo vazio/BOM-only, que quebra parser de CSV no GitHub).

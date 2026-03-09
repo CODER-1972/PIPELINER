@@ -9,6 +9,12 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-09 | Codex | Corrige deteccao de colunas no Seguimento para export do catalogo
+'   - Remove dependencia de helper inexistente (`HeaderColByName`) e usa mapa de cabecalhos local com aliases robustos.
+'   - Garante fallback para devolver sempre cabecalho CSV (evita ficheiro vazio/BOM-only no GitHub).
+' - 2026-03-08 | Codex | Alinha export do catalogo ao layout fisico de blocos (5 linhas por prompt)
+'   - Gera `catalogo_prompts_executadas.csv` com colunas A:K (cabecalho do catalogo) e 5 linhas por prompt (ID + Next/default/allowed + linha em branco).
+'   - Preserva a estrutura visual do catalogo para auditoria 1:1 entre Excel e CSV exportado.
 ' - 2026-03-08 | Codex | Corrige export do catalogo para refletir bloco completo do prompt
 '   - Substitui CSV reduzido (7 colunas) por export completo com colunas A:K e campos Next/INPUTS/OUTPUTS.
 '   - Faz lookup robusto da linha do prompt por ID com normalizacao (CR/LF/TAB/NBSP) para evitar falhas por caracteres invisiveis.
@@ -419,48 +425,48 @@ EH:
 End Function
 
 Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelineNome As String) As String
-    Dim d As Object
-    Set d = CreateObject("Scripting.Dictionary")
-    d.CompareMode = 1
+    Dim out As String
+    out = CsvRow(Array("ID", "Nome curto", "Nome descritivo", "Texto prompt", "Modelo", "Modos", "Storage", "Config extra", "Comentarios", "Notas para desenvolvimento", "Historico de versoes")) & vbCrLf
 
-    Dim hMap As Object
-    Set hMap = HeaderMap(wsSeg)
+    Dim map As Object
+    Set map = HeaderMap(wsSeg)
 
     Dim cPipe As Long
-    cPipe = MapGet(hMap, "pipeline_name")
-
     Dim cPid As Long
-    cPid = MapGet(hMap, "Prompt ID")
+    cPipe = MapGetFirst(map, Array("Pipeline", "pipeline_name", "Nome do Pipeline"))
+    cPid = MapGetFirst(map, Array("Prompt ID", "Prompt Id", "ID Prompt", "prompt_id"))
 
-    Dim lastRow As Long
-    lastRow = wsSeg.Cells(wsSeg.Rows.Count, 1).End(xlUp).Row
+    If cPipe = 0 Or cPid = 0 Then
+        BuildExecutedCatalogCsv = out
+        Exit Function
+    End If
+
+    Dim d As Object
+    Set d = CreateObject("Scripting.Dictionary")
+
+    Dim lr As Long
+    lr = wsSeg.Cells(wsSeg.Rows.Count, cPipe).End(xlUp).Row
 
     Dim r As Long
-    For r = 2 To lastRow
-        If Trim$(CStr(wsSeg.Cells(r, cPipe).Value)) = pipelineNome Then
+    For r = 2 To lr
+        If StrComp(Trim$(CStr(wsSeg.Cells(r, cPipe).Value)), Trim$(pipelineNome), vbTextCompare) = 0 Then
             Dim pid As String
             pid = Trim$(CStr(wsSeg.Cells(r, cPid).Value))
             If pid <> "" And UCase$(pid) <> "STOP" Then d(pid) = 1
         End If
     Next r
 
-    Dim out As String
-    out = "prompt_id,catalogo,nome_curto,nome_descritivo,texto_prompt,modelo,modos,storage,config_extra,comentarios,notas_dev,historico_versoes,next_prompt,next_prompt_default,next_prompt_allowed,descricao_textual,inputs,outputs" & vbCrLf
-
     Dim k As Variant
     For Each k In d.Keys
-        out = out & BuildExecutedCatalogCsvRow(CStr(k)) & vbCrLf
+        out = out & BuildExecutedCatalogCsvBlock(CStr(k))
     Next k
 
     BuildExecutedCatalogCsv = out
 End Function
 
-Private Function BuildExecutedCatalogCsvRow(ByVal promptId As String) As String
+Private Function BuildExecutedCatalogCsvBlock(ByVal promptId As String) As String
     Dim p As PromptDefinicao
     p = Catalogo_ObterPromptPorID(promptId)
-
-    Dim catalogo As String
-    catalogo = PrefixFromId(promptId)
 
     Dim nextPrompt As String
     Dim nextPromptDefault As String
@@ -471,9 +477,11 @@ Private Function BuildExecutedCatalogCsvRow(ByVal promptId As String) As String
 
     Call Catalogo_ReadBlockMetadata(promptId, nextPrompt, nextPromptDefault, nextPromptAllowed, descricaoTextual, inputsText, outputsText)
 
-    BuildExecutedCatalogCsvRow = CsvRow(Array( _
+    Dim out As String
+    out = ""
+
+    out = out & CsvRow(Array( _
         promptId, _
-        catalogo, _
         p.NomeCurto, _
         p.NomeDescritivo, _
         p.textoPrompt, _
@@ -483,13 +491,32 @@ Private Function BuildExecutedCatalogCsvRow(ByVal promptId As String) As String
         p.ConfigExtra, _
         p.Comentarios, _
         p.NotasDev, _
-        p.HistoricoVersoes, _
-        nextPrompt, _
-        nextPromptDefault, _
-        nextPromptAllowed, _
+        p.HistoricoVersoes)) & vbCrLf
+
+    out = out & CsvRow(Array( _
+        "", _
+        "Next PROMPT: " & nextPrompt, _
+        "Descricao textual:", _
         descricaoTextual, _
+        "", "", "", "", "", "", "")) & vbCrLf
+
+    out = out & CsvRow(Array( _
+        "", _
+        "Next PROMPT default: " & nextPromptDefault, _
+        "INPUTS:", _
         inputsText, _
-        outputsText))
+        "", "", "", "", "", "", "")) & vbCrLf
+
+    out = out & CsvRow(Array( _
+        "", _
+        "Next PROMPT allowed: " & nextPromptAllowed, _
+        "OUTPUTS:", _
+        outputsText, _
+        "", "", "", "", "", "", "")) & vbCrLf
+
+    out = out & CsvRow(Array("", "", "", "", "", "", "", "", "", "", "")) & vbCrLf
+
+    BuildExecutedCatalogCsvBlock = out
 End Function
 
 Private Sub Catalogo_ReadBlockMetadata(ByVal promptId As String, ByRef nextPrompt As String, ByRef nextPromptDefault As String, ByRef nextPromptAllowed As String, ByRef descricaoTextual As String, ByRef inputsText As String, ByRef outputsText As String)
@@ -841,6 +868,16 @@ Private Function MapGet(ByVal d As Object, ByVal keyName As String) As Long
         MapGet = 0
     End If
 End Function
+
+Private Function MapGetFirst(ByVal d As Object, ByVal keys As Variant) As Long
+    Dim i As Long
+    For i = LBound(keys) To UBound(keys)
+        MapGetFirst = MapGet(d, CStr(keys(i)))
+        If MapGetFirst > 0 Then Exit Function
+    Next i
+    MapGetFirst = 0
+End Function
+
 
 Private Function GitDebug_SanitizePathPart(ByVal s As String) As String
     Dim out As String
