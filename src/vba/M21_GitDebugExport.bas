@@ -9,6 +9,18 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-09 | Codex | Remove prefixo do indice no PROMPT_NAME do run folder Git
+'   - Altera derivacao para <ordem>_<nomeCurto> (ex.: 01_WF_PROMPT_AUDIT), sem prefixo do slot da pipeline.
+'   - Mantem fallback por nome da pipeline apenas para resolver Prompt ID, sem impactar o nome final da prompt.
+' - 2026-03-09 | Codex | Tolera linhas vazias/comentarios na lista INICIAR ao derivar Prompt ID
+'   - Deixa de parar na primeira linha vazia e passa a varrer a janela completa da lista para encontrar o primeiro Prompt ID valido.
+'   - Ignora entradas nao-ID (sem formato <folha>/<ordem>/<nome>/<versao>) para reduzir quedas indevidas em PROMPT_DESCONHECIDO.
+' - 2026-03-09 | Codex | Endurece resolucao de Prompt ID no PAINEL para pasta remota Git
+'   - Resolve coluna/slot da pipeline com normalizacao de texto (CR/LF/TAB/NBSP/espacos) e extrai prompt mesmo com variacoes de nome.
+'   - Usa pipelineIndex efetivo apenas para resolver coluna da pipeline no PAINEL e regista alerta diagnostico quando nao encontra Prompt ID.
+' - 2026-03-08 | Codex | Corrige derivacao de PROMPT_NAME/VERSION para pasta remota Git
+'   - Passa a montar PROMPT_NAME no formato <ordem>_<nomeCurto> (ex.: 01_WF_PROMPT_AUDIT).
+'   - Adiciona fallback por nome da pipeline para resolver o primeiro Prompt ID quando o indice nao estiver disponivel.
 ' - 2026-03-09 | Codex | Tolera linhas vazias/comentarios na lista INICIAR ao derivar Prompt ID
 '   - Deixa de parar na primeira linha vazia e passa a varrer a janela completa da lista para encontrar o primeiro Prompt ID valido.
 '   - Ignora entradas nao-ID (sem formato <folha>/<ordem>/<nome>/<versao>) para reduzir quedas indevidas em PROMPT_DESCONHECIDO.
@@ -409,8 +421,8 @@ Private Function GitDebug_PromptNameFromId(ByVal promptId As String, ByVal pipel
         stepCode = GitDebug_KeepDigitsOnly(Trim$(parts(1)))
     End If
 
-    If pipelineIndex > 0 And stepCode <> "" And promptLabel <> "" Then
-        GitDebug_PromptNameFromId = CStr(pipelineIndex) & stepCode & "_" & promptLabel
+    If stepCode <> "" And promptLabel <> "" Then
+        GitDebug_PromptNameFromId = stepCode & "_" & promptLabel
     Else
         GitDebug_PromptNameFromId = promptLabel
     End If
