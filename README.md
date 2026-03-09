@@ -186,8 +186,9 @@ Checklist rápido quando `Environ$("GH_TOKEN")` vier vazio:
 
 1. confirmar em PowerShell/CMD que a variável existe no perfil correto (`USER` ou `SYSTEM`);
 2. no VBA (Janela Immediate), testar `? GH_Config_ResolveToken(src): ? src` para ver `token_source` efetivo;
-3. confirmar na folha `Config` que `GH_TOKEN_ENV` aponta para `GH_TOKEN` (ou `GITHUB_TOKEN`) e que `GH_TOKEN_CONFIG` está vazio (ou com PAT real para fallback controlado);
-4. reabrir o Excel e repetir o teste.
+3. para um resumo rápido e sanitizado dos parâmetros GitHub, executar `GH_Config_PrintImmediateReport` na Janela Immediate.
+4. confirmar na folha `Config` que `GH_TOKEN_ENV` aponta para `GH_TOKEN` (ou `GITHUB_TOKEN`) e que `GH_TOKEN_CONFIG` está vazio (ou com PAT real para fallback controlado);
+5. reabrir o Excel e repetir o teste.
 
 > **Segurança (produção):** evitar guardar token em claro no workbook. Preferir sempre variável de ambiente (`GH_TOKEN_ENV`) e deixar `GH_TOKEN_CONFIG` vazio, usando este último apenas para testes controlados.
 
