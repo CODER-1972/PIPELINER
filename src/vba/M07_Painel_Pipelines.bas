@@ -8,6 +8,10 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-09 | Codex | Snapshot DEBUG focado no contexto da prompt executada
+'   - Filtra linhas por Prompt ID e por Passo (fallback) para manter eventos da prompt mesmo quando o Prompt ID vem vazio.
+'   - Mantem cabecalho da linha 1 e ordem original das linhas do DEBUG no TSV.
+'   - Evita truncagem prematura por ruido de outras prompts ao espelhar apenas o contexto relevante no catalogo.
 ' - 2026-03-09 | Codex | Espelho do DEBUG passa a copiar desde a linha 1 e quebra por caracteres
 '   - Remove filtro por Prompt ID no snapshot para refletir integralmente a folha DEBUG no catalogo.
 '   - Inclui a linha 1 (cabecalhos) e preserva a numeracao original das linhas no TSV.
@@ -2408,7 +2412,7 @@ Private Sub Painel_EspelharDebugNoCatalogo(ByVal passo As Long, ByVal promptId A
     Set bodyOverflowCell = wsCatalogo.Cells(rowId + 3, 10)
 
     Dim snapshotTsv As String
-    snapshotTsv = Painel_DebugSheetToTsv(wsDebug)
+    snapshotTsv = Painel_DebugSheetToTsv(wsDebug, passo, pid)
     If Trim$(snapshotTsv) = "" Then
         snapshotTsv = "[Sem linhas no DEBUG para a prompt " & pid & "]"
         Call Debug_Registar(passo, pid, "ALERTA", "", "DEBUG_SNAPSHOT", _
@@ -2488,13 +2492,18 @@ Private Function Painel_LocalizarLinhaPromptNoCatalogo(ByVal wsCatalogo As Works
     Next i
 End Function
 
-Private Function Painel_DebugSheetToTsv(ByVal wsDebug As Worksheet) As String
+Private Function Painel_DebugSheetToTsv(ByVal wsDebug As Worksheet, ByVal passo As Long, ByVal promptId As String) As String
     Dim lastRow As Long
     Dim lastCol As Long
+    Dim colPrompt As Long
+    Dim colPasso As Long
     Dim r As Long
     Dim c As Long
     Dim lineTxt As String
     Dim acc As String
+    Dim pidKey As String
+    Dim rowPidKey As String
+    Dim rowPasso As String
 
     lastRow = wsDebug.Cells(wsDebug.Rows.Count, 1).End(xlUp).Row
     If lastRow < 1 Then Exit Function
@@ -2502,7 +2511,33 @@ Private Function Painel_DebugSheetToTsv(ByVal wsDebug As Worksheet) As String
     lastCol = wsDebug.Cells(1, wsDebug.Columns.Count).End(xlToLeft).Column
     If lastCol < 1 Then Exit Function
 
+    colPrompt = Painel_FindHeaderColumn(wsDebug, "Prompt ID")
+    colPasso = Painel_FindHeaderColumn(wsDebug, "Passo")
+    pidKey = Painel_NormalizarPromptIdKey(promptId)
+
     For r = 1 To lastRow
+        If r > 1 Then
+            If colPrompt > 0 Then
+                rowPidKey = Painel_NormalizarPromptIdKey(CStr(wsDebug.Cells(r, colPrompt).Value))
+            Else
+                rowPidKey = ""
+            End If
+
+            If colPasso > 0 Then
+                rowPasso = Trim$(CStr(wsDebug.Cells(r, colPasso).Value))
+            Else
+                rowPasso = ""
+            End If
+
+            If (pidKey <> "" And rowPidKey = pidKey) Then
+                ' inclui por Prompt ID
+            ElseIf (passo > 0 And rowPasso = CStr(passo)) Then
+                ' fallback: inclui por Passo para capturar linhas sem Prompt ID
+            Else
+                GoTo ProximaLinha
+            End If
+        End If
+
         lineTxt = CStr(r)
         For c = 1 To lastCol
             lineTxt = lineTxt & vbTab

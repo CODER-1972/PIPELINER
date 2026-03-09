@@ -613,5 +613,6 @@ Se começar a ficar demasiado grande:
 - Quando um helper de lookup de cabecalho (ex.: `HeaderColByName`) for usado no modulo, manter implementacao local ou dependencia publica explícita no mesmo commit; nao deixar call-site sem definicao apos resolver conflitos.
 
 - Em espelhos de logs para células (ex.: DEBUG -> catálogo), evitar segmentação por linha quando há limite de 32767 caracteres por célula; usar chunk por comprimento para continuar exatamente no ponto de corte e só truncar após esgotar todas as células alvo.
+- Em snapshots de DEBUG por prompt, aplicar filtro por `Prompt ID` com fallback por `Passo` para capturar eventos do mesmo step quando o `Prompt ID` vier vazio; isto evita perder linhas relevantes e reduz truncagem por ruído de outros passos.
 
 - Em exports CSV com deduplicacao por dictionary no VBA, declarar explicitamente no mesmo escopo as estruturas usadas no loop (`seen` e colecao ordenada) e devolver `Build... = out` + `End Function`; evitar referencias a variaveis renomeadas (ex.: `d.Keys`) que causam `Compile error: Variable not defined` e bloqueiam compilacao do modulo.
