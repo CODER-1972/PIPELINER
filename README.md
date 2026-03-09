@@ -219,7 +219,7 @@ Cada célula de `Funcionalidade` passa a incluir, numa segunda linha em **negrit
 
 Após cada prompt executada no `RUN` da pipeline, o sistema também grava um espelho do `DEBUG` no catálogo da própria prompt, na coluna **Notas para o desenvolvimento** (coluna J):
 - linha +1 do bloco recebe `DEBUG [dd-mm-yyyy hh:mm]` em negrito;
-- linha +2 recebe todo o conteúdo atual do DEBUG numa única célula TSV (colunas separadas por tab), sem `text wrap`;
+- linhas +2/+3 recebem um TSV sem `text wrap` com o contexto relevante da prompt (filtro por `Prompt ID` com fallback por `Passo`, preservando a linha 1/cabeçalho);
 - ambas as células ficam com fundo salmão claro e substituem conteúdo anterior.
 
 Também existe suporte a um botão de utilidade na própria folha `DEBUG` para gerar um pacote de diagnóstico “copiar/colar” para chat:
