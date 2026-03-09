@@ -15,6 +15,9 @@ Option Explicit
 ' - 2026-03-08 | Codex | Corrige derivacao de PROMPT_NAME/VERSION para pasta remota Git
 '   - Passa a montar PROMPT_NAME no formato <pipelineIndex><ordem>_<nomeCurto> (ex.: 701_WF_PROMPT_AUDIT).
 '   - Adiciona fallback por nome da pipeline para resolver o primeiro Prompt ID quando o indice nao estiver disponivel.
+' - 2026-03-09 | Codex | Corrige deteccao de colunas no Seguimento para export do catalogo
+'   - Remove dependencia de helper inexistente (`HeaderColByName`) e usa mapa de cabecalhos local com aliases robustos.
+'   - Garante fallback para devolver sempre cabecalho CSV (evita ficheiro vazio/BOM-only no GitHub).
 ' - 2026-03-09 | Codex | Corrige conflito de merge e helper de cabecalho no export Git
 '   - Remove marcadores `<<<<<<< ======= >>>>>>>` remanescentes no modulo para restaurar compilacao.
 '   - Reintroduz helper local `HeaderColByName` usando `HeaderMap/MapGet` para evitar `Sub or Function not defined`.
@@ -559,26 +562,31 @@ EH:
 End Function
 
 Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelineNome As String) As String
+    Dim out As String
+    out = CsvRow(Array("ID", "Nome curto", "Nome descritivo", "Texto prompt", "Modelo", "Modos", "Storage", "Config extra", "Comentarios", "Notas para desenvolvimento", "Historico de versoes")) & vbCrLf
+
+    Dim map As Object
+    Set map = HeaderMap(wsSeg)
+
     Dim cPipe As Long
     Dim cPid As Long
-    cPipe = HeaderColByName(wsSeg, "Pipeline")
-    cPid = HeaderColByName(wsSeg, "Prompt ID")
-    If cPipe = 0 Or cPid = 0 Then Exit Function
+    cPipe = MapGetFirst(map, Array("Pipeline", "pipeline_name", "Nome do Pipeline"))
+    cPid = MapGetFirst(map, Array("Prompt ID", "Prompt Id", "ID Prompt", "prompt_id"))
+
+    If cPipe = 0 Or cPid = 0 Then
+        BuildExecutedCatalogCsv = out
+        Exit Function
+    End If
+
+    Dim d As Object
+    Set d = CreateObject("Scripting.Dictionary")
 
     Dim lr As Long
     lr = wsSeg.Cells(wsSeg.Rows.Count, cPipe).End(xlUp).Row
 
-    Dim out As String
-    out = "prompt_id,catalogo,catalog_row,block_line_index,col_A_ID,col_B_nome_curto,col_C_nome_descritivo,col_D_prompt,col_E_modelo,col_F_modos,col_G_storage,col_H_config_extra,col_I_comentarios,col_J_notas_dev,col_K_historico" & vbCrLf
-
-    Dim orderedIds As New Collection
-    Dim seen As Object
-    Set seen = CreateObject("Scripting.Dictionary")
-    seen.CompareMode = 1
-
     Dim r As Long
     For r = 2 To lr
-        If Trim$(CStr(wsSeg.Cells(r, cPipe).Value)) = pipelineNome Then
+        If StrComp(Trim$(CStr(wsSeg.Cells(r, cPipe).Value)), Trim$(pipelineNome), vbTextCompare) = 0 Then
             Dim pid As String
             pid = Trim$(CStr(wsSeg.Cells(r, cPid).Value))
             If pid <> "" And UCase$(pid) <> "STOP" Then
@@ -590,59 +598,10 @@ Private Function BuildExecutedCatalogCsv(ByVal wsSeg As Worksheet, ByVal pipelin
         End If
     Next r
 
-    Dim itemPid As Variant
-    For Each itemPid In orderedIds
-        out = out & BuildCatalogPromptBlockCsvRows(CStr(itemPid))
-    Next itemPid
-
-    BuildExecutedCatalogCsv = out
-End Function
-
-Private Function HeaderColByName(ByVal ws As Worksheet, ByVal headerName As String) As Long
-    Dim map As Object
-    Set map = HeaderMap(ws)
-    HeaderColByName = MapGet(map, headerName)
-End Function
-
-Private Function BuildCatalogPromptBlockCsvRows(ByVal promptId As String) As String
-    On Error GoTo EH
-
-    Dim ws As Worksheet
-    Set ws = ResolvePromptSheet(promptId)
-    If ws Is Nothing Then Exit Function
-
-    Dim rowPrompt As Long
-    rowPrompt = FindPromptRowById(ws, promptId)
-    If rowPrompt <= 0 Then Exit Function
-
-    Dim i As Long
-    Dim out As String
-    For i = 0 To 4
-        Dim rowN As Long
-        rowN = rowPrompt + i
-        out = out & CsvRow(Array( _
-            promptId, _
-            ws.Name, _
-            CStr(rowN), _
-            CStr(i + 1), _
-            CStr(ws.Cells(rowN, 1).Value), _
-            CStr(ws.Cells(rowN, 2).Value), _
-            CStr(ws.Cells(rowN, 3).Value), _
-            CStr(ws.Cells(rowN, 4).Value), _
-            CStr(ws.Cells(rowN, 5).Value), _
-            CStr(ws.Cells(rowN, 6).Value), _
-            CStr(ws.Cells(rowN, 7).Value), _
-            CStr(ws.Cells(rowN, 8).Value), _
-            CStr(ws.Cells(rowN, 9).Value), _
-            CStr(ws.Cells(rowN, 10).Value), _
-            CStr(ws.Cells(rowN, 11).Value))) & vbCrLf
-    Next i
-
-    BuildCatalogPromptBlockCsvRows = out
-    Exit Function
-EH:
-    BuildCatalogPromptBlockCsvRows = ""
-End Function
+    Dim k As Variant
+    For Each k In d.Keys
+        out = out & BuildExecutedCatalogCsvBlock(CStr(k))
+    Next k
 
 Private Function ResolvePromptSheet(ByVal promptId As String) As Worksheet
     On Error GoTo EH
@@ -655,12 +614,6 @@ Private Function ResolvePromptSheet(ByVal promptId As String) As Worksheet
     Exit Function
 EH:
     Set ResolvePromptSheet = Nothing
-End Function
-
-Private Function FindPromptRowById(ByVal ws As Worksheet, ByVal promptId As String) As Long
-    Dim found As Range
-    Set found = ws.Columns(1).Find(What:=promptId, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
-    If Not found Is Nothing Then FindPromptRowById = found.Row
 End Function
 
 Private Function BuildExecutedCatalogCsvBlock(ByVal promptId As String) As String
@@ -1082,6 +1035,16 @@ Private Function MapGet(ByVal d As Object, ByVal keyName As String) As Long
         MapGet = 0
     End If
 End Function
+
+Private Function MapGetFirst(ByVal d As Object, ByVal keys As Variant) As Long
+    Dim i As Long
+    For i = LBound(keys) To UBound(keys)
+        MapGetFirst = MapGet(d, CStr(keys(i)))
+        If MapGetFirst > 0 Then Exit Function
+    Next i
+    MapGetFirst = 0
+End Function
+
 
 Private Function GitDebug_SanitizePathPart(ByVal s As String) As String
     Dim out As String
