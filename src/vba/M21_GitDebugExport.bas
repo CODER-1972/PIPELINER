@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-09 | Codex | Tolera linhas vazias/comentarios na lista INICIAR ao derivar Prompt ID
+'   - Deixa de parar na primeira linha vazia e passa a varrer a janela completa da lista para encontrar o primeiro Prompt ID valido.
+'   - Ignora entradas nao-ID (sem formato <folha>/<ordem>/<nome>/<versao>) para reduzir quedas indevidas em PROMPT_DESCONHECIDO.
 ' - 2026-03-09 | Codex | Corrige erro de compilacao em BuildExecutedCatalogCsv
 '   - Declara colecao `orderedIds` e usa dictionary local `seen` para deduplicar Prompt IDs sem `Variable not defined`.
 '   - Fecha a funcao com `End Function` e preserva ordem de execucao ao montar `catalogo_prompts_executadas.csv`.
@@ -90,6 +93,8 @@ Option Explicit
 '   - Resolve pasta remota por run e aplica estrutura canonica obrigatoria pipeline/prompt/versao/data.
 ' - GitDebug_FirstPromptIdFromPainel(pipelineIndex As Long, pipelineNome As String, resolvedPipelineIndex As Long) As String (Private Function)
 '   - Resolve o primeiro Prompt ID ativo e devolve pipelineIndex efetivo por indice ou fallback por nome no PAINEL.
+' - GitDebug_IsLikelyPromptId(promptId As String) As Boolean (Private Function)
+'   - Valida formato minimo de Prompt ID para ignorar linhas decorativas/comentarios na lista do PAINEL.
 ' - JsonPick(body As String, keyName As String) As String (Private Function)
 '   - Extrai valor string de chave JSON simples para compatibilidade de parsing em M21.
 ' =============================================================================
@@ -314,10 +319,14 @@ Private Function GitDebug_FirstPromptIdFromPainel(ByVal pipelineIndex As Long, B
     For r = LIST_START_ROW To LIST_START_ROW + 400
         Dim promptId As String
         promptId = Trim$(CStr(wsPainel.Cells(r, colIniciar).Value))
-        If promptId = "" Then Exit For
-        If UCase$(promptId) <> "STOP" Then
-            GitDebug_FirstPromptIdFromPainel = promptId
-            Exit Function
+
+        If promptId <> "" Then
+            If UCase$(promptId) <> "STOP" Then
+                If GitDebug_IsLikelyPromptId(promptId) Then
+                    GitDebug_FirstPromptIdFromPainel = promptId
+                    Exit Function
+                End If
+            End If
         End If
     Next r
 
@@ -368,6 +377,22 @@ Private Function GitDebug_NormalizeCompareToken(ByVal rawText As String) As Stri
     Loop While hasDouble
 
     GitDebug_NormalizeCompareToken = UCase$(Trim$(s))
+End Function
+
+Private Function GitDebug_IsLikelyPromptId(ByVal promptId As String) As Boolean
+    Dim cleaned As String
+    cleaned = Trim$(promptId)
+    If cleaned = "" Then Exit Function
+
+    Dim parts() As String
+    parts = Split(cleaned, "/")
+    If UBound(parts) < 3 Then Exit Function
+
+    If Trim$(parts(0)) = "" Then Exit Function
+    If Trim$(parts(2)) = "" Then Exit Function
+    If Trim$(parts(3)) = "" Then Exit Function
+
+    GitDebug_IsLikelyPromptId = True
 End Function
 
 Private Function GitDebug_PromptNameFromId(ByVal promptId As String, ByVal pipelineIndex As Long) As String
