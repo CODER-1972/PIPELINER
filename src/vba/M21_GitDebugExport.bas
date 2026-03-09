@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-09 | Codex | Publica DEBUG.csv final apos GH_UPLOAD_DONE para reduzir drift
+'   - Reenvia apenas DEBUG.csv no fim da rotina para aproximar o artefacto remoto ao estado final da folha DEBUG.
+'   - Mantem o upload principal inalterado e trata falha da republicacao final como ALERTA nao bloqueante.
 ' - 2026-03-08 | Codex | Corrige derivacao de PROMPT_NAME/VERSION para pasta remota Git
 '   - Passa a montar PROMPT_NAME no formato <pipelineIndex><ordem>_<nomeCurto> (ex.: 701_WF_PROMPT_AUDIT).
 '   - Adiciona fallback por nome da pipeline para resolver o primeiro Prompt ID quando o indice nao estiver disponivel.
@@ -155,11 +158,53 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Link registado em Seguimento/HISTORICO.", webUrl)
 
     Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD_DONE, "Debug export publicado no GitHub.", "upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount) & " | " & webUrl)
+
+    Dim finalRefreshReason As String
+    If Not GitDebug_RefreshDebugCsvFinal(cfg, pipelineNome, remoteFolder, uploadMode, finalRefreshReason) Then
+        Call GH_LogWarn(0, pipelineNome, GH_EVT_UPLOAD, "Falha ao republicar DEBUG.csv final no GitHub.", finalRefreshReason)
+    End If
     Exit Sub
 
 EH:
     Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD, "Falha no auto-upload de debug: " & Err.Description, "Validar parametros GH_* e conectividade com api.github.com.")
 End Sub
+
+Private Function GitDebug_RefreshDebugCsvFinal( _
+    ByVal cfg As Object, _
+    ByVal pipelineNome As String, _
+    ByVal remoteFolder As String, _
+    ByVal uploadMode As String, _
+    ByRef reason As String) As Boolean
+
+    On Error GoTo EH
+
+    reason = ""
+
+    Dim wsDebug As Worksheet
+    Set wsDebug = ThisWorkbook.Worksheets(SHEET_DEBUG)
+
+    Dim csvDebugFinal As String
+    csvDebugFinal = SheetToCsv(wsDebug, True)
+
+    Dim files As New Collection
+    files.Add GitFileItem(remoteFolder & "/DEBUG.csv", csvDebugFinal)
+
+    Dim successCount As Long
+    Dim failCount As Long
+    Dim retryCount As Long
+
+    GitDebug_RefreshDebugCsvFinal = GitDebug_RunUploadByMode(cfg, files, pipelineNome, uploadMode, reason, successCount, failCount, retryCount)
+
+    If Not GitDebug_RefreshDebugCsvFinal Then
+        reason = Trim$(reason & " | upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount))
+    End If
+
+    Exit Function
+
+EH:
+    reason = "err=" & CStr(Err.Number) & " | " & Left$(Err.Description, 180)
+    GitDebug_RefreshDebugCsvFinal = False
+End Function
 
 Private Function GitDebug_NormalizeApiVersionForDiag(ByVal rawValue As String) As String
     Dim valueText As String

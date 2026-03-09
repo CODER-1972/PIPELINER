@@ -118,6 +118,7 @@ Também suporta exportação opcional de debug para GitHub (Git Data API) no fim
 - quando o Prompt ID segue `<Folha>/<ordem>/<nomeCurto>/<versão>`, o runtime deriva `PROMPT_NAME` como `<pipelineIndex><ordem>_<nomeCurto>` (ex.: `PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.4` -> `701_WF_PROMPT_AUDIT`) e `VERSION` como `v1.4`;
 - atualização da coluna `GIT_DEBUG` nas folhas `Seguimento` e `HISTÓRICO` com o link da pasta remota.
 - no arranque/fim do export, o DEBUG regista INFO/ALERTA para `run_folder`, `remote_folder` e gravação de link em `Seguimento/HISTÓRICO`.
+- após `GH_UPLOAD_DONE`, o runtime faz uma republicação final apenas de `DEBUG.csv` para aproximar o artefacto remoto ao estado final da folha `DEBUG` no fim da rotina.
 - em cada execução de upload Git, o DEBUG regista a fonte do token (`token_source`) e a `path` de cada ficheiro enviado.
 - publicação de `DEBUG.csv`, `catalogo_prompts_executadas.csv`, `Seguimento.csv` e `painel_pipeline.txt`;
 - composição da pasta remota por run em `GH_BASE_PATH/GH_LOG_FOLDER/<run_folder>`, onde `<run_folder>` segue obrigatoriamente `{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}`;
