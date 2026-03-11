@@ -8,6 +8,10 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-11 | Codex | Registo Git LOG no topo por run com separador visual
+'   - Escreve cada prompt executada na linha 2 do HISTORICO via modulo M28_GitLog (top-down).
+'   - Mantem prompts da mesma run consecutivas e insere separador preto (6 pt) apenas na transicao entre runs.
+'   - Usa runToken da execucao para persistir metadado de run em coluna auxiliar oculta.
 ' - 2026-03-11 | Codex | Corrige compilacao em exportacao TSV do DEBUG
 '   - Alinha salto condicional com label local `NextRow` em `Painel_DebugSheetToTsv`.
 '   - Elimina referencia a `ProximaLinha` inexistente que gerava `Compile error: Label not defined`.
@@ -1197,6 +1201,11 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, resultado.httpStatus, resultado.responseId, _
             textoSeguimento, pipelineNome, "", filesUsedResumo, filesOpsResumo, fileIds)
+
+        If Painel_GitLog_IsEnabled(pipelineIndex) Then
+            Call GitLog_InsertEntryTop(runToken, pipelineNome, passo, prompt.Id, resultado.httpStatus, resultado.responseId, textoSeguimento, "")
+        End If
+
         Call Painel_LogStepStage(passo, prompt.Id, "step_completed", "http=" & CStr(resultado.httpStatus) & " | response_id=" & Left$(Trim$(resultado.responseId), 24))
 
         ' ================================
