@@ -1,0 +1,18 @@
+PROMPT_REVISAO_NAO_NECESSARIA
+
+1) Justificação objectiva
+A prompt-alvo PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.3 cumpriu o contrato técnico observado: recebeu RESULTS_JSON via ContextKV, produziu output determinístico com labels estáveis e registou captura de variáveis sem erro HTTP.
+
+2) Evidência resumida
+- HTTP 200 no passo 2.
+- INJECT_OK de RESULTS_JSON a partir do passo 1.
+- FILES_ITEM_TRACE e REQ_INPUT_JSON com anexação válida.
+- Output do passo 2 coerente com o estado recebido (prompts_count=0), gerando cabeçalho + validações.
+
+3) Confirmação de camada correta dos problemas
+Os problemas materiais observados pertencem principalmente a outras camadas:
+- TEXTO DA PROMPT anterior (passo 01), que reportou indisponibilidade de anexos apesar da evidência técnica contrária.
+- ORQUESTRADOR/PIPELINE, por não impor gate de conteúdo mínimo (prompts_count>0) antes de prosseguir para etapas geradoras.
+- OPERAÇÃO/GOVERNAÇÃO, por manter API key literal em Config.
+
+Conclusão: não se recomenda alteração textual da prompt-alvo v1.3 nesta iteração.
