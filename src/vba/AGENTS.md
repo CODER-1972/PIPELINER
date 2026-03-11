@@ -613,3 +613,5 @@ Se começar a ficar demasiado grande:
 - Em espelhos de logs para células (ex.: DEBUG -> catálogo), evitar segmentação por linha quando há limite de 32767 caracteres por célula; usar chunk por comprimento para continuar exatamente no ponto de corte e só truncar após esgotar todas as células alvo.
 - Em snapshots de DEBUG por prompt, aplicar filtro por `Prompt ID` com fallback por `Passo` para capturar eventos do mesmo step quando o `Prompt ID` vier vazio; isto evita perder linhas relevantes e reduz truncagem por ruído de outros passos.
 - Em espelhos de DEBUG por prompt, tirar snapshot no fecho do passo (e também antes de saídas antecipadas) para incluir logs emitidos após API/NEXT; snapshots precoces tendem a omitir diagnósticos finais da mesma prompt.
+
+- Quando renomear labels de fluxo (`GoTo`/`GoSub`) dentro de um procedimento, atualizar simultaneamente todos os saltos locais e correr uma varredura por `GoTo <label>` no próprio módulo para evitar regressão `Compile error: Label not defined`.

@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-11 | Codex | Corrige compilacao em exportacao TSV do DEBUG
+'   - Alinha salto condicional com label local `NextRow` em `Painel_DebugSheetToTsv`.
+'   - Elimina referencia a `ProximaLinha` inexistente que gerava `Compile error: Label not defined`.
 ' - 2026-03-09 | Codex | Snapshot DEBUG atualizado no fecho do passo antes de sair/avancar
 '   - Regrava o espelho no catalogo imediatamente antes de cada saida antecipada do passo.
 '   - Regrava no caminho nominal apos validacoes de NEXT para capturar logs emitidos apos a chamada API.
@@ -2550,7 +2553,7 @@ Private Function Painel_DebugSheetToTsv(ByVal wsDebug As Worksheet, ByVal passo 
             ElseIf (passo > 0 And rowPasso = CStr(passo)) Then
                 ' fallback: inclui por Passo para capturar linhas sem Prompt ID
             Else
-                GoTo ProximaLinha
+                GoTo NextRow
             End If
         End If
 
