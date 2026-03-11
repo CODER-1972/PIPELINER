@@ -15,6 +15,7 @@ Template Excel + VBA para execução de pipelines de prompts com auditoria opera
   - [3.4 DEBUG](#34-debug)
   - [3.5 Folhas de catálogo](#35-folhas-de-catálogo)
   - [3.6 FILES_MANAGEMENT](#36-files_management)
+  - [3.7 Folha GIT LOG](#37-folha-git-log)
 - [4. Modelo de IDs e catálogo de prompts](#4-modelo-de-ids-e-catálogo-de-prompts)
 - [5. Fluxo de execução de uma pipeline](#5-fluxo-de-execução-de-uma-pipeline)
   - [5.1 Resolução do prompt e configuração efetiva](#51-resolução-do-prompt-e-configuração-efetiva)
@@ -244,6 +245,42 @@ Folha de auditoria de ficheiros (upload/reutilização/download/output), quando 
 Notas de layout operacional:
 - o separador visual entre runs é uma linha própria com fundo preto e altura fixa de **6 pt**;
 - as linhas de registo (não separadoras) são sempre forçadas para altura normal legível (mínimo 15 pt), evitando herança da altura do separador.
+
+## 3.7 Folha GIT LOG
+
+Quando a macro `GitLog_RegisterPromptExecution(...)` está disponível no workbook, o loop de execução da pipeline regista **cada prompt concluída** (sucesso ou erro) com payload mínimo:
+
+- `pipelineNome`
+- `promptId`
+- `versao` (derivada do último segmento do `Prompt ID`)
+- `status`
+- `analysisLink`
+- `newPromptLink`
+- `summary`
+- `runId`
+
+Regras de normalização aplicadas antes do registo:
+
+- `summary` é saneado para CRLF (remove quebras vazias redundantes) e limitado a **4 linhas**;
+- `Success` é mapeado para domínio controlado: `Sim`, `Não`, `Condicionado`, `Outro`;
+- `New version` é mapeado para `Sim`/`Não`.
+
+### Fluxo de eliminação/remediação (GIT LOG)
+
+Quando o registo aponta `Success=Não` ou `Condicionado`, usar o fluxo operacional abaixo para evitar acumular itens inválidos:
+
+1. **Triagem rápida**
+   - confirmar `runId`, `promptId` e links (`analysisLink`/`newPromptLink`);
+   - validar no `DEBUG` o erro raiz (API, contrato, FILES, NEXT, etc.).
+2. **Eliminação controlada (quando aplicável)**
+   - remover/arquivar a linha inválida no `GIT LOG` apenas após preservar rastreabilidade mínima (`runId`, motivo, timestamp, operador);
+   - nunca apagar em lote sem critério de run/prompt.
+3. **Remediação**
+   - corrigir origem (prompt, config extra, anexos, defaults, allowed/default de NEXT);
+   - reexecutar a pipeline e confirmar novo registo para o mesmo contexto funcional.
+4. **Fecho**
+   - manter no `GIT LOG` apenas a versão final válida ou sinalizada com estado final explícito;
+   - documentar no `DEBUG`/`Seguimento` a ação corretiva aplicada para auditoria futura.
 
 ---
 
