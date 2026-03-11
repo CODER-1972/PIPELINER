@@ -615,3 +615,5 @@ Se começar a ficar demasiado grande:
 - Em espelhos de DEBUG por prompt, tirar snapshot no fecho do passo (e também antes de saídas antecipadas) para incluir logs emitidos após API/NEXT; snapshots precoces tendem a omitir diagnósticos finais da mesma prompt.
 
 - Quando renomear labels de fluxo (`GoTo`/`GoSub`) dentro de um procedimento, atualizar simultaneamente todos os saltos locais e correr uma varredura por `GoTo <label>` no próprio módulo para evitar regressão `Compile error: Label not defined`.
+- Em export Git com pipelines multi-step, derivar o `run_folder` por **cada Prompt ID executado** (mesmo `RUN_STAMP`) em vez de fixar apenas o primeiro prompt; isto evita rastreabilidade incorreta quando a run inclui prompts 02/03/... no mesmo ciclo.
+- Em filtros de `pipeline_name` no Seguimento (export/auditoria), comparar com normalização de tokens (`CR/LF/TAB/NBSP`, trim, case-insensitive) em vez de igualdade textual direta; isto evita fallback indevido para a primeira prompt em runs multi-step.

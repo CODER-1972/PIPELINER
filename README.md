@@ -116,7 +116,9 @@ Também suporta exportação opcional de debug para GitHub (Git Data API) no fim
 - quando existirem dumps da run, publicação adicional em `payload_dumps/` (ex.: `step001_<timestamp>_<prompt>_request_payload_raw.json`, `..._response_raw.json`, `..._meta.txt`) para troubleshooting detalhado por passo;
 - `catalogo_prompts_executadas.csv` espelha o layout físico do catálogo: colunas A:K e blocos de 5 linhas por prompt (linha principal + `Next PROMPT`/`default`/`allowed` + linha em branco), preservando `Descrição textual`, `INPUTS` e `OUTPUTS`;
 - composição da pasta remota por run em `GH_BASE_PATH/GH_LOG_FOLDER/<run_folder>`, onde `<run_folder>` por default segue `{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}`;
+- quando uma execução tem múltiplas prompts, o runtime cria/publica uma pasta por prompt executada (mesmo `RUN_STAMP`), em vez de concentrar tudo apenas na pasta da primeira prompt;
 - quando o Prompt ID segue `<Folha>/<ordem>/<nomeCurto>/<versão>`, o runtime deriva `PROMPT_NAME` como `<ordem>_<nomeCurto>` (ex.: `PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.4` -> `01_WF_PROMPT_AUDIT`) e `VERSION` como `v1.4`;
+- na recolha de prompts executadas em `Seguimento`, o runtime normaliza `pipeline_name` (trim + CR/LF/TAB/NBSP + case-insensitive) para evitar perda de passos por variações invisíveis;
 - se `pipelineIndex` vier inválido no fluxo de export, o runtime tenta resolver a pipeline por nome no `PAINEL` com normalização de espaços invisíveis (`CR/LF/TAB/NBSP`) antes de derivar `PROMPT_NAME`/`VERSION`;
 - na derivação do primeiro Prompt ID no `PAINEL`, o runtime varre a janela inteira da lista (linha 9+) e ignora linhas vazias/entradas sem formato de ID, evitando falso `PROMPT_DESCONHECIDO` quando há separadores visuais na coluna `INICIAR`;
 - atualização da coluna `GIT_DEBUG` nas folhas `Seguimento` e `HISTÓRICO` com o link da pasta remota.

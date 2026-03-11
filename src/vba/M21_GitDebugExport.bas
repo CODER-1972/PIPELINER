@@ -9,6 +9,12 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-11 | Codex | Normaliza filtro de pipeline no Seguimento para export por prompt
+'   - Evita queda indevida para fallback da primeira prompt quando `pipeline_name` no Seguimento tem espacos invisiveis/variacoes.
+'   - Mantem deteccao de Prompt IDs por ordem de execucao e melhora rastreabilidade em runs multi-step.
+' - 2026-03-11 | Codex | Export Git com pasta propria por prompt executada
+'   - Passa a gerar/upload para cada Prompt ID observado no Seguimento da pipeline (mantendo run stamp comum).
+'   - Mantem fallback para o primeiro Prompt ID do PAINEL quando o Seguimento nao tem linhas elegiveis.
 ' - 2026-03-10 | Codex | Inclui dumps raw request/response no Git LOG da run
 '   - Agrega ficheiros JSON/TXT produzidos pelo M05 em subpasta payload_dumps da pasta remota da run.
 '   - Regista INFO/ALERTA no DEBUG quando adiciona (ou falha a adicionar) dumps ao pacote de upload.
@@ -88,8 +94,12 @@ Option Explicit
 '   - Adiciona rotina para criar/atualizar chaves GH_* com default e explicacoes.
 '
 ' Funcoes e procedimentos:
-' - GitDebug_BuildFilesForUpload(pipelineIndex As Long, pipelineNome As String, remoteFolder As String, cfg As Object) As Collection (Private Function)
-'   - Prepara artefactos CSV/TXT e agrega dumps raw request/response para upload Git quando disponiveis.
+' - GitDebug_BuildFilesForUpload(pipelineIndex As Long, pipelineNome As String, remoteFolders As Collection, cfg As Object) As Collection (Private Function)
+'   - Prepara artefactos CSV/TXT e agrega dumps raw request/response para upload Git em cada pasta de prompt.
+' - GitDebug_BuildRemoteFoldersForPipeline(cfg As Object, pipelineNome As String, pipelineIndex As Long, runStampHhdd As String) As Collection (Private Function)
+'   - Resolve uma pasta remota por prompt executada, com fallback seguro para o primeiro Prompt ID do PAINEL.
+' - GitDebug_CollectExecutedPromptIds(wsSeg As Worksheet, pipelineNome As String) As Collection (Private Function)
+'   - Recolhe Prompt IDs unicos da pipeline no Seguimento, preservando ordem de execucao.
 ' - PipelineGitDebug_ExportIfEnabled(pipelineIndex As Long, pipelineNome As String, painelAutoSave As String)
 '   - Entry point chamado no fim da pipeline para export opcional de debug para GitHub.
 ' - GitDebug_Config_InstalarParametros(Optional sobrescreverValores As Boolean = False)
@@ -146,27 +156,24 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
         Call GH_LogWarn(0, pipelineNome, GH_EVT_CONFIG, "GH_API_VERSION normalizado para formato canonico.", "raw=" & Trim$(apiVersionRaw) & " | normalized=" & apiVersionNormalized & " | action=Preferir YYYY-MM-DD na Config.")
     End If
 
-    Dim ghFolder As String
-    ghFolder = GitDebug_BuildRunFolder(cfg, pipelineNome, pipelineIndex)
-    If Trim$(ghFolder) = "" Then
-        Call GH_LogWarn(0, pipelineNome, GH_EVT_CONFIG, "run_folder_template gerou pasta vazia; aplicado fallback.", "[ACTION] Ajuste GH_RUN_FOLDER_TEMPLATE (use {{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{RUN_STAMP}}).")
-    Else
-        Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Run folder resolvida.", "run_folder=" & ghFolder)
+    Dim runStampHhdd As String
+    runStampHhdd = Format$(Now, "yyyy-mm-dd") & " " & Format$(Now, "hhdd")
+
+    Dim remoteFolders As Collection
+    Set remoteFolders = GitDebug_BuildRemoteFoldersForPipeline(cfg, pipelineNome, pipelineIndex, runStampHhdd)
+    If remoteFolders Is Nothing Or remoteFolders.Count = 0 Then
+        Call GH_LogError(0, pipelineNome, GH_EVT_CONFIG, "Falha a resolver remote_folder para upload.", "[ACTION] Confirme Prompt IDs executados e GH_BASE_PATH/GH_LOG_FOLDER.")
+        Exit Sub
     End If
 
-    Dim remoteFolder As String
-    remoteFolder = GitDebug_BuildRemoteFolder(cfg, ghFolder)
-    If Trim$(remoteFolder) = "" Then
-        Call GH_LogError(0, pipelineNome, GH_EVT_CONFIG, "Falha a resolver remote_folder para upload.", "[ACTION] Confirme GH_BASE_PATH/GH_LOG_FOLDER/GH_RUN_FOLDER_TEMPLATE na Config.")
-        Exit Sub
-    Else
-        Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Pasta remota final resolvida.", "remote_folder=" & remoteFolder)
-    End If
+    Dim primaryRemoteFolder As String
+    primaryRemoteFolder = CStr(remoteFolders(1))
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Pasta remota principal resolvida.", "remote_folder=" & primaryRemoteFolder & " | total_prompt_folders=" & CStr(remoteFolders.Count))
 
     Dim files As Collection
-    Set files = GitDebug_BuildFilesForUpload(pipelineIndex, pipelineNome, remoteFolder, cfg)
+    Set files = GitDebug_BuildFilesForUpload(pipelineIndex, pipelineNome, remoteFolders, cfg)
     If files Is Nothing Or files.Count = 0 Then Exit Sub
-    Call GitDebug_LogFilesForUpload(pipelineNome, remoteFolder, files)
+    Call GitDebug_LogFilesForUpload(pipelineNome, primaryRemoteFolder, files)
 
     Dim uploadModeReason As String
     Dim uploadModeDefaulted As Boolean
@@ -182,8 +189,8 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
         Call GH_LogWarn(0, pipelineNome, GH_EVT_UPLOAD_MODE_DEFAULTED, "GH_UPLOAD_MODE vazio; aplicado default.", "upload_mode=tree_commit")
     End If
 
-    Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD_START, "Inicio do upload GitHub.", "upload_mode=" & uploadMode & " | remote_folder=" & remoteFolder & " | total_files=" & CStr(files.Count) & " | token_source=" & GH_Config_GetString(cfg, "token_source", "desconhecida"))
-    Call GH_LogInfo(0, pipelineNome, GH_EVT_MODE_SELECTED, "Modo de upload selecionado.", "upload_mode=" & uploadMode & " | owner=" & GH_Config_GetString(cfg, "owner") & " | repo=" & GH_Config_GetString(cfg, "repo") & " | branch=" & GH_Config_GetString(cfg, "branch") & " | remote_folder=" & remoteFolder & " | total_files=" & CStr(files.Count) & " | token_source=" & GH_Config_GetString(cfg, "token_source", "desconhecida"))
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD_START, "Inicio do upload GitHub.", "upload_mode=" & uploadMode & " | remote_folder=" & primaryRemoteFolder & " | total_prompt_folders=" & CStr(remoteFolders.Count) & " | total_files=" & CStr(files.Count) & " | token_source=" & GH_Config_GetString(cfg, "token_source", "desconhecida"))
+    Call GH_LogInfo(0, pipelineNome, GH_EVT_MODE_SELECTED, "Modo de upload selecionado.", "upload_mode=" & uploadMode & " | owner=" & GH_Config_GetString(cfg, "owner") & " | repo=" & GH_Config_GetString(cfg, "repo") & " | branch=" & GH_Config_GetString(cfg, "branch") & " | remote_folder=" & primaryRemoteFolder & " | total_prompt_folders=" & CStr(remoteFolders.Count) & " | total_files=" & CStr(files.Count) & " | token_source=" & GH_Config_GetString(cfg, "token_source", "desconhecida"))
 
     Dim successCount As Long
     Dim failCount As Long
@@ -194,7 +201,7 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     End If
 
     Dim webUrl As String
-    webUrl = GH_TreeCommit_BuildWebFolderUrl(cfg, remoteFolder)
+    webUrl = GH_TreeCommit_BuildWebFolderUrl(cfg, primaryRemoteFolder)
 
     Call GitDebug_WriteLinkToSeguimento(pipelineNome, webUrl)
     Call GitDebug_WriteLinkToHistorico(pipelineNome, webUrl)
@@ -203,7 +210,7 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD_DONE, "Debug export publicado no GitHub.", "upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount) & " | " & webUrl)
 
     Dim finalRefreshReason As String
-    If Not GitDebug_RefreshDebugCsvFinal(cfg, pipelineNome, remoteFolder, uploadMode, finalRefreshReason) Then
+    If Not GitDebug_RefreshDebugCsvFinal(cfg, pipelineNome, remoteFolders, uploadMode, finalRefreshReason) Then
         Call GH_LogWarn(0, pipelineNome, GH_EVT_UPLOAD, "Falha ao republicar DEBUG.csv final no GitHub.", finalRefreshReason)
     End If
     Exit Sub
@@ -215,7 +222,7 @@ End Sub
 Private Function GitDebug_RefreshDebugCsvFinal( _
     ByVal cfg As Object, _
     ByVal pipelineNome As String, _
-    ByVal remoteFolder As String, _
+    ByVal remoteFolders As Collection, _
     ByVal uploadMode As String, _
     ByRef reason As String) As Boolean
 
@@ -230,7 +237,11 @@ Private Function GitDebug_RefreshDebugCsvFinal( _
     csvDebugFinal = SheetToCsv(wsDebug, True)
 
     Dim files As New Collection
-    files.Add GitFileItem(remoteFolder & "/DEBUG.csv", csvDebugFinal)
+
+    Dim idx As Long
+    For idx = 1 To remoteFolders.Count
+        files.Add GitFileItem(CStr(remoteFolders(idx)) & "/DEBUG.csv", csvDebugFinal)
+    Next idx
 
     Dim successCount As Long
     Dim failCount As Long
@@ -297,6 +308,70 @@ Private Function GitDebug_BuildRunFolder(ByVal cfg As Object, ByVal pipelineNome
 
     GitDebug_BuildRunFolder = GitDebug_SanitizePathTemplate( _
         safePipeline & "/" & safePromptName & "/" & safeVersion & "/" & runStampHhdd)
+End Function
+
+Private Function GitDebug_BuildRunFolderFromPromptId(ByVal pipelineNome As String, ByVal promptId As String, ByVal runStampHhdd As String) As String
+    Dim safePipeline As String
+    safePipeline = GitDebug_SanitizePathPart(pipelineNome)
+
+    Dim safePromptName As String
+    safePromptName = GitDebug_SanitizePathPart(GitDebug_PromptNameFromId(promptId, 0))
+
+    Dim safeVersion As String
+    safeVersion = GitDebug_SanitizePathPart(GitDebug_PromptVersionFromId(promptId))
+
+    GitDebug_BuildRunFolderFromPromptId = GitDebug_SanitizePathTemplate( _
+        safePipeline & "/" & safePromptName & "/" & safeVersion & "/" & runStampHhdd)
+End Function
+
+Private Function GitDebug_BuildRemoteFoldersForPipeline(ByVal cfg As Object, ByVal pipelineNome As String, ByVal pipelineIndex As Long, ByVal runStampHhdd As String) As Collection
+    On Error GoTo EH
+
+    Dim wsSeg As Worksheet
+    Set wsSeg = ThisWorkbook.Worksheets(SHEET_SEGUIMENTO)
+
+    Dim promptIds As Collection
+    Set promptIds = GitDebug_CollectExecutedPromptIds(wsSeg, pipelineNome)
+
+    If promptIds.Count = 0 Then
+        Dim resolvedPipelineIndex As Long
+        Dim firstPromptId As String
+        firstPromptId = GitDebug_FirstPromptIdFromPainel(pipelineIndex, pipelineNome, resolvedPipelineIndex)
+        If Trim$(firstPromptId) <> "" Then
+            promptIds.Add firstPromptId
+            Call GH_LogWarn(0, pipelineNome, GH_EVT_CONFIG, "Seguimento sem Prompt IDs elegiveis para export Git.", "fallback_prompt_id=" & firstPromptId & " | action=validar se Seguimento regista Prompt ID em todas as execucoes.")
+        End If
+    End If
+
+    Dim folders As New Collection
+    Dim seen As Object
+    Set seen = CreateObject("Scripting.Dictionary")
+
+    Dim i As Long
+    For i = 1 To promptIds.Count
+        Dim promptId As String
+        promptId = Trim$(CStr(promptIds(i)))
+        If promptId <> "" Then
+            Dim runFolder As String
+            runFolder = GitDebug_BuildRunFolderFromPromptId(pipelineNome, promptId, runStampHhdd)
+
+            Dim remoteFolder As String
+            remoteFolder = GitDebug_BuildRemoteFolder(cfg, runFolder)
+
+            If Trim$(remoteFolder) <> "" Then
+                If Not seen.Exists(remoteFolder) Then
+                    seen(remoteFolder) = True
+                    folders.Add remoteFolder
+                    Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Run folder resolvida por prompt.", "prompt_id=" & promptId & " | remote_folder=" & remoteFolder)
+                End If
+            End If
+        End If
+    Next i
+
+    Set GitDebug_BuildRemoteFoldersForPipeline = folders
+    Exit Function
+EH:
+    Set GitDebug_BuildRemoteFoldersForPipeline = Nothing
 End Function
 
 Private Function GitDebug_SanitizePathTemplate(ByVal templatePath As String) As String
@@ -482,7 +557,7 @@ Private Function GitDebug_BuildRemoteFolder(ByVal cfg As Object, ByVal ghFolder 
     End If
 End Function
 
-Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByVal remoteFolder As String, ByVal cfg As Object) As Collection
+Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal pipelineNome As String, ByVal remoteFolders As Collection, ByVal cfg As Object) As Collection
     On Error GoTo EH
 
     Dim wsDebug As Worksheet
@@ -503,34 +578,89 @@ Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal
     txtPainel = BuildPainelPipelineInfo(pipelineIndex)
 
     Dim files As New Collection
-    files.Add GitFileItem(remoteFolder & "/DEBUG.csv", csvDebug)
-    files.Add GitFileItem(remoteFolder & "/catalogo_prompts_executadas.csv", csvCatalogo)
-    files.Add GitFileItem(remoteFolder & "/Seguimento.csv", csvSeg)
-    files.Add GitFileItem(remoteFolder & "/painel_pipeline.txt", txtPainel)
+    Dim folderIdx As Long
+    For folderIdx = 1 To remoteFolders.Count
+        Dim remoteFolder As String
+        remoteFolder = CStr(remoteFolders(folderIdx))
 
-    Dim dumpFiles As Collection
-    Set dumpFiles = M05_ListRunDumpFileItems(remoteFolder & "/payload_dumps", pipelineNome)
+        files.Add GitFileItem(remoteFolder & "/DEBUG.csv", csvDebug)
+        files.Add GitFileItem(remoteFolder & "/catalogo_prompts_executadas.csv", csvCatalogo)
+        files.Add GitFileItem(remoteFolder & "/Seguimento.csv", csvSeg)
+        files.Add GitFileItem(remoteFolder & "/painel_pipeline.txt", txtPainel)
+    Next folderIdx
 
-    If Not dumpFiles Is Nothing Then
-        Dim dumpIdx As Long
-        For dumpIdx = 1 To dumpFiles.Count
-            files.Add dumpFiles(dumpIdx)
-        Next dumpIdx
+    For folderIdx = 1 To remoteFolders.Count
+        Dim dumpFiles As Collection
+        Set dumpFiles = M05_ListRunDumpFileItems(CStr(remoteFolders(folderIdx)) & "/payload_dumps", pipelineNome)
 
-        If dumpFiles.Count > 0 Then
-            Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD, "Dumps raw adicionados ao pacote Git.", "payload_dump_files=" & CStr(dumpFiles.Count))
+        If Not dumpFiles Is Nothing Then
+            Dim dumpIdx As Long
+            For dumpIdx = 1 To dumpFiles.Count
+                files.Add dumpFiles(dumpIdx)
+            Next dumpIdx
+
+            If dumpFiles.Count > 0 Then
+                Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD, "Dumps raw adicionados ao pacote Git.", "remote_folder=" & CStr(remoteFolders(folderIdx)) & " | payload_dump_files=" & CStr(dumpFiles.Count))
+            Else
+                Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD, "Sem dumps raw para adicionar ao pacote Git.", "remote_folder=" & CStr(remoteFolders(folderIdx)) & " | payload_dump_files=0")
+            End If
         Else
-            Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD, "Sem dumps raw para adicionar ao pacote Git.", "payload_dump_files=0")
+            Call GH_LogWarn(0, pipelineNome, GH_EVT_UPLOAD, "Nao foi possivel listar dumps raw da run.", "remote_folder=" & CStr(remoteFolders(folderIdx)) & " | action=Verifique eventos M05_RUN_DUMP no DEBUG.")
         End If
-    Else
-        Call GH_LogWarn(0, pipelineNome, GH_EVT_UPLOAD, "Nao foi possivel listar dumps raw da run.", "action=Verifique eventos M05_RUN_DUMP no DEBUG.")
-    End If
+    Next folderIdx
 
     Set GitDebug_BuildFilesForUpload = files
     Exit Function
 
 EH:
     Set GitDebug_BuildFilesForUpload = Nothing
+End Function
+
+Private Function GitDebug_CollectExecutedPromptIds(ByVal wsSeg As Worksheet, ByVal pipelineNome As String) As Collection
+    On Error GoTo EH
+
+    Dim ids As New Collection
+    Dim seen As Object
+    Set seen = CreateObject("Scripting.Dictionary")
+
+    Dim map As Object
+    Set map = HeaderMap(wsSeg)
+
+    Dim cPipe As Long
+    Dim cPid As Long
+    cPipe = MapGetFirst(map, Array("Pipeline", "pipeline_name", "Nome do Pipeline"))
+    cPid = MapGetFirst(map, Array("Prompt ID", "Prompt Id", "ID Prompt", "prompt_id"))
+
+    If cPipe = 0 Or cPid = 0 Then
+        Set GitDebug_CollectExecutedPromptIds = ids
+        Exit Function
+    End If
+
+    Dim lr As Long
+    lr = wsSeg.Cells(wsSeg.Rows.Count, cPipe).End(xlUp).Row
+
+    Dim targetPipelineToken As String
+    targetPipelineToken = GitDebug_NormalizeCompareToken(pipelineNome)
+
+    Dim r As Long
+    For r = 2 To lr
+        If GitDebug_NormalizeCompareToken(CStr(wsSeg.Cells(r, cPipe).Value)) = targetPipelineToken Then
+            Dim promptId As String
+            promptId = Trim$(CStr(wsSeg.Cells(r, cPid).Value))
+
+            If promptId <> "" And UCase$(promptId) <> "STOP" And GitDebug_IsLikelyPromptId(promptId) Then
+                If Not seen.Exists(promptId) Then
+                    seen(promptId) = True
+                    ids.Add promptId
+                End If
+            End If
+        End If
+    Next r
+
+    Set GitDebug_CollectExecutedPromptIds = ids
+    Exit Function
+EH:
+    Set GitDebug_CollectExecutedPromptIds = New Collection
 End Function
 
 Private Sub GitDebug_LogFilesForUpload(ByVal pipelineNome As String, ByVal remoteFolder As String, ByVal files As Collection)
