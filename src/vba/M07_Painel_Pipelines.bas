@@ -12,6 +12,10 @@ Option Explicit
 '   - Chama `GitLog_RegisterPromptExecution(...)` apos cada prompt concluida (sucesso/erro) com payload minimo normalizado.
 '   - Mapeia `Success` para `Sim/Nao/Condicionado/Outro` e `New version` para `Sim/Nao` com fallback por HTTP/erro.
 '   - Limita `summary` a 4 linhas, normaliza CRLF e remove quebras vazias redundantes antes do registo.
+' - 2026-03-11 | Codex | Registo Git LOG no topo por run com separador visual
+'   - Escreve cada prompt executada na linha 2 do HISTORICO via modulo M28_GitLog (top-down).
+'   - Mantem prompts da mesma run consecutivas e insere separador preto (6 pt) apenas na transicao entre runs.
+'   - Usa runToken da execucao para persistir metadado de run em coluna auxiliar oculta.
 ' - 2026-03-11 | Codex | Corrige compilacao em exportacao TSV do DEBUG
 '   - Alinha salto condicional com label local `NextRow` em `Painel_DebugSheetToTsv`.
 '   - Elimina referencia a `ProximaLinha` inexistente que gerava `Compile error: Label not defined`.
