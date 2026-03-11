@@ -9,6 +9,9 @@ Option Explicit
 ' - Registar eventos canonicos de progresso/erro no DEBUG sem expor segredos.
 '
 ' Atualizacoes:
+' - 2026-03-11 | Codex | Exponibiliza delete e leitura de SHA para GIT LOG
+'   - Adiciona GH_ContentsApi_GetFileSha (probe publico) para obter SHA atual por path.
+'   - Adiciona GH_ContentsApi_DeleteFile com payload DELETE e diagnostico acionavel por HTTP.
 ' - 2026-03-08 | Codex | Remove literais JSON com aspas escapadas em validacao de create
 '   - Substitui deteccoes InStr(""""chave"""") por GH_TreeCommit_JsonPick para evitar erro de compilacao por aspas truncadas.
 '   - Mantem o mesmo diagnostico (has_sha/has_committer/has_author) com parser JSON ja usado no modulo.
@@ -35,6 +38,10 @@ Option Explicit
 ' Funcoes e procedimentos:
 ' - GH_ContentsApi_UploadFiles(cfg, files, pipelineNome, successCount, failCount, retryCount, errReason) As Boolean
 '   - Executa lote serial via Contents API e devolve contadores/sucesso global.
+' - GH_ContentsApi_GetFileSha(cfg, repoPath, pipelineNome, fileSha, statusCode, diagOut) As Boolean
+'   - Faz probe de existencia por path e devolve SHA atual quando disponivel.
+' - GH_ContentsApi_DeleteFile(cfg, repoPath, fileSha, commitMessage, pipelineNome, statusCode, diagOut) As Boolean
+'   - Executa DELETE em /contents/{path} com message/sha/branch e devolve diagnostico curto.
 ' - GH_ContentsApi_ReadFileShaIfExists(cfg, repoPath, pipelineNome, existsOnRepo, fileSha, errReason) As Boolean
 '   - Consulta metadados de um path no branch e devolve sha quando o ficheiro existe.
 ' - GH_ContentsApi_BuildHttpDiag(statusCode, httpErr, responseText, apiVersion, branch, hasMessage, hasContent, hasSha, endpointShort) As String
@@ -196,6 +203,111 @@ ContinueLoop:
 
 EH:
     errReason = "Erro inesperado GH_ContentsApi_UploadFiles: " & Err.Description
+End Function
+
+Public Function GH_ContentsApi_GetFileSha( _
+    ByVal cfg As Object, _
+    ByVal repoPath As String, _
+    ByVal pipelineNome As String, _
+    ByRef fileSha As String, _
+    ByRef statusCode As Long, _
+    ByRef diagOut As String) As Boolean
+
+    Dim existsOnRepo As Boolean
+    Dim errReason As String
+
+    statusCode = 0
+    diagOut = ""
+    fileSha = ""
+
+    If GH_ContentsApi_ReadFileShaIfExists(cfg, repoPath, pipelineNome, existsOnRepo, fileSha, errReason) Then
+        If existsOnRepo Then
+            GH_ContentsApi_GetFileSha = (Trim$(fileSha) <> "")
+            If Not GH_ContentsApi_GetFileSha Then
+                statusCode = 422
+                diagOut = "http_status=422 | err=Ficheiro existe mas sem sha no payload."
+            End If
+        Else
+            statusCode = 404
+            diagOut = "http_status=404 | err=Path remoto inexistente no branch."
+        End If
+        Exit Function
+    End If
+
+    GH_ContentsApi_GetFileSha = False
+    statusCode = 500
+    diagOut = errReason
+End Function
+
+Public Function GH_ContentsApi_DeleteFile( _
+    ByVal cfg As Object, _
+    ByVal repoPath As String, _
+    ByVal fileSha As String, _
+    ByVal commitMessage As String, _
+    ByVal pipelineNome As String, _
+    ByRef statusCode As Long, _
+    ByRef diagOut As String) As Boolean
+
+    On Error GoTo EH
+
+    statusCode = 0
+    diagOut = ""
+
+    Dim normalizedPath As String
+    normalizedPath = GH_ContentsApi_NormalizeRepoPath(repoPath)
+    If normalizedPath = "" Then
+        statusCode = 422
+        diagOut = "http_status=422 | err=Path remoto vazio. | action=Preencher GH_REMOTE_PATHS com path valido."
+        Exit Function
+    End If
+
+    If Trim$(fileSha) = "" Then
+        statusCode = 422
+        diagOut = "http_status=422 | err=SHA vazio para delete. | action=Executar probe de SHA antes do DELETE."
+        Exit Function
+    End If
+
+    Dim branchName As String
+    branchName = Trim$(GH_Config_GetString(cfg, "branch", ""))
+
+    Dim msg As String
+    msg = Trim$(commitMessage)
+    If msg = "" Then msg = "Delete file via PIPELINER"
+
+    Dim reqBody As String
+    reqBody = "{""message"":""" & GH_Blob_JsonEscape(msg) & """,""sha"":""" & GH_Blob_JsonEscape(Trim$(fileSha)) & """"
+    If branchName <> "" Then reqBody = reqBody & ",""branch"":""" & GH_Blob_JsonEscape(branchName) & """"
+    reqBody = reqBody & GH_ContentsApi_BuildAuthorCommitterJson(cfg) & "}"
+
+    Dim url As String
+    url = GH_ContentsApi_BuildContentUrl(cfg, normalizedPath)
+
+    Dim responseText As String
+    Dim httpErr As String
+
+    If GH_HTTP_SendJson("DELETE", url, cfg, reqBody, statusCode, responseText, httpErr, pipelineNome) Then
+        GH_ContentsApi_DeleteFile = True
+        diagOut = "http_status=" & CStr(statusCode) & " | path=" & normalizedPath
+        Exit Function
+    End If
+
+    GH_ContentsApi_DeleteFile = False
+    diagOut = GH_ContentsApi_BuildHttpDiag(statusCode, httpErr, responseText, GH_Config_GetString(cfg, "api_version", "2022-11-28"), branchName, True, True, True, "/contents/" & normalizedPath)
+
+    Select Case statusCode
+        Case 404
+            diagOut = diagOut & " | action=Validar se o path ja foi removido ou se branch/path estao corretos."
+        Case 409
+            diagOut = diagOut & " | action=Conflito de SHA/branch; refazer probe de SHA e repetir delete."
+        Case 422
+            diagOut = diagOut & " | action=SHA invalido/antigo ou payload invalido; recalcular SHA atual e repetir."
+    End Select
+
+    Exit Function
+EH:
+    statusCode = 500
+    GH_ContentsApi_DeleteFile = False
+    diagOut = "http_status=500 | err=" & Left$(Err.Description, 180)
 End Function
 
 Private Function GH_ContentsApi_ReadFileShaIfExists( _
