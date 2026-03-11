@@ -67,6 +67,7 @@ Inclui módulos que:
 - persistem auditoria por passo;
 - resolvem encadeamento (`Next PROMPT`) até `STOP`;
 - incluem utilitários HTTP dedicados a integrações GitHub (`M23_GH_HTTP`) com timeout configurável, headers padrão (`Authorization`, `Accept`, `X-GitHub-Api-Version`, `User-Agent`) e logging estruturado de falhas via `M26_GH_Logger`.
+- inclui utilitario de layout `M28_GitLogSheet` para garantir a folha `GIT LOG` (headers canonicos, estilo de cabecalho, WrapText em `Summary`, larguras iniciais e painel congelado na linha 2) de forma idempotente.
 
 Também inclui um fluxo opcional de exportação dos logs `DEBUG`/`Seguimento` para GitHub, orquestrado por `M21_GitDebugExport` com separação por responsabilidades:
 
