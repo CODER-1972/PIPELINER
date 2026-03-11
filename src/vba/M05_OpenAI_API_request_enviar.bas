@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos uteis da resposta JSON para consumo da orquestracao.
 '
 ' Atualizacoes:
+' - 2026-03-10 | Codex | Publica dumps request/response por passo para export Git
+'   - Introduz contexto de run para escrever request_payload_raw/response_raw por chamada da API em pasta dedicada.
+'   - Regista INFO/ALERTA no DEBUG para escrita dos dumps e disponibiliza inventario para upload no M21.
 ' - 2026-03-07 | Codex | Evita identificadores reservados em variaveis locais de parsing de rede
 '   - Renomeia variaveis locais `line` para `lineText` em helpers de diagnostico de proxy/IP.
 '   - Mantem comportamento funcional sem alterar formato de output nos eventos de troubleshooting.
@@ -68,9 +71,15 @@ Option Explicit
 '
 ' Funcoes e procedimentos (inventario publico):
 ' - OpenAI_Executar (Function): rotina publica do modulo.
+' - M05_SetRunDumpFolder (Sub): inicializa pasta de dumps request/response para a run atual.
+' - M05_ClearRunDumpFolder (Sub): limpa contexto de dumps da run apos termino da pipeline.
+' - M05_ListRunDumpFileItems (Function): lista dumps da run para integracao no upload Git (M21).
 ' =============================================================================
 
 Private Const OPENAI_ENDPOINT As String = "https://api.openai.com/v1/responses"
+
+Private mRunDumpFolder As String
+Private mRunDumpCounter As Long
 Private Const HTTP_TIMEOUT_RESOLVE_MS_DEFAULT As Long = 15000
 Private Const HTTP_TIMEOUT_CONNECT_MS_DEFAULT As Long = 15000
 Private Const HTTP_TIMEOUT_SEND_MS_DEFAULT As Long = 60000
@@ -1035,6 +1044,7 @@ On Error Resume Next
 
         resultado.rawResponseJson = resposta
         resultado.httpStatus = httpStatus
+        Call M05_DumpRunArtifacts(json, resposta, dbgPromptId, httpStatus, "response_received")
 
         On Error Resume Next
         Call Debug_Registar(0, dbgPromptId, "INFO", "", "M05_HTTP_RESULT", _
@@ -1704,6 +1714,172 @@ EH:
 End Function
 
 
+
+Public Sub M05_SetRunDumpFolder(ByVal folderPath As String, ByVal pipelineNome As String)
+    On Error GoTo EH
+
+    mRunDumpFolder = Trim$(folderPath)
+    mRunDumpCounter = 0
+
+    If mRunDumpFolder = "" Then
+        Call Debug_Registar(0, pipelineNome, "ALERTA", "", "M05_RUN_DUMP", _
+            "Run dump desativado: pasta vazia.", _
+            "Defina OUTPUT Folder no PAINEL para ativar dumps request/response por passo.")
+        Exit Sub
+    End If
+
+    Call M05_EnsureFolderPath(mRunDumpFolder)
+
+    Call Debug_Registar(0, pipelineNome, "INFO", "", "M05_RUN_DUMP", _
+        "Run dump ativo em " & mRunDumpFolder, _
+        "Os ficheiros request/response desta run serao elegiveis para upload Git quando Git LOG estiver ON.")
+    Exit Sub
+EH:
+    mRunDumpFolder = ""
+    mRunDumpCounter = 0
+    Call Debug_Registar(0, pipelineNome, "ALERTA", "", "M05_RUN_DUMP", _
+        "Falha a inicializar pasta de dumps: " & Err.Description, _
+        "Verifique permissoes da pasta OUTPUT/DEBUG_PAYLOAD_DUMPS.")
+End Sub
+
+Public Sub M05_ClearRunDumpFolder()
+    mRunDumpFolder = ""
+    mRunDumpCounter = 0
+End Sub
+
+Public Function M05_ListRunDumpFileItems(ByVal remoteFolder As String, ByVal pipelineNome As String) As Collection
+    On Error GoTo EH
+
+    Dim files As New Collection
+
+    If Trim$(mRunDumpFolder) = "" Then
+        Set M05_ListRunDumpFileItems = files
+        Exit Function
+    End If
+
+    Call M05_ListRunDumpFileItemsByPattern(files, remoteFolder, "*.json")
+    Call M05_ListRunDumpFileItemsByPattern(files, remoteFolder, "*.txt")
+
+    If files.Count > 0 Then
+        Call Debug_Registar(0, pipelineNome, "INFO", "", "M05_RUN_DUMP", _
+            "Run dump pronto para upload Git.", _
+            "folder=" & mRunDumpFolder & " | files=" & CStr(files.Count))
+    End If
+
+    Set M05_ListRunDumpFileItems = files
+    Exit Function
+EH:
+    Call Debug_Registar(0, pipelineNome, "ALERTA", "", "M05_RUN_DUMP", _
+        "Falha ao ler dumps da run para upload: " & Err.Description, _
+        "folder=" & mRunDumpFolder)
+    Set M05_ListRunDumpFileItems = New Collection
+End Function
+
+Private Sub M05_ListRunDumpFileItemsByPattern(ByRef files As Collection, ByVal remoteFolder As String, ByVal filePattern As String)
+    Dim f As String
+    f = Dir(mRunDumpFolder & "\" & filePattern)
+    Do While f <> ""
+        Dim ff As Integer
+        Dim txt As String
+        ff = FreeFile
+        Open mRunDumpFolder & "\" & f For Input As #ff
+        txt = Input$(LOF(ff), #ff)
+        Close #ff
+
+        Dim d As Object
+        Set d = CreateObject("Scripting.Dictionary")
+        d("path") = remoteFolder & "/" & f
+        d("content") = txt
+        files.Add d
+
+        f = Dir()
+    Loop
+End Sub
+
+Private Sub M05_DumpRunArtifacts(ByVal requestPayload As String, ByVal responseJson As String, ByVal dbgPromptId As String, ByVal httpStatus As Long, ByVal stageName As String)
+    On Error GoTo EH
+
+    If Trim$(mRunDumpFolder) = "" Then Exit Sub
+
+    Call M05_EnsureFolderPath(mRunDumpFolder)
+
+    mRunDumpCounter = mRunDumpCounter + 1
+
+    Dim stamp As String
+    stamp = Format$(Now, "yyyymmdd_hhnnss")
+
+    Dim prefix As String
+    prefix = "step" & Format$(mRunDumpCounter, "000") & "_" & stamp & "_" & M05_SafeToken(dbgPromptId)
+
+    Dim requestPath As String
+    requestPath = mRunDumpFolder & "\" & prefix & "_request_payload_raw.json"
+
+    Dim responsePath As String
+    responsePath = mRunDumpFolder & "\" & prefix & "_response_raw.json"
+
+    Dim metaPath As String
+    metaPath = mRunDumpFolder & "\" & prefix & "_meta.txt"
+
+    Call M05_WriteTextFile(requestPath, requestPayload)
+    Call M05_WriteTextFile(responsePath, responseJson)
+    Call M05_WriteTextFile(metaPath, "prompt_id=" & dbgPromptId & vbCrLf & "http_status=" & CStr(httpStatus) & vbCrLf & "stage=" & stageName)
+
+    Call Debug_Registar(0, dbgPromptId, "INFO", "", "M05_RUN_DUMP", _
+        "Dumps request/response guardados para a run.", _
+        "step=" & CStr(mRunDumpCounter) & " | status=" & CStr(httpStatus) & " | folder=" & mRunDumpFolder)
+    Exit Sub
+EH:
+    Call Debug_Registar(0, dbgPromptId, "ALERTA", "", "M05_RUN_DUMP", _
+        "Falha ao gravar dumps request/response: " & Err.Description, _
+        "folder=" & mRunDumpFolder & " | stage=" & stageName)
+End Sub
+
+Private Sub M05_EnsureFolderPath(ByVal folderPath As String)
+    Dim parts() As String
+    parts = Split(folderPath, "\")
+
+    Dim i As Long
+    Dim currentPath As String
+
+    If InStr(folderPath, ":") > 0 Then
+        currentPath = parts(0) & "\"
+        i = 1
+    Else
+        currentPath = ""
+        i = 0
+    End If
+
+    For i = i To UBound(parts)
+        If Trim$(parts(i)) <> "" Then
+            If Right$(currentPath, 1) <> "\" Then currentPath = currentPath & "\"
+            currentPath = currentPath & parts(i)
+            If Dir(currentPath, vbDirectory) = "" Then MkDir currentPath
+        End If
+    Next i
+End Sub
+
+Private Sub M05_WriteTextFile(ByVal filePath As String, ByVal content As String)
+    Dim ff As Integer
+    ff = FreeFile
+    Open filePath For Output As #ff
+    Print #ff, content
+    Close #ff
+End Sub
+
+Private Function M05_SafeToken(ByVal s As String) As String
+    Dim i As Long
+    Dim ch As String
+    For i = 1 To Len(s)
+        ch = Mid$(s, i, 1)
+        If ch Like "[A-Za-z0-9_-]" Then
+            M05_SafeToken = M05_SafeToken & ch
+        ElseIf ch = "/" Then
+            M05_SafeToken = M05_SafeToken & "_"
+        End If
+        If Len(M05_SafeToken) >= 32 Then Exit For
+    Next i
+    If M05_SafeToken = "" Then M05_SafeToken = "na"
+End Function
 
 Private Sub M05_DumpPayloadForDebug(ByVal payloadJson As String, ByVal dbgPromptId As String)
     On Error GoTo Falha

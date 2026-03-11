@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-10 | Codex | Inclui dumps raw request/response no Git LOG da run
+'   - Agrega ficheiros JSON/TXT produzidos pelo M05 em subpasta payload_dumps da pasta remota da run.
+'   - Regista INFO/ALERTA no DEBUG quando adiciona (ou falha a adicionar) dumps ao pacote de upload.
 ' - 2026-03-09 | Codex | Remove prefixo do indice no PROMPT_NAME do run folder Git
 '   - Altera derivacao para <ordem>_<nomeCurto> (ex.: 01_WF_PROMPT_AUDIT), sem prefixo do slot da pipeline.
 '   - Mantem fallback por nome da pipeline apenas para resolver Prompt ID, sem impactar o nome final da prompt.
@@ -85,6 +88,8 @@ Option Explicit
 '   - Adiciona rotina para criar/atualizar chaves GH_* com default e explicacoes.
 '
 ' Funcoes e procedimentos:
+' - GitDebug_BuildFilesForUpload(pipelineIndex As Long, pipelineNome As String, remoteFolder As String, cfg As Object) As Collection (Private Function)
+'   - Prepara artefactos CSV/TXT e agrega dumps raw request/response para upload Git quando disponiveis.
 ' - PipelineGitDebug_ExportIfEnabled(pipelineIndex As Long, pipelineNome As String, painelAutoSave As String)
 '   - Entry point chamado no fim da pipeline para export opcional de debug para GitHub.
 ' - GitDebug_Config_InstalarParametros(Optional sobrescreverValores As Boolean = False)
@@ -502,6 +507,24 @@ Private Function GitDebug_BuildFilesForUpload(ByVal pipelineIndex As Long, ByVal
     files.Add GitFileItem(remoteFolder & "/catalogo_prompts_executadas.csv", csvCatalogo)
     files.Add GitFileItem(remoteFolder & "/Seguimento.csv", csvSeg)
     files.Add GitFileItem(remoteFolder & "/painel_pipeline.txt", txtPainel)
+
+    Dim dumpFiles As Collection
+    Set dumpFiles = M05_ListRunDumpFileItems(remoteFolder & "/payload_dumps", pipelineNome)
+
+    If Not dumpFiles Is Nothing Then
+        Dim dumpIdx As Long
+        For dumpIdx = 1 To dumpFiles.Count
+            files.Add dumpFiles(dumpIdx)
+        Next dumpIdx
+
+        If dumpFiles.Count > 0 Then
+            Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD, "Dumps raw adicionados ao pacote Git.", "payload_dump_files=" & CStr(dumpFiles.Count))
+        Else
+            Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD, "Sem dumps raw para adicionar ao pacote Git.", "payload_dump_files=0")
+        End If
+    Else
+        Call GH_LogWarn(0, pipelineNome, GH_EVT_UPLOAD, "Nao foi possivel listar dumps raw da run.", "action=Verifique eventos M05_RUN_DUMP no DEBUG.")
+    End If
 
     Set GitDebug_BuildFilesForUpload = files
     Exit Function

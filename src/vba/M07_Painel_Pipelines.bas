@@ -731,6 +731,13 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         painelAutoSave = "debug"
     End If
 
+    Dim runDumpFolder As String
+    runDumpFolder = outputFolderBase
+    If Trim$(runDumpFolder) = "" Then runDumpFolder = Environ$("TEMP")
+    If Right$(runDumpFolder, 1) = "\" Then runDumpFolder = Left$(runDumpFolder, Len(runDumpFolder) - 1)
+    runDumpFolder = runDumpFolder & "\DEBUG_PAYLOAD_DUMPS\" & Format$(Now, "yyyymmdd_hhnnss") & "_" & Replace$(Replace$(pipelineNome, " ", "_"), "/", "_")
+    Call M05_SetRunDumpFolder(runDumpFolder, pipelineNome)
+
     Dim maxSteps As Long, maxRep As Long
     Call Painel_LerLimitesPipeline(wsPainel, pipelineIndex, maxSteps, maxRep)
 
@@ -1349,6 +1356,8 @@ SaidaLimpa:
     If runExecutouPassos Then
         Call PipelineGitDebug_ExportIfEnabled(pipelineIndex, pipelineNome, painelAutoSave)
     End If
+
+    Call M05_ClearRunDumpFolder
 
     Application.StatusBar = False
     Application.DisplayStatusBar = oldDisplayStatusBar
