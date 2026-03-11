@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-11 | Codex | Normaliza filtro de pipeline no Seguimento para export por prompt
+'   - Evita queda indevida para fallback da primeira prompt quando `pipeline_name` no Seguimento tem espacos invisiveis/variacoes.
+'   - Mantem deteccao de Prompt IDs por ordem de execucao e melhora rastreabilidade em runs multi-step.
 ' - 2026-03-11 | Codex | Export Git com pasta propria por prompt executada
 '   - Passa a gerar/upload para cada Prompt ID observado no Seguimento da pipeline (mantendo run stamp comum).
 '   - Mantem fallback para o primeiro Prompt ID do PAINEL quando o Seguimento nao tem linhas elegiveis.
@@ -636,9 +639,12 @@ Private Function GitDebug_CollectExecutedPromptIds(ByVal wsSeg As Worksheet, ByV
     Dim lr As Long
     lr = wsSeg.Cells(wsSeg.Rows.Count, cPipe).End(xlUp).Row
 
+    Dim targetPipelineToken As String
+    targetPipelineToken = GitDebug_NormalizeCompareToken(pipelineNome)
+
     Dim r As Long
     For r = 2 To lr
-        If StrComp(Trim$(CStr(wsSeg.Cells(r, cPipe).Value)), Trim$(pipelineNome), vbTextCompare) = 0 Then
+        If GitDebug_NormalizeCompareToken(CStr(wsSeg.Cells(r, cPipe).Value)) = targetPipelineToken Then
             Dim promptId As String
             promptId = Trim$(CStr(wsSeg.Cells(r, cPid).Value))
 
