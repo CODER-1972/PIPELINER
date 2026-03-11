@@ -8,6 +8,10 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-11 | Codex | Registo por prompt na folha GIT LOG apos conclusao do passo
+'   - Chama `GitLog_RegisterPromptExecution(...)` apos cada prompt concluida (sucesso/erro) com payload minimo normalizado.
+'   - Mapeia `Success` para `Sim/Nao/Condicionado/Outro` e `New version` para `Sim/Nao` com fallback por HTTP/erro.
+'   - Limita `summary` a 4 linhas, normaliza CRLF e remove quebras vazias redundantes antes do registo.
 ' - 2026-03-11 | Codex | Registo Git LOG no topo por run com separador visual
 '   - Escreve cada prompt executada na linha 2 do HISTORICO via modulo M28_GitLog (top-down).
 '   - Mantem prompts da mesma run consecutivas e insere separador preto (6 pt) apenas na transicao entre runs.
@@ -139,6 +143,7 @@ Option Explicit
 ' - Painel_LogStepStage (Private Sub): breadcrumb de fase no DEBUG para troubleshooting pre-API.
 ' - Painel_EspelharDebugNoCatalogo (Private Sub): grava snapshot TSV do DEBUG no bloco da prompt executada.
 ' - Painel_RegistarFalhaNoSeguimento (Private Sub): fallback de auditoria no Seguimento para erros inesperados.
+' - Painel_GitLog_RegisterStepExecution (Private Sub): envia resumo normalizado da prompt concluida para a folha GIT LOG.
 ' =============================================================================
 
 ' ============================================================
@@ -1201,11 +1206,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, resultado.httpStatus, resultado.responseId, _
             textoSeguimento, pipelineNome, "", filesUsedResumo, filesOpsResumo, fileIds)
-
-        If Painel_GitLog_IsEnabled(pipelineIndex) Then
-            Call GitLog_InsertEntryTop(runToken, pipelineNome, passo, prompt.Id, resultado.httpStatus, resultado.responseId, textoSeguimento, "")
-        End If
-
+        Call Painel_GitLog_RegisterStepExecution(pipelineNome, prompt.Id, resultado, textoSeguimento, runToken)
         Call Painel_LogStepStage(passo, prompt.Id, "step_completed", "http=" & CStr(resultado.httpStatus) & " | response_id=" & Left$(Trim$(resultado.responseId), 24))
 
         ' ================================
@@ -1387,6 +1388,158 @@ TrataErro:
 
     Resume SaidaLimpa
 End Sub
+
+
+Private Sub Painel_GitLog_RegisterStepExecution(ByVal pipelineNome As String, ByVal promptId As String, ByRef resultado As ApiResultado, ByVal textoSeguimento As String, ByVal runId As String)
+    On Error GoTo Falha
+
+    Dim versao As String
+    versao = Painel_ExtrairVersaoDoPromptId(promptId)
+
+    Dim successRaw As String
+    successRaw = Painel_GitLog_ExtractField(resultado.outputText, "Success")
+    If Trim$(successRaw) = "" Then successRaw = Painel_GitLog_ExtractField(resultado.outputText, "Sucesso")
+
+    Dim successNorm As String
+    successNorm = Painel_GitLog_NormalizeSuccess(successRaw)
+    If Trim$(successNorm) = "Outro" Then
+        If Trim$(resultado.Erro) <> "" Or resultado.httpStatus < 200 Or resultado.httpStatus >= 300 Then
+            successNorm = "Não"
+        End If
+    End If
+
+    Dim newVersionRaw As String
+    newVersionRaw = Painel_GitLog_ExtractField(resultado.outputText, "New version")
+    If Trim$(newVersionRaw) = "" Then newVersionRaw = Painel_GitLog_ExtractField(resultado.outputText, "Nova versao")
+
+    Dim newVersionNorm As String
+    newVersionNorm = Painel_GitLog_NormalizeYesNo(newVersionRaw)
+
+    Dim analysisLink As String
+    analysisLink = Painel_GitLog_ExtractField(resultado.outputText, "Analysis Link")
+    If Trim$(analysisLink) = "" Then analysisLink = Painel_GitLog_ExtractField(resultado.outputText, "Analysis")
+
+    Dim newPromptLink As String
+    newPromptLink = Painel_GitLog_ExtractField(resultado.outputText, "New Prompt Link")
+    If Trim$(newPromptLink) = "" Then newPromptLink = Painel_GitLog_ExtractField(resultado.outputText, "Prompt Link")
+
+    Dim summaryRaw As String
+    summaryRaw = Painel_GitLog_ExtractField(resultado.outputText, "Summary")
+    If Trim$(summaryRaw) = "" Then summaryRaw = textoSeguimento
+
+    Dim summaryFinal As String
+    summaryFinal = Painel_GitLog_NormalizeSummary(summaryRaw, 4)
+
+    Dim status As String
+    status = "Success=" & successNorm & " | New version=" & newVersionNorm
+
+    Application.Run "GitLog_RegisterPromptExecution", pipelineNome, promptId, versao, status, analysisLink, newPromptLink, summaryFinal, runId
+    Exit Sub
+
+Falha:
+    Call Debug_Registar(0, promptId, "ALERTA", "", "GIT_LOG", _
+        "Nao foi possivel chamar GitLog_RegisterPromptExecution: " & Err.Description, _
+        "Sugestao: confirme se a macro GitLog_RegisterPromptExecution existe e aceita 8 argumentos.")
+End Sub
+
+Private Function Painel_ExtrairVersaoDoPromptId(ByVal promptId As String) As String
+    Dim arr() As String
+    arr = Split(Trim$(promptId), "/")
+    If UBound(arr) >= 3 Then
+        Painel_ExtrairVersaoDoPromptId = Trim$(arr(UBound(arr)))
+    Else
+        Painel_ExtrairVersaoDoPromptId = ""
+    End If
+End Function
+
+Private Function Painel_GitLog_NormalizeSuccess(ByVal rawValue As String) As String
+    Dim s As String
+    s = UCase$(Trim$(rawValue))
+
+    Select Case s
+        Case "SIM", "YES", "TRUE", "Y", "OK", "SUCESSO"
+            Painel_GitLog_NormalizeSuccess = "Sim"
+        Case "NAO", "NÃO", "NO", "FALSE", "N", "FAIL", "FALHA"
+            Painel_GitLog_NormalizeSuccess = "Não"
+        Case "CONDICIONADO", "CONDITIONAL", "PARTIAL", "PARCIAL", "DEPENDE"
+            Painel_GitLog_NormalizeSuccess = "Condicionado"
+        Case Else
+            Painel_GitLog_NormalizeSuccess = "Outro"
+    End Select
+End Function
+
+Private Function Painel_GitLog_NormalizeYesNo(ByVal rawValue As String) As String
+    Dim s As String
+    s = UCase$(Trim$(rawValue))
+
+    Select Case s
+        Case "SIM", "YES", "TRUE", "Y", "1"
+            Painel_GitLog_NormalizeYesNo = "Sim"
+        Case Else
+            Painel_GitLog_NormalizeYesNo = "Não"
+    End Select
+End Function
+
+Private Function Painel_GitLog_ExtractField(ByVal outputText As String, ByVal label As String) As String
+    Dim txt As String
+    txt = Replace$(Replace$(CStr(outputText), vbCrLf, vbLf), vbCr, vbLf)
+
+    Dim linhas() As String
+    linhas = Split(txt, vbLf)
+
+    Dim i As Long
+    For i = LBound(linhas) To UBound(linhas)
+        Dim ln As String
+        ln = Trim$(linhas(i))
+
+        If UCase$(Left$(ln, Len(label) + 1)) = UCase$(label & ":") Then
+            Painel_GitLog_ExtractField = Trim$(Mid$(ln, Len(label) + 2))
+            Exit Function
+        End If
+    Next i
+End Function
+
+Private Function Painel_GitLog_NormalizeSummary(ByVal summaryText As String, ByVal maxLines As Long) As String
+    Dim txt As String
+    txt = Replace$(Replace$(CStr(summaryText), vbCrLf, vbLf), vbCr, vbLf)
+
+    Dim linhas() As String
+    linhas = Split(txt, vbLf)
+
+    Dim resultado As String
+    Dim i As Long
+    Dim n As Long
+    Dim lastBlank As Boolean
+    resultado = ""
+    n = 0
+    lastBlank = True
+
+    For i = LBound(linhas) To UBound(linhas)
+        Dim ln As String
+        ln = Trim$(linhas(i))
+
+        If ln = "" Then
+            If lastBlank Then GoTo NextLine
+            lastBlank = True
+        Else
+            lastBlank = False
+        End If
+
+        n = n + 1
+        If n > maxLines Then Exit For
+
+        If resultado = "" Then
+            resultado = ln
+        Else
+            resultado = resultado & vbLf & ln
+        End If
+
+NextLine:
+    Next i
+
+    Painel_GitLog_NormalizeSummary = resultado
+End Function
+
 
 ' ============================================================
 ' 4.x) Ajudas pedidas: foco/DEBUG/status bar/checks de FILES
