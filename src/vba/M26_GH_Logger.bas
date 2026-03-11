@@ -9,6 +9,8 @@ Option Explicit
 ' - Garantir mensagens curtas, sem segredos e com sugestoes acionaveis.
 '
 ' Atualizacoes:
+' - 2026-03-11 | Codex | Adiciona eventos GH_* para delete no GIT LOG
+'   - Inclui codigos para sucesso, retry, not-found e politica de manter/remover linha local.
 ' - 2026-03-08 | Codex | Adiciona alertas de diagnostico para conteudo/binario em contents_api
 '   - Inclui codigos para risco de codificacao textual em payload e limite de local_size_bytes para binarios.
 ' - 2026-03-08 | Codex | Adiciona eventos de validacao pre-PUT no create
@@ -81,6 +83,12 @@ Public Const GH_EVT_CONTENTS_CREATE_JSON_INVALID As String = "GH_CONTENTS_CREATE
 Public Const GH_EVT_CONTENTS_ENCODING_RISK As String = "GH_CONTENTS_ENCODING_RISK"
 Public Const GH_EVT_CONTENTS_LOCAL_SIZE_LIMIT As String = "GH_CONTENTS_LOCAL_SIZE_LIMIT"
 Public Const GH_EVT_FILE_FAILED As String = "GH_FILE_FAILED"
+Public Const GH_EVT_GITLOG_DELETE_OK As String = "GH_GITLOG_DELETE_OK"
+Public Const GH_EVT_GITLOG_DELETE_FAILED As String = "GH_GITLOG_DELETE_FAILED"
+Public Const GH_EVT_GITLOG_DELETE_RETRY As String = "GH_GITLOG_DELETE_RETRY"
+Public Const GH_EVT_GITLOG_DELETE_NOT_FOUND As String = "GH_GITLOG_DELETE_NOT_FOUND"
+Public Const GH_EVT_GITLOG_DELETE_ROW_REMOVED As String = "GH_GITLOG_DELETE_ROW_REMOVED"
+Public Const GH_EVT_GITLOG_DELETE_ROW_KEPT As String = "GH_GITLOG_DELETE_ROW_KEPT"
 
 Public Sub GH_LogInfo(ByVal stepNo As Long, ByVal pipelineNome As String, ByVal eventCode As String, ByVal message As String, Optional ByVal suggestion As String = "")
     Call Debug_Registar(stepNo, pipelineNome, "INFO", "", eventCode, message, suggestion)

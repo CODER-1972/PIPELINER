@@ -156,6 +156,13 @@ No `contents_api`, o runtime também regista fases por ficheiro (`GH_CONTENTS_CR
 Além disso, `GH_FILE_BEGIN` passa a incluir `file_kind=text|binary` e `local_size_bytes=...`, e o payload pode incluir `author/committer` quando `GH_COMMIT_AUTHOR_NAME` + `GH_COMMIT_AUTHOR_EMAIL` estiverem preenchidos.
 Se `file_kind=binary`, o DEBUG emite alertas (`GH_CONTENTS_ENCODING_RISK` e `GH_CONTENTS_LOCAL_SIZE_LIMIT`) para sinalizar que o fluxo atual usa `GH_Blob_Base64FromText(contentText)` e que `local_size_bytes` é estimativa de string (`LenB`), não tamanho real em disco para binários externos.
 
+No `contents_api`, o runtime tambem suporta delete por linha na folha `GIT LOG` (modulo `M28_GitLogActions`):
+- a coluna `Eliminar` cria botoes por linha (`GitLog_DeleteEntry`);
+- os paths remotos sao guardados em coluna tecnica oculta (`GH_REMOTE_PATHS`, com `GH_REMOTE_SHAS` opcional);
+- o delete usa `DELETE /repos/{owner}/{repo}/contents/{path}` com `sha` e commit message;
+- erros `404/409/422` geram mensagens acionaveis no DEBUG (`GH_GITLOG_DELETE_*`) e retries para `409/422`;
+- a remocao local da linha segue `GH_GITLOG_DELETE_POLICY` (`after_remote_success` por defeito).
+
 ### Quadro resumido `GH_*` (defaults e valores permitidos)
 
 | Chave (`Config`) | Default | Valores permitidos / intervalo |
@@ -177,6 +184,7 @@ Se `file_kind=binary`, o DEBUG emite alertas (`GH_CONTENTS_ENCODING_RISK` e `GH_
 | `GH_MAX_FILE_MB` | `50` | `1..200` |
 | `GH_MAX_RETRIES` | `3` | `0..10` |
 | `GH_CONTENTS_BATCH_POLICY` | `fail_fast` | `fail_fast` ou `best_effort` |
+| `GH_GITLOG_DELETE_POLICY` | `after_remote_success` | `after_remote_success` / `always` / `keep_local` |
 
 Fallback de token (ordem exata):
 
