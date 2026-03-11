@@ -1,0 +1,73 @@
+Síntese curta
+- A prompt executou e entregou o output principal, mas deve ser revista para fechar lacunas de handoff determinístico e governança de contrato técnico.
+
+Alterações propostas
+- ID: ALT-01
+  Prioridade: P1
+  Camada: TEXTO DA PROMPT
+  Localização exacta: secção “OUTPUT PARA CONTEXTKV (OBRIGATÓRIO)”, no final.
+  Acção: [adicionar]
+  Texto original: (não existe cláusula NEXT_PROMPT_ID)
+  Texto proposto: "NEXT_PROMPT_ID: PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2"
+  Problema que resolve: next implícito e rastreabilidade incompleta.
+  Impacto: alto no handoff.
+  Benefício esperado: roteamento determinístico e auditável.
+  Risco de regressão: baixo.
+  Esforço: baixo.
+
+- ID: ALT-02
+  Prioridade: P1
+  Camada: ORQUESTRADOR / PIPELINE
+  Localização exacta: regra de monitorização/contrato do passo 2.
+  Acção: [adicionar]
+  Texto original: Contrato técnico ausente (SEM_CONTRATO).
+  Texto proposto: activar "diagnostic_contract: ci_csv_v1" para prompts que referem CSV/LOAD_CSV.
+  Problema que resolve: alerta C0_SUGGEST e menor governança.
+  Impacto: alto na robustez.
+  Benefício esperado: deteção precoce de falhas de ingestão CSV.
+  Risco de regressão: baixo/médio.
+  Esforço: baixo.
+
+- ID: ALT-03
+  Prioridade: P2
+  Camada: TEXTO DA PROMPT
+  Localização exacta: secção de outputs opcionais/captura.
+  Acção: [substituir]
+  Texto original: uso genérico de nomes capturados sem namespace rígido.
+  Texto proposto: "Não reutilizar RESULTS_JSON como chave de saída neste passo; usar apenas TSV_* e MEMORY_SHORT."
+  Problema que resolve: confusão semântica observada na captura.
+  Impacto: médio.
+  Benefício esperado: handoff mais limpo.
+  Risco de regressão: baixo.
+  Esforço: baixo.
+
+- ID: ALT-04
+  Prioridade: P2
+  Camada: ORQUESTRADOR / PIPELINE
+  Localização exacta: persistência de auditoria Seguimento.csv.
+  Acção: [substituir]
+  Texto original: campo “Next prompt decidido” pode ficar vazio.
+  Texto proposto: preencher sempre com next efetivo (catálogo/PAINEL/AUTO) + origem da decisão.
+  Problema que resolve: quebra de auditabilidade.
+  Impacto: médio.
+  Benefício esperado: troubleshooting mais rápido.
+  Risco de regressão: baixo.
+  Esforço: médio.
+
+Versão integral da prompt corrigida
+- NÃO seguro reconstruir integralmente sem risco de drift textual face ao catálogo real em Excel.
+- Motivo: a versão enviada no request inclui conteúdo injetado dinâmico e contexto composto; reproduzir “integral” aqui pode criar divergência operacional.
+
+Plano em 2 passos
+- Passo A (o que falta obter): export textual canónico da célula “Texto prompt” no catálogo de produção + confirmação da política de next/handoff no orquestrador.
+- Passo B (aplicação imediata): aplicar as alterações localizadas ALT-01..ALT-04 diretamente no catálogo e no módulo de logging/contrato.
+
+Verificação interna da revisão/proposta
+- Contradições internas: PASS
+- Duplicações: PASS
+- Coerência de IDs/versões: PASS
+- Placeholders: PASS
+- next/default/allowed: PASS (após ALT-01)
+- formato de output: PASS
+- exequibilidade operacional: PASS
+- alinhamento com problemas detectados: PASS
