@@ -8,6 +8,13 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-12 | Codex | Diagnostico acionavel para escrita na folha Git LOG
+'   - Regista preflight do alvo de escrita (folha/cabecalhos/meta) quando Git LOG esta ON.
+'   - Regista ERRO no DEBUG quando GitLog_InsertEntryTop falha, incluindo detalhe de causa.
+' - 2026-03-11 | Codex | Registo Git LOG no topo por run com separador visual
+'   - Escreve cada prompt executada na linha 2 do HISTORICO via modulo M28_GitLog (top-down).
+'   - Mantem prompts da mesma run consecutivas e insere separador preto (6 pt) apenas na transicao entre runs.
+'   - Usa runToken da execucao para persistir metadado de run em coluna auxiliar oculta.
 ' - 2026-03-11 | Codex | Corrige compilacao em exportacao TSV do DEBUG
 '   - Alinha salto condicional com label local `NextRow` em `Painel_DebugSheetToTsv`.
 '   - Elimina referencia a `ProximaLinha` inexistente que gerava `Compile error: Label not defined`.
@@ -810,6 +817,19 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     Dim runToken As String
     runToken = "RUN|" & pipelineNome & "|" & Format$(Now, "yyyymmdd_hhnnss") & "|P" & Format$(pipelineIndex, "00")
 
+    If Painel_GitLog_IsEnabled(pipelineIndex) Then
+        Dim gitLogDiag As String
+        If GitLog_DiagnoseTarget(gitLogDiag) Then
+            Call Debug_Registar(0, startId, "INFO", "", "GIT_LOG_BIND", _
+                "Preflight Git LOG OK. " & gitLogDiag, _
+                "OK")
+        Else
+            Call Debug_Registar(0, startId, "ERRO", "", "GIT_LOG_BIND", _
+                "Preflight Git LOG falhou. " & gitLogDiag, _
+                "Criar/renomear folha para GIT LOG (ou HISTORICO) e validar cabecalhos na linha 1.")
+        End If
+    End If
+
     ' Definir token de run (PAINEL) para separador visual na folha FILES_MANAGEMENT (M09)
     Call Files_SetRunToken(runToken)
 
@@ -1197,6 +1217,18 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         Call Seguimento_Registar(passo, prompt, modeloUsado, auditJson, resultado.httpStatus, resultado.responseId, _
             textoSeguimento, pipelineNome, "", filesUsedResumo, filesOpsResumo, fileIds)
+
+        If Painel_GitLog_IsEnabled(pipelineIndex) Then
+            Dim gitLogOk As Boolean
+            Dim gitLogReason As String
+            Call GitLog_InsertEntryTop(runToken, pipelineNome, passo, prompt.Id, resultado.httpStatus, resultado.responseId, textoSeguimento, "", gitLogOk, gitLogReason)
+            If Not gitLogOk Then
+                Call Debug_Registar(passo, prompt.Id, "ERRO", "", "GIT_LOG_WRITE", _
+                    "Falha ao escrever na folha Git LOG. " & gitLogReason, _
+                    "Validar nome da folha (GIT LOG/GIT_LOG/HISTORICO), protecao da folha e cabecalhos na linha 1.")
+            End If
+        End If
+
         Call Painel_LogStepStage(passo, prompt.Id, "step_completed", "http=" & CStr(resultado.httpStatus) & " | response_id=" & Left$(Trim$(resultado.responseId), 24))
 
         ' ================================

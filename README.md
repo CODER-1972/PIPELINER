@@ -90,6 +90,7 @@ Ponto de operação principal:
 - limites (`Max Steps`, `Max Repetitions`);
 - botões de execução.
 - botão `Git LOG` por pipeline (abaixo de `INICIAR`) com estado `Git LOG ON/OFF` independente, usado como gatilho rápido do auto-upload Git de logs no run; quando `ON`, o botão destaca visualmente com azul claro acinzentado e texto a negrito (em `OFF`, volta ao estilo padrão).
+- quando `Git LOG` está `ON`, a escrita local por passo usa inserção no topo (linha 2) e resolve a folha por nomes candidatos (`GIT LOG`, `GIT_LOG`, `HISTORICO`, `HISTÓRICO`), com diagnósticos no DEBUG (`GIT_LOG_BIND` no preflight e `GIT_LOG_WRITE` em falhas de escrita).
 
 Comportamentos esperados:
 
