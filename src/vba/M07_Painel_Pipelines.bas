@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-12 | Codex | Regista eventos de inicio/fim no GIT LOG durante o run
+'   - Quando Git LOG esta ON, escreve eventos RUN_START e RUN_FINISH na folha GIT LOG.
+'   - Mantem log auxiliar nao bloqueante para preservar execucao da pipeline em caso de falha de escrita.
 ' - 2026-03-12 | Codex | Corrige compile error de variaveis FILES nao declaradas no loop principal
 '   - Declara `promptTemFiles`, `promptTemRequiredFiles` e `linhaFilesLista` antes das chamadas de preparacao por passo.
 '   - Elimina `Compile error: Variable not defined` em `Painel_DeterminarFlagsFiles` com `Option Explicit` ativo.
@@ -752,7 +755,10 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     painelAutoSave = Trim$(CStr(wsPainel.Cells(4, colIniciar).value))
     If painelAutoSave = "" Then painelAutoSave = "Sim"
 
-    If Painel_GitLog_IsEnabled(pipelineIndex) Then
+    Dim gitLogEnabled As Boolean
+    gitLogEnabled = Painel_GitLog_IsEnabled(pipelineIndex)
+
+    If gitLogEnabled Then
         painelAutoSave = "debug"
 
         Dim wsGitLog As Worksheet
@@ -842,6 +848,12 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
     Dim runToken As String
     runToken = "RUN|" & pipelineNome & "|" & Format$(Now, "yyyymmdd_hhnnss") & "|P" & Format$(pipelineIndex, "00")
+
+    If gitLogEnabled Then
+        Call GitLog_AppendEvent(runToken, 0, pipelineNome, startId, "INFO", "RUN_START", "PAINEL", _
+            "Execucao da pipeline iniciada com Git LOG ON.", _
+            "pipeline_index=" & CStr(pipelineIndex) & " | max_steps=" & CStr(maxSteps) & " | max_rep=" & CStr(maxRep))
+    End If
 
     ' Definir token de run (PAINEL) para separador visual na folha FILES_MANAGEMENT (M09)
     Call Files_SetRunToken(runToken)
@@ -1406,6 +1418,12 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
 
 SaidaLimpa:
+    If gitLogEnabled Then
+        Call GitLog_AppendEvent(runToken, passoCtx, pipelineNome, promptCtx, "INFO", "RUN_FINISH", "PAINEL", _
+            "Execucao da pipeline concluida.", _
+            "executou_passos=" & IIf(runExecutouPassos, "SIM", "NAO") & " | ultimo_stage=" & mStepLastStage)
+    End If
+
     If runExecutouPassos Then
         Call PipelineGitDebug_ExportIfEnabled(pipelineIndex, pipelineNome, painelAutoSave)
     End If

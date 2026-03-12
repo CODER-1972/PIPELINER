@@ -93,6 +93,7 @@ Ponto de operação principal:
 - botões de execução.
 - botão `Git LOG` por pipeline (abaixo de `INICIAR`) com estado `Git LOG ON/OFF` independente, usado como gatilho rápido do auto-upload Git de logs no run; quando `ON`, o botão destaca visualmente com azul claro acinzentado e texto a negrito (em `OFF`, volta ao estilo padrão).
 - quando `Git LOG` está em `ON` e o utilizador clica `INICIAR`, o arranque da pipeline chama `GitLog_EnsureSheet` (módulo `M28_GitLogSheet`) para garantir/criar a folha `GIT LOG` antes da execução.
+- com `Git LOG` em `ON`, a execução passa a registar linhas na própria folha (`RUN_START`, `RUN_FINISH` e estado de upload `GH_UPLOAD_DONE`/`GH_UPLOAD_FAILED`) para auditoria local da run.
 
 Comportamentos esperados:
 
