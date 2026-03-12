@@ -627,3 +627,5 @@ Se começar a ficar demasiado grande:
 
 - Em composições de timestamp para paths remotos de auditoria Git, usar minutos (`hhmm`) em vez de dia (`hhdd`) no sufixo horário; `hhdd` reduz unicidade e mistura semânticas de data/hora no nome da pasta.
 - Em chamadas a helpers públicos que podem coexistir em módulos duplicados (ex.: importações que geram `...1`), preferir chamada qualificada `NomeModulo.Procedimento`; isto reduz `Compile error: Ambiguous name detected` em projetos com duplicação temporária.
+
+- Em preflights de auditoria Git (ex.: `GitLog_DiagnoseTarget`), usar sempre chamada qualificada com o módulo de origem (`M28_GitLog.<helper>`) para evitar colisões de nome quando o VBAProject contém cópias automáticas de módulos (`...1`).
