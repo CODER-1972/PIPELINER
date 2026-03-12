@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-12 | Codex | Espelha estado do upload Git na folha GIT LOG
+'   - Regista eventos GH_UPLOAD_DONE/GH_UPLOAD_FAILED via `GitLog_AppendEvent` para rastreabilidade da run.
+'   - Mantem fluxo de upload inalterado e nao bloqueante em caso de falha no log auxiliar.
 ' - 2026-03-11 | Codex | Normaliza filtro de pipeline no Seguimento para export por prompt
 '   - Evita queda indevida para fallback da primeira prompt quando `pipeline_name` no Seguimento tem espacos invisiveis/variacoes.
 '   - Mantem deteccao de Prompt IDs por ordem de execucao e melhora rastreabilidade em runs multi-step.
@@ -197,6 +200,9 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     Dim retryCount As Long
     If Not GitDebug_RunUploadByMode(cfg, files, pipelineNome, uploadMode, reason, successCount, failCount, retryCount) Then
         Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD_FAILED, "Falha no auto-upload de debug.", reason & " | upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount))
+        Call GitLog_AppendEvent("", 0, pipelineNome, "", "ERRO", "GH_UPLOAD_FAILED", "M21_GitDebugExport", _
+            "Falha no upload Git da run.", _
+            "upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount) & " | reason=" & reason)
         Exit Sub
     End If
 
@@ -208,6 +214,9 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Link registado em Seguimento/HISTORICO.", webUrl)
 
     Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD_DONE, "Debug export publicado no GitHub.", "upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount) & " | " & webUrl)
+    Call GitLog_AppendEvent("", 0, pipelineNome, "", "INFO", "GH_UPLOAD_DONE", "M21_GitDebugExport", _
+        "Run publicado no GitHub.", _
+        "upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount) & " | link=" & webUrl)
 
     Dim finalRefreshReason As String
     If Not GitDebug_RefreshDebugCsvFinal(cfg, pipelineNome, remoteFolders, uploadMode, finalRefreshReason) Then
@@ -1359,6 +1368,7 @@ Private Function GitDebug_Config_Definitions() As Collection
 
     Call GitDebug_Config_Add(defs, "GH_BATCH_MODE", "tree_commit", "Modo de upload em batch para este modulo.", "tree_commit")
     Call GitDebug_Config_Add(defs, "GH_CONTENTS_BATCH_POLICY", "fail_fast", "Politica de lote para contents_api (aborta no 1o erro ou continua).", "fail_fast | best_effort")
+    Call GitDebug_Config_Add(defs, "GH_GITLOG_DELETE_POLICY", "after_remote_success", "Politica de remocao da linha local no GIT LOG apos delete remoto.", "after_remote_success | always | keep_local")
     Call GitDebug_Config_Add(defs, "GH_MAX_FILES", "200", "Numero maximo de ficheiros por commit (protecao).", "1..1000")
     Call GitDebug_Config_Add(defs, "GH_MAX_FILE_MB", "50", "Tamanho maximo por ficheiro (MB).", "1..200")
     Call GitDebug_Config_Add(defs, "GH_ENCODING_TEXT", "utf-8", "Encoding dos ficheiros de texto enviados para blobs.", "utf-8")
