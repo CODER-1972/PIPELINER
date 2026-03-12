@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-12 | Codex | Evita erro de compilacao por nome ambiguo em GitLog_EnsureSheet
+'   - Qualifica chamada com o nome do modulo (M28_GitLogSheet.GitLog_EnsureSheet) para reduzir colisao com modulos duplicados no VBAProject.
+'   - Mantem fluxo de preflight Git LOG inalterado quando existe apenas uma definicao.
 ' - 2026-03-12 | Codex | Diagnostico acionavel para escrita na folha Git LOG
 '   - Regista preflight do alvo de escrita (folha/cabecalhos/meta) quando Git LOG esta ON.
 '   - Regista ERRO no DEBUG quando GitLog_InsertEntryTop falha, incluindo detalhe de causa.
@@ -769,7 +772,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         painelAutoSave = "debug"
 
         Dim wsGitLog As Worksheet
-        Set wsGitLog = GitLog_EnsureSheet()
+        Set wsGitLog = M28_GitLogSheet.GitLog_EnsureSheet()
         If wsGitLog Is Nothing Then
             Call Debug_Registar(0, pipelineNome, "ALERTA", "", "GIT LOG", _
                 "Nao foi possivel inicializar a folha GIT LOG; o run vai continuar sem bootstrap da folha.", _

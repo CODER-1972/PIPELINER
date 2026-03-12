@@ -447,6 +447,7 @@ Boas práticas de manutenção VBA (preventivas):
 - após alterações em módulos `.bas`, correr compilação do projeto (`Debug > Compile VBAProject`) para apanhar erros de sintaxe antes de execução.
 - em procedimentos com `Option Explicit`, qualquer identificador usado em mensagens/StatusBar (ex.: `promptId`) deve existir na assinatura ou em `Dim` local; quando o helper for reutilizável, preferir parâmetro opcional explícito para evitar `Compile error: Variable not defined`.
 - no VBA, usar `IsMissing` apenas em parâmetros `Optional Variant`; em helpers utilitários como `Nz`, preferir contrato explícito (fallback opcional) e tratar `Null`/`Error` sem `IsMissing` para evitar `Compile error: Invalid use of IsMissing`.
+- em chamadas entre módulos com nomes potencialmente repetidos após importações (ex.: `M07_Painel_Pipelines1`), preferir qualificação explícita (`Modulo.Funcao`) para reduzir risco de `Compile error: Ambiguous name detected`.
 
 
 ### Diagnóstico rápido: web_search + anexos + ContextKV
