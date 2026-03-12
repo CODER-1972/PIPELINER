@@ -8,6 +8,12 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-12 | Codex | Regista eventos de inicio/fim no GIT LOG durante o run
+'   - Quando Git LOG esta ON, escreve eventos RUN_START e RUN_FINISH na folha GIT LOG.
+'   - Mantem log auxiliar nao bloqueante para preservar execucao da pipeline em caso de falha de escrita.
+' - 2026-03-11 | Codex | Ativa bootstrap da folha GIT LOG no arranque da pipeline
+'   - Quando o toggle Git LOG estiver ON, chama `GitLog_EnsureSheet` antes da execucao para garantir schema base da folha.
+'   - Em falha de inicializacao, regista ALERTA no DEBUG e segue o run sem bloquear a pipeline.
 ' - 2026-03-11 | Codex | Corrige compilacao em exportacao TSV do DEBUG
 '   - Alinha salto condicional com label local `NextRow` em `Painel_DebugSheetToTsv`.
 '   - Elimina referencia a `ProximaLinha` inexistente que gerava `Compile error: Label not defined`.
@@ -727,8 +733,19 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     painelAutoSave = Trim$(CStr(wsPainel.Cells(4, colIniciar).value))
     If painelAutoSave = "" Then painelAutoSave = "Sim"
 
-    If Painel_GitLog_IsEnabled(pipelineIndex) Then
+    Dim gitLogEnabled As Boolean
+    gitLogEnabled = Painel_GitLog_IsEnabled(pipelineIndex)
+
+    If gitLogEnabled Then
         painelAutoSave = "debug"
+
+        Dim wsGitLog As Worksheet
+        Set wsGitLog = GitLog_EnsureSheet()
+        If wsGitLog Is Nothing Then
+            Call Debug_Registar(0, pipelineNome, "ALERTA", "", "GIT LOG", _
+                "Nao foi possivel inicializar a folha GIT LOG; o run vai continuar sem bootstrap da folha.", _
+                "Sugestao: verificar permissao de escrita/estado do workbook e repetir a execucao.")
+        End If
     End If
 
     Dim runDumpFolder As String
@@ -809,6 +826,12 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
     Dim runToken As String
     runToken = "RUN|" & pipelineNome & "|" & Format$(Now, "yyyymmdd_hhnnss") & "|P" & Format$(pipelineIndex, "00")
+
+    If gitLogEnabled Then
+        Call GitLog_AppendEvent(runToken, 0, pipelineNome, startId, "INFO", "RUN_START", "PAINEL", _
+            "Execucao da pipeline iniciada com Git LOG ON.", _
+            "pipeline_index=" & CStr(pipelineIndex) & " | max_steps=" & CStr(maxSteps) & " | max_rep=" & CStr(maxRep))
+    End If
 
     ' Definir token de run (PAINEL) para separador visual na folha FILES_MANAGEMENT (M09)
     Call Files_SetRunToken(runToken)
@@ -1353,6 +1376,12 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     wsPainel.Cells(cursorRow + 1, colIniciar).value = "STOP"
 
 SaidaLimpa:
+    If gitLogEnabled Then
+        Call GitLog_AppendEvent(runToken, passoCtx, pipelineNome, promptCtx, "INFO", "RUN_FINISH", "PAINEL", _
+            "Execucao da pipeline concluida.", _
+            "executou_passos=" & IIf(runExecutouPassos, "SIM", "NAO") & " | ultimo_stage=" & mStepLastStage)
+    End If
+
     If runExecutouPassos Then
         Call PipelineGitDebug_ExportIfEnabled(pipelineIndex, pipelineNome, painelAutoSave)
     End If
