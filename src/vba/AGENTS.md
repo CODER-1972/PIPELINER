@@ -620,3 +620,5 @@ Se começar a ficar demasiado grande:
 - Sempre que criar um modulo utilitario novo (ex.: EnsureSheet/Bootstrap), ligar explicitamente pelo menos um call-site no fluxo operacional (entrypoint de botao/pipeline/export) e documentar o gatilho no README; evitar utilitarios "orfãos" sem ativacao em runtime.
 
 - Em mensagens de progresso no PAINEL, separar semântica de execução interna vs planeamento: `Step x of y` deve refletir um plano dinâmico de fases internas da prompt atual (núcleo fixo + fases condicionais), enquanto `Row n of z (pipeline)` representa a posição da lista planeada na coluna INICIAR.
+
+- Em rotinas com `Option Explicit`, declarar explicitamente as variáveis de output passadas por referência para helpers (ex.: flags/linhas retornadas por `...Determinar...`) antes do primeiro uso; confiar em criação implícita leva a `Compile error: Variable not defined`.

@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-12 | Codex | Corrige compile error de variaveis FILES nao declaradas no loop principal
+'   - Declara `promptTemFiles`, `promptTemRequiredFiles` e `linhaFilesLista` antes das chamadas de preparacao por passo.
+'   - Elimina `Compile error: Variable not defined` em `Painel_DeterminarFlagsFiles` com `Option Explicit` ativo.
 ' - 2026-03-12 | Codex | `Step x of y` passa a usar estimativa da execucao real
 '   - Substitui `y` baseado na lista planeada do PAINEL por estimativa dinamica da cadeia Next PROMPT a partir da prompt atual.
 '   - Em prompts AUTO, usa fallback deterministico (Next default) e interrompe estimativa em STOP/loop/ID invalido ou Max Steps.
@@ -875,6 +878,9 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     Dim passo As Long
     Dim passoCtx As Long
     Dim promptCtx As String
+    Dim promptTemFiles As Boolean
+    Dim promptTemRequiredFiles As Boolean
+    Dim linhaFilesLista As String
     Dim stepStartAt As Date, stepEndAt As Date
     Dim filesPrepareMs As Long, apiCallMs As Long, directiveParseMs As Long
     Dim tMark As Double
