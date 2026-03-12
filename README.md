@@ -15,6 +15,7 @@ Template Excel + VBA para execução de pipelines de prompts com auditoria opera
   - [3.4 DEBUG](#34-debug)
   - [3.5 Folhas de catálogo](#35-folhas-de-catálogo)
   - [3.6 FILES_MANAGEMENT](#36-files_management)
+  - [3.7 Folha GIT LOG](#37-folha-git-log)
 - [4. Modelo de IDs e catálogo de prompts](#4-modelo-de-ids-e-catálogo-de-prompts)
 - [5. Fluxo de execução de uma pipeline](#5-fluxo-de-execução-de-uma-pipeline)
   - [5.1 Resolução do prompt e configuração efetiva](#51-resolução-do-prompt-e-configuração-efetiva)
@@ -157,6 +158,13 @@ No `contents_api`, o runtime também regista fases por ficheiro (`GH_CONTENTS_CR
 Além disso, `GH_FILE_BEGIN` passa a incluir `file_kind=text|binary` e `local_size_bytes=...`, e o payload pode incluir `author/committer` quando `GH_COMMIT_AUTHOR_NAME` + `GH_COMMIT_AUTHOR_EMAIL` estiverem preenchidos.
 Se `file_kind=binary`, o DEBUG emite alertas (`GH_CONTENTS_ENCODING_RISK` e `GH_CONTENTS_LOCAL_SIZE_LIMIT`) para sinalizar que o fluxo atual usa `GH_Blob_Base64FromText(contentText)` e que `local_size_bytes` é estimativa de string (`LenB`), não tamanho real em disco para binários externos.
 
+No `contents_api`, o runtime tambem suporta delete por linha na folha `GIT LOG` (modulo `M28_GitLogActions`):
+- a coluna `Eliminar` cria botoes por linha (`GitLog_DeleteEntry`);
+- os paths remotos sao guardados em coluna tecnica oculta (`GH_REMOTE_PATHS`, com `GH_REMOTE_SHAS` opcional);
+- o delete usa `DELETE /repos/{owner}/{repo}/contents/{path}` com `sha` e commit message;
+- erros `404/409/422` geram mensagens acionaveis no DEBUG (`GH_GITLOG_DELETE_*`) e retries para `409/422`;
+- a remocao local da linha segue `GH_GITLOG_DELETE_POLICY` (`after_remote_success` por defeito).
+
 ### Quadro resumido `GH_*` (defaults e valores permitidos)
 
 | Chave (`Config`) | Default | Valores permitidos / intervalo |
@@ -178,6 +186,7 @@ Se `file_kind=binary`, o DEBUG emite alertas (`GH_CONTENTS_ENCODING_RISK` e `GH_
 | `GH_MAX_FILE_MB` | `50` | `1..200` |
 | `GH_MAX_RETRIES` | `3` | `0..10` |
 | `GH_CONTENTS_BATCH_POLICY` | `fail_fast` | `fail_fast` ou `best_effort` |
+| `GH_GITLOG_DELETE_POLICY` | `after_remote_success` | `after_remote_success` / `always` / `keep_local` |
 
 Fallback de token (ordem exata):
 
@@ -246,6 +255,42 @@ Folha de auditoria de ficheiros (upload/reutilização/download/output), quando 
 Notas de layout operacional:
 - o separador visual entre runs é uma linha própria com fundo preto e altura fixa de **6 pt**;
 - as linhas de registo (não separadoras) são sempre forçadas para altura normal legível (mínimo 15 pt), evitando herança da altura do separador.
+
+## 3.7 Folha GIT LOG
+
+Quando a macro `GitLog_RegisterPromptExecution(...)` está disponível no workbook, o loop de execução da pipeline regista **cada prompt concluída** (sucesso ou erro) com payload mínimo:
+
+- `pipelineNome`
+- `promptId`
+- `versao` (derivada do último segmento do `Prompt ID`)
+- `status`
+- `analysisLink`
+- `newPromptLink`
+- `summary`
+- `runId`
+
+Regras de normalização aplicadas antes do registo:
+
+- `summary` é saneado para CRLF (remove quebras vazias redundantes) e limitado a **4 linhas**;
+- `Success` é mapeado para domínio controlado: `Sim`, `Não`, `Condicionado`, `Outro`;
+- `New version` é mapeado para `Sim`/`Não`.
+
+### Fluxo de eliminação/remediação (GIT LOG)
+
+Quando o registo aponta `Success=Não` ou `Condicionado`, usar o fluxo operacional abaixo para evitar acumular itens inválidos:
+
+1. **Triagem rápida**
+   - confirmar `runId`, `promptId` e links (`analysisLink`/`newPromptLink`);
+   - validar no `DEBUG` o erro raiz (API, contrato, FILES, NEXT, etc.).
+2. **Eliminação controlada (quando aplicável)**
+   - remover/arquivar a linha inválida no `GIT LOG` apenas após preservar rastreabilidade mínima (`runId`, motivo, timestamp, operador);
+   - nunca apagar em lote sem critério de run/prompt.
+3. **Remediação**
+   - corrigir origem (prompt, config extra, anexos, defaults, allowed/default de NEXT);
+   - reexecutar a pipeline e confirmar novo registo para o mesmo contexto funcional.
+4. **Fecho**
+   - manter no `GIT LOG` apenas a versão final válida ou sinalizada com estado final explícito;
+   - documentar no `DEBUG`/`Seguimento` a ação corretiva aplicada para auditoria futura.
 
 ---
 
