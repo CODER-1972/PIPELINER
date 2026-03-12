@@ -8,6 +8,12 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-12 | Codex | `Step x of y` passa a usar estimativa da execucao real
+'   - Substitui `y` baseado na lista planeada do PAINEL por estimativa dinamica da cadeia Next PROMPT a partir da prompt atual.
+'   - Em prompts AUTO, usa fallback deterministico (Next default) e interrompe estimativa em STOP/loop/ID invalido ou Max Steps.
+' - 2026-03-12 | Codex | Retry da status bar passa a refletir novas tentativas reais de API
+'   - Substitui contador de chamadas por acumulador de retries reais devolvidos pelo M05 (`ApiResultado.retryCount`).
+'   - Mantem formato visual da barra e atualiza o valor apos cada resposta recebida.
 ' - 2026-03-11 | Codex | Ativa bootstrap da folha GIT LOG no arranque da pipeline
 '   - Quando o toggle Git LOG estiver ON, chama `GitLog_EnsureSheet` antes da execucao para garantir schema base da folha.
 '   - Em falha de inicializacao, regista ALERTA no DEBUG e segue o run sem bloquear a pipeline.
@@ -135,6 +141,10 @@ Option Explicit
 ' - Painel_Click_Registar (Sub): rotina publica do modulo.
 ' - Painel_Click_SetDefault (Sub): rotina publica do modulo.
 ' - Painel_Click_CriarMapa (Sub): rotina publica do modulo.
+' - Painel_StatusBar_SetPhase (Private Sub): resolve indice/total da fase interna e atualiza a status bar.
+' - Painel_BuildInternalPhasePlan (Private Function): constroi lista dinâmica de fases do passo atual.
+' - Painel_PhasePlanIndex (Private Function): obtém posição de uma fase no plano dinâmico.
+' - Painel_HasFileOutputIntent (Private Function): heurística de intenção de output para incluir fase condicional.
 ' - Painel_LogStepStage (Private Sub): breadcrumb de fase no DEBUG para troubleshooting pre-API.
 ' - Painel_EspelharDebugNoCatalogo (Private Sub): grava snapshot TSV do DEBUG no bloco da prompt executada.
 ' - Painel_RegistarFalhaNoSeguimento (Private Sub): fallback de auditoria no Seguimento para erros inesperados.
@@ -162,7 +172,7 @@ Option Explicit
 ' Requisitos adicionados (user):
 '   1) Ao clicar INICIAR: foco em Seguimento!A1
 '   2) Ao clicar INICIAR: limpar DEBUG (sessao anterior) sem ativar a folha
-'   3) Status bar: "(hh:mm) Step: x of y  |  Retry: z  |  Row n de z"
+'   3) Status bar: "(hh:mm) Step: x of y  |  Retry: z  |  Row n of z (pipeline)"
 '   4) Check/diagnostico de FILES (3 checks) + logging util
 ' ============================================================
 
@@ -842,8 +852,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     Dim inicioHHMM As String
     inicioHHMM = Format$(Now, "hh:nn")
 
-    Dim execCount As Long
-    execCount = 0
+    Dim retryCountTotal As Long
+    retryCountTotal = 0
 
     mStepLastStage = "pipeline_start"
 
@@ -875,13 +885,12 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
         Dim rowPos As Long
         Dim rowTotal As Long
-        Dim stepTotalVisivel As Long
+        Dim hasDiagContract As Boolean
+        Dim hasOutputIntent As Boolean
         rowPos = Painel_PosicaoPromptPlaneado(wsPainel, colIniciar, cursorRow)
         rowTotal = Painel_ContarPromptsPlaneados(wsPainel, colIniciar)
         If rowTotal < rowPos Then rowTotal = rowPos
-        stepTotalVisivel = Painel_TotalVisivelStep(maxSteps, rowTotal, passo)
 
-        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "A preparar passo", rowPos, rowTotal, atual)
         Call Painel_LogStepStage(passo, atual, "enter_step", "row=" & CStr(rowPos) & "/" & CStr(rowTotal))
         Call Painel_LogStepStage(passo, atual, "before_context_inject", "")
         DoEvents
@@ -900,10 +909,18 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             GoTo SaidaLimpa
         End If
 
+
+
         ' Ler definicao da prompt
         Dim prompt As PromptDefinicao
         prompt = Catalogo_ObterPromptPorID(atual)
         Call Painel_LogStepStage(passo, atual, "catalog_loaded", "lenPrompt=" & CStr(Len(prompt.textoPrompt)))
+
+        hasDiagContract = Painel_HasDiagnosticContractConfigured(prompt.ConfigExtra)
+        hasOutputIntent = Painel_HasFileOutputIntent(prompt.textoPrompt, prompt.ConfigExtra, prompt.modos)
+
+        Call Painel_DeterminarFlagsFiles(atual, promptTemFiles, promptTemRequiredFiles, linhaFilesLista)
+        Call Painel_StatusBar_SetPhase(inicioHHMM, "prepare", retryCountTotal, rowPos, rowTotal, atual, promptTemFiles, hasDiagContract, hasOutputIntent, "A preparar passo")
 
         If Trim$(prompt.textoPrompt) = "" Then
             Call Debug_Registar(passo, atual, "ERRO", "", "Catalogo", _
@@ -942,6 +959,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         End If
         On Error GoTo TrataErro
         Call Painel_LogStepStage(passo, prompt.Id, "after_context_inject", "injectOk=" & IIf(injectOk, "SIM", "NAO"))
+
+        Call Painel_StatusBar_SetPhase(inicioHHMM, "context", retryCountTotal, rowPos, rowTotal, prompt.Id, promptTemFiles, hasDiagContract, hasOutputIntent, "A montar contexto")
 
         If injectOk = False Then
             Call Debug_Registar(passo, prompt.Id, "ERRO", "", "CONTEXT_KV", injectErro, "")
@@ -987,9 +1006,6 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Dim filesUsed As String, filesOps As String, fileIds As String
         Dim falhaCriticaFiles As Boolean, erroFiles As String
 
-        Dim promptTemFiles As Boolean, promptTemRequiredFiles As Boolean
-        Dim linhaFilesLista As String
-        Call Painel_DeterminarFlagsFiles(atual, promptTemFiles, promptTemRequiredFiles, linhaFilesLista)
 
         ' Check 1 (antes do M09): prompt declara FILES mas INPUT Folder invalido
         If promptTemFiles Then
@@ -1009,7 +1025,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Dim okFiles As Boolean
         tMark = Timer
         If promptTemFiles Then
-            Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "Uploading file", rowPos, rowTotal, prompt.Id)
+            Call Painel_StatusBar_SetPhase(inicioHHMM, "files_prepare", retryCountTotal, rowPos, rowTotal, prompt.Id, promptTemFiles, hasDiagContract, hasOutputIntent, "Uploading file")
             Call Painel_LogStepStage(passo, prompt.Id, "files_prepare_start", "temFiles=SIM")
             DoEvents
 
@@ -1077,6 +1093,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             "Input final construído; este retrato confirma se anexos seguiram como file/image e/ou text_embed. Se esperava text_embed, validar has_text_embed=SIM e blocos BEGIN/END FILE no payload dump.")
 
         Call Painel_LogStepStage(passo, prompt.Id, "before_api", "lenInputJsonFinal=" & CStr(Len(inputJsonFinal)))
+        Call Painel_StatusBar_SetPhase(inicioHHMM, "request_ready", retryCountTotal, rowPos, rowTotal, prompt.Id, promptTemFiles, hasDiagContract, hasOutputIntent, "Pedido pronto")
 
         ' -------------------------------
         ' Chamada a API (1 chamada / passo)
@@ -1116,7 +1133,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         End If
 
         Call Painel_LogStepStage(passo, prompt.Id, "api_call_start", "model=" & modeloUsado)
-        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "A executar prompt", rowPos, rowTotal, prompt.Id)
+        Call Painel_StatusBar_SetPhase(inicioHHMM, "api_call", retryCountTotal, rowPos, rowTotal, prompt.Id, promptTemFiles, hasDiagContract, hasOutputIntent, "A executar prompt")
         DoEvents
 
         Dim debugFingerprintSeed As String
@@ -1131,8 +1148,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         apiCallMs = CLng((Timer - tMark) * 1000)
         If apiCallMs < 0 Then apiCallMs = 0
 
-        execCount = execCount + 1
-        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "Resposta recebida", rowPos, rowTotal, prompt.Id)
+        retryCountTotal = retryCountTotal + resultado.retryCount
+        Call Painel_StatusBar_SetPhase(inicioHHMM, "response", retryCountTotal, rowPos, rowTotal, prompt.Id, promptTemFiles, hasDiagContract, hasOutputIntent, "Resposta recebida")
         DoEvents
 
                 ' -------------------------------
@@ -1150,6 +1167,9 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Dim ctProblem As String, ctSuggestion As String, ctDetail As String
         Call ContractDiag_EvaluateStep(passo, prompt.Id, prompt.ConfigExtra, resultado.outputText, resultado.rawResponseJson, _
             ctHasContract, ctMode, ctState, ctRule, ctProblem, ctSuggestion, ctDetail)
+        If ctHasContract Then
+            Call Painel_StatusBar_SetPhase(inicioHHMM, "contract_gate", retryCountTotal, rowPos, rowTotal, prompt.Id, promptTemFiles, hasDiagContract, hasOutputIntent, "Validar contrato")
+        End If
 
         Dim fo_executeOpsLog As String
         fo_executeOpsLog = ""
@@ -1163,6 +1183,9 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
                     ctSuggestion)
                 resultado.Erro = "Contrato do passo bloqueou continuidade: estado=" & ctState & " regra=" & ctRule
             Else
+                If hasOutputIntent Then
+                    Call Painel_StatusBar_SetPhase(inicioHHMM, "output_execute", retryCountTotal, rowPos, rowTotal, prompt.Id, promptTemFiles, hasDiagContract, hasOutputIntent, "Executar output")
+                End If
                 fo_executeOpsLog = OutputOrders_TryExecute(passo, prompt.Id, resultado.responseId, resultado.outputText, outputFolderBase, fo_filesOpsOut, fo_executeM10Signals)
                 If Trim$(fo_executeOpsLog) <> "" Then
                     If Trim$(fo_filesOpsOut) <> "" Then
@@ -1216,6 +1239,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         ' CONTEXTKV - REGISTAR + CAPTURAR
         ' ================================
         On Error Resume Next
+        Call Painel_StatusBar_SetPhase(inicioHHMM, "context_capture", retryCountTotal, rowPos, rowTotal, prompt.Id, promptTemFiles, hasDiagContract, hasOutputIntent, "Capturar contexto")
         Call ContextKV_WriteInjectedVars(pipelineNome, passo, prompt.Id, injectedVarsJson, outputFolderBase, runToken)
         Call ContextKV_CaptureRow(pipelineNome, passo, prompt.Id, outputFolderBase, runToken)
         If Err.Number <> 0 Then
@@ -1225,6 +1249,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         End If
         On Error GoTo TrataErro
 
+        Call Painel_StatusBar_SetPhase(inicioHHMM, "completed", retryCountTotal, rowPos, rowTotal, prompt.Id, promptTemFiles, hasDiagContract, hasOutputIntent, "Passo concluido")
 
         If Trim$(resultado.Erro) <> "" Then
             Call Debug_Registar(passo, atual, "ERRO", "", "API", _
@@ -1583,25 +1608,63 @@ Private Sub Painel_LimparDebugSessaoAnterior()
     On Error GoTo 0
 End Sub
 
-Private Function Painel_TotalVisivelStep(ByVal maxSteps As Long, ByVal rowTotal As Long, ByVal passoAtual As Long) As Long
-    Dim total As Long
+Private Sub Painel_StatusBar_SetPhase(ByVal inicioHHMM As String, ByVal phaseCode As String, ByVal retryCount As Long, ByVal rowPos As Long, ByVal rowTotal As Long, ByVal promptId As String, ByVal promptTemFiles As Boolean, ByVal hasDiagContract As Boolean, ByVal hasOutputIntent As Boolean, ByVal detalhe As String)
+    Dim phasePlan As Collection
+    Set phasePlan = Painel_BuildInternalPhasePlan(promptTemFiles, hasDiagContract, hasOutputIntent)
 
-    total = rowTotal
-    If total <= 0 Then total = maxSteps
-    If total <= 0 Then total = passoAtual
-    If total < passoAtual Then total = passoAtual
+    Dim idx As Long
+    idx = Painel_PhasePlanIndex(phasePlan, phaseCode)
+    If idx <= 0 Then idx = 1
 
-    Painel_TotalVisivelStep = total
+    Call Painel_StatusBar_Set(inicioHHMM, idx, phasePlan.Count, retryCount, detalhe, rowPos, rowTotal, promptId)
+End Sub
+
+Private Function Painel_BuildInternalPhasePlan(ByVal promptTemFiles As Boolean, ByVal hasDiagContract As Boolean, ByVal hasOutputIntent As Boolean) As Collection
+    Dim plan As Collection
+    Set plan = New Collection
+
+    plan.Add "prepare"
+    plan.Add "context"
+    If promptTemFiles Then plan.Add "files_prepare"
+    plan.Add "request_ready"
+    plan.Add "api_call"
+    plan.Add "response"
+    If hasDiagContract Then plan.Add "contract_gate"
+    If hasOutputIntent Then plan.Add "output_execute"
+    plan.Add "context_capture"
+    plan.Add "completed"
+
+    Set Painel_BuildInternalPhasePlan = plan
 End Function
 
-Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long, ByVal total As Long, ByVal execCount As Long, Optional ByVal detalhe As String = "", Optional ByVal rowPos As Long = 0, Optional ByVal rowTotal As Long = 0, Optional ByVal promptId As String = "")
+Private Function Painel_PhasePlanIndex(ByVal plan As Collection, ByVal phaseCode As String) As Long
+    Dim i As Long
+    For i = 1 To plan.Count
+        If StrComp(CStr(plan(i)), phaseCode, vbTextCompare) = 0 Then
+            Painel_PhasePlanIndex = i
+            Exit Function
+        End If
+    Next i
+End Function
+
+Private Function Painel_HasFileOutputIntent(ByVal promptText As String, ByVal configExtraText As String, ByVal modos As String) As Boolean
+    Dim cfgLower As String
+    cfgLower = LCase$(Trim$(configExtraText))
+
+    Painel_HasFileOutputIntent = (InStr(1, cfgLower, "output_kind", vbTextCompare) > 0 Or _
+                                  InStr(1, cfgLower, "process_mode", vbTextCompare) > 0 Or _
+                                  InStr(1, LCase$(modos), "code interpreter", vbTextCompare) > 0 Or _
+                                  InStr(1, LCase$(promptText), "ci_output_file:", vbTextCompare) > 0)
+End Function
+
+Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal internalStep As Long, ByVal internalTotal As Long, ByVal retryCount As Long, Optional ByVal detalhe As String = "", Optional ByVal rowPos As Long = 0, Optional ByVal rowTotal As Long = 0, Optional ByVal promptId As String = "")
     On Error Resume Next
 
     Dim passoTxt As String
-    If total > 10 Then
-        passoTxt = Format$(passo, "00")
+    If internalTotal > 10 Then
+        passoTxt = Format$(internalStep, "00")
     Else
-        passoTxt = CStr(passo)
+        passoTxt = CStr(internalStep)
     End If
 
     Dim detalheLimpo As String
@@ -1615,10 +1678,10 @@ Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long
     If rowTotal > 0 Then
         If rowPos <= 0 Then rowPos = 1
         If rowPos > rowTotal Then rowPos = rowTotal
-        rowLabel = "  |  Row " & CStr(rowPos) & " de " & CStr(rowTotal)
+        rowLabel = "  |  Row " & CStr(rowPos) & " of " & CStr(rowTotal) & " (pipeline)"
     End If
 
-    Application.StatusBar = "(" & inicioHHMM & ") Step: " & passoTxt & " of " & CStr(total) & "  |  Retry: " & CStr(execCount) & _
+    Application.StatusBar = "(" & inicioHHMM & ") Step: " & passoTxt & " of " & CStr(internalTotal) & "  |  Retry: " & CStr(retryCount) & _
                             rowLabel & IIf(promptIdLimpo = "", "", "  |  " & promptIdLimpo) & _
                             IIf(detalheLimpo = "", "", "  |  " & detalheLimpo)
     On Error GoTo 0
