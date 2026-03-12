@@ -1,0 +1,206 @@
+1) Resumo Executivo
+[CONCLUSÃO:] RISCO — A prompt executou sem erro HTTP (200), mas o handoff saiu parcialmente frágil porque o artefacto principal (TSV_CATALOGO_FINAL_ENC) foi emitido com quebras reais e a própria saída indica READY_FOR_CSV=NAO, degradando o consumo automático no passo seguinte.
+- Objetivo em linguagem simples: validar e corrigir mecanicamente um TSV de catálogo (recebido por ContextKV), produzir TSV final + changelog + validações para o passo de conversão em CSV.
+- Esperado vs observado:
+  - Esperado: saída totalmente parsing-safe, em 1 linha por variável *_ENC, pronta para consumo pela prompt 04.
+  - Observado: HTTP 200 e captura de 5 variáveis, porém o conteúdo reporta que ainda existem quebras reais e READY_FOR_CSV=NAO.
+- Classificação final da prompt-alvo: Aprovada com ressalvas.
+- Decisão operacional: Go condicionado.
+- Top riscos reais:
+  1. Handoff frágil por violação potencial do contrato “1 linha” em TSV_*_ENC.
+  2. Ambiguidade sobre requisito do consumidor (*ENC multi-linha vs one-line codificada), explicitamente assinalada no output.
+  3. Captura ContextKV com sinais de colisão/contaminação (hash/chars iguais em chaves diferentes) — risco de variáveis incorretas a jusante.
+  4. Ausência de gate operacional duro para bloquear cadeia quando READY_FOR_CSV=NAO.
+  5. Texto da prompt contém fragmento corrompido em “regras de 
+
+ literal” (clareza contratual reduzida).
+- Top ações recomendadas:
+  - P1: Corrigir texto da prompt (secção de output) para impor serialização estritamente monolinha em TSV_*_ENC.
+  - P1: Introduzir gate explícito READY_FOR_CSV e condição de falha operacional (sem ambiguidade) para o passo seguinte.
+  - P1: Ajustar parser/captura no orquestrador para rejeitar valores *_ENC com CR/LF reais.
+  - P2: Clarificar semântica de “
+ literal” no corpo da prompt (evitar quebra visual que virou ambígua).
+  - P2: Acrescentar validação técnica “NO_REAL_NEWLINES_IN_ENC=PASS/FAIL” no próprio output.
+- Nota para leigo: “O passo 3 respondeu, mas ainda não garantiu formato totalmente seguro para o passo 4; convém corrigir antes de uso contínuo.”
+
+2) Contexto na Cadeia de Prompts (visão de fluxo)
+[CONCLUSÃO:] OK com ressalvas — A run certa foi identificada sem ambiguidade; a cadeia 01→02→03→04 é observável, mas a robustez do handoff 03→04 é limitada.
+- Fontes da análise: Seguimento.csv, DEBUG.csv, catalogo_prompts_executadas.csv, painel_pipeline.txt e payload_dumps (meta/request/response dos 4 passos).
+- Pasta analisada: pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/03_WF_LAYOUT_QA/v1.2
+- Runs encontradas: apenas “2026-03-12 1356”.
+- Run escolhida: “2026-03-12 1356” (é simultaneamente a única e a mais recente por ordenação temporal).
+- Artefactos encontrados: todos os mínimos obrigatórios presentes (sem MISSING).
+- Cobertura de leitura:
+  - Seguimento.csv: 100%
+  - DEBUG.csv: 100%
+  - catalogo_prompts_executadas.csv: 100%
+  - painel_pipeline.txt: 100%
+  - payload_dumps/*.json e *.txt: 100%
+- Limitações: nenhuma limitação material de leitura; não houve URL_RUN_FIXA.
+- Papel da prompt na cadeia: passo 3 de 4 prompts efetivamente executadas nesta run.
+- Dependência anterior: recebe TSV_CATALOGO_DRAFT_ENC do passo 2 via ContextKV.
+- Entregáveis para a seguinte: TSV_CATALOGO_FINAL_ENC + TSV_CHANGELOG_ENC + TSV_VALIDACOES_ENC + MEMORY_SHORT.
+- Impacto no objetivo global: alto, porque este passo determina se o catálogo segue para conversão CSV com determinismo.
+- Resposta explícita: se falhar parcialmente, o objetivo global pode ainda ser atingido, mas com risco elevado de quebra silenciosa no passo de conversão/importação.
+
+3) I/O de Negócio (o que entra e o que sai)
+[CONCLUSÃO:] RISCO — Entradas obrigatórias foram recebidas, mas a saída principal não ficou inequivocamente pronta para consumo automático.
+- Entradas esperadas:
+  - ContextKV: {{VAR:TSV_CATALOGO_DRAFT_ENC}}
+  - Ficheiros: FLOW_TEMPLATE*.csv e ORIENTACOES_PIPELINE*.pdf
+- Entradas observadas de facto:
+  - injected_vars confirma TSV_CATALOGO_DRAFT_ENC vindo do passo 2
+  - files_used confirma FLOW_TEMPLATE.csv (text_embed) e ORIENTACOES...pdf (file_id)
+- Saídas esperadas:
+  - TSV_CATALOGO_FINAL_ENC, TSV_CHANGELOG_ENC, TSV_VALIDACOES_ENC, MEMORY_SHORT
+- Saídas observadas:
+  - Todas as chaves foram capturadas (CAPTURE_OK keys=5), mas MEMORY_SHORT marca READY_FOR_CSV=NAO e reporta dúvida sobre contrato de serialização.
+- Critério de sucesso: TSV_*_ENC em formato deterministicamente parseável (1 linha codificada), sem TAB/newline reais.
+- Critério de falha/paragem: ausência de variável de entrada, ou saída sem contrato parse-safe.
+- Diferenças esperado vs observado: sucesso de execução técnica ≠ sucesso de prontidão operacional.
+- Tradução leiga: “Recebeu os dados certos, mas a forma de os devolver ainda pode confundir o próximo passo.”
+
+4) Integridade de Handoff (prompt anterior -> atual -> próxima)
+4.1 Receção da prompt anterior
+[CONCLUSÃO:] OK — A receção do passo 2 para o passo 3 está tecnicamente íntegra e auditável.
+- Evidência: INJECT_OK|TSV_CATALOGO_DRAFT_ENC com from_step=2 e placeholder substituído 3x (6154 chars).
+- Ficheiros esperados vs resolvidos: FLOW_TEMPLATE.csv (text_embed) e ORIENTACOES*.pdf (file_id) ambos com status=OK.
+- Lacunas/fallback: sem fallback necessário nesta receção.
+- Risco residual para a prompt atual: baixo.
+
+4.2 Preparação para a prompt seguinte
+[CONCLUSÃO:] RISCO — O passo 3 entrega variáveis, mas sem garantia dura de parsing-safe.
+- Variáveis capturadas: 5 chaves capturadas.
+- Qualidade: MEMORY_SHORT explicita READY_FOR_CSV=NAO e alerta sobre possível violação da regra de 1 linha.
+- Prontidão para consumo automático: frágil.
+- Risco de quebra silenciosa: médio/alto (especialmente se parser assumir uma linha única por chave).
+
+4.3 Encadeamento e rotas
+[CONCLUSÃO:] ROBUSTO na rota declarada, FRÁGIL no conteúdo — next/default/allowed da prompt 03 aponta deterministicamente para a 04 e inclui STOP, mas o payload de handoff pode degradar a etapa seguinte.
+- Coerência de rota: Next PROMPT e default = passo 04; allowed = STOP + passo 04.
+- Rotas perigosas: não observadas na definição de catálogo; risco está no conteúdo, não no roteamento.
+- Conclusão handoff: frágil.
+
+5) Contrato da Prompt (clareza operacional)
+[CONCLUSÃO:] RISCO — O contrato é bom na intenção, mas tem ambiguidades de serialização e um trecho textual corrompido que reduz determinismo.
+- ROLE/objetivo/limites: claros (QA mecânico, não inventar, web proibida, Pt-PT).
+- Regras nucleares: presentes e alinhadas com governance.
+- Formato obrigatório: define chaves de saída, mas não fecha com rigor o bloqueio de CR/LF reais no valor final de cada *_ENC.
+- [POR CONFIRMAR]: sem regra operacional explícita sobre o que fazer quando READY_FOR_CSV=NAO (continuar/parar).
+- Exequibilidade: exequível, porém precisa de reforço textual para reduzir ambiguidade.
+- Delimitação: razoável; margem perigosa concentrada em serialização do output.
+
+6) Qualidade e Robustez (PASS/FAIL)
+[CONCLUSÃO:] FAIL parcial — execução técnica passou; robustez operacional ficou abaixo do ideal.
+Matriz:
+- run correcta identificada | PASS | única run encontrada | sem risco | operação | manter
+- artefactos obrigatórios encontrados | PASS | todos presentes | sem risco | operação | manter
+- cobertura integral de leitura | PASS | 100% em todos artefactos | sem risco | auditoria | manter
+- prompt executada sem ambiguidade | PASS | passo 3 identificado | sem risco | operação | manter
+- input da prompt anterior | PASS | INJECT_OK from_step=2 | baixo | orquestrador | manter
+- ficheiros resolvidos/anexados | PASS | FILES_ITEM_TRACE status=OK | baixo | dados/anexos | manter
+- integridade ContextKV | AMBÍGUO | metadados de captura com hashes iguais em chaves distintas | médio | orquestrador | [adicionar] validação de colisão por key/offset
+- parsing config extra | PASS | sem erros na prompt 03 | baixo | prompt | manter
+- coerência payload/request | PASS | M05_PAYLOAD_CHECK OK + HTTP 200 | baixo | orquestrador | manter
+- resultado HTTP/resposta | PASS | M05_HTTP_RESULT 200 | baixo | orquestrador | manter
+- captura de output | PASS com ressalva | CAPTURE_OK keys=5 mas prontidão NAO | médio | prompt | [substituir] secção output com regra monolinha
+- handoff etapa seguinte | FAIL | passo 4 não recebeu estado pronto inequívoco | alto | prompt+orquestrador | [adicionar] gate de bloqueio
+- determinismo/parsing-safe output | FAIL | MEMORY_SHORT assume dúvida estrutural | alto | prompt | [adicionar] teste NO_REAL_NEWLINES_IN_ENC
+- coerência IDs/versões/placeholders | PASS | IDs e injeção consistentes | baixo | catálogo | manter
+- coerência next/default/allowed | PASS | rota 03→04 e STOP coerente | baixo | catálogo | manter
+- aderência idioma/regras/web policy | PASS | Pt-PT e web não usada | baixo | prompt | manter
+- segurança/segredos | PASS com ressalva | alerta OPENAI_API_KEY mascarado; sem segredo exposto no output observado | baixo | governação | manter mascaramento
+- rastreabilidade/auditabilidade | PASS | DEBUG+Seguimento ricos | baixo | operação | manter
+- production-readiness | FAIL | saída sem garantia de consumo seguro | alto | prompt+orquestrador | reforçar contrato e gate
+- coerência entre artefactos | AMBÍGUO | Sequência consistente, mas sinal de captura potencialmente conflituosa | médio | orquestrador | endurecer parser/context capture
+
+7) Ficheiros e Anexos (técnico-operacional)
+[CONCLUSÃO:] production-ready com ressalvas no passo 03 — anexação foi correta, mas não compensa fragilidade de serialização do output.
+- Anexos obrigatórios:
+  - FLOW_TEMPLATE*.csv: OK (text_embed)
+  - ORIENTACOES_PIPELINE*.pdf: OK (pdf_upload com file_id)
+- Transporte observado: misto (text_embed + file_id), coerente com design.
+- Compatibilidades/riscos: não há sinais de erro de upload/415; risco principal não é FILES, é contrato textual de saída.
+- Payload técnico: has_input_file=SIM, has_text_embed=SIM, HTTP 200.
+- Evidência capture/inject: INJECT_OK e CAPTURE_OK presentes.
+- Conclusão técnica: anexos OK; prontidão global ainda condicionada por contrato de saída.
+
+8) Evidência de Execução (Seguimento + DEBUG em linguagem leiga)
+[CONCLUSÃO:] RISCO controlado — a “máquina” funcionou, mas o “formato de entrega” ainda pode partir automações.
+- Linha temporal simplificada:
+  - 13:51:21 injeção ContextKV e resolução de anexos
+  - 13:51:23 payload enviado
+  - 13:53:27 HTTP 200
+  - 13:53:28 captura de 5 chaves
+- Seguimento.csv mostra:
+  - modelo gpt-5.2
+  - HTTP 200
+  - response_id presente
+  - output com TSV_CATALOGO_FINAL_ENC + CHANGELOG + VALIDACOES + MEMORY_SHORT
+  - next decidido vazio no registo (roteamento veio da lista do PAINEL/catálogo)
+- DEBUG.csv mostra:
+  - FILES_ITEM_TRACE OK para ambos anexos
+  - REQ_INPUT_JSON com file e text_embed presentes
+  - M05_HTTP_RESULT 200
+  - CONTRACT_SUGGEST_ENABLE (alerta de contrato)
+  - CAPTURE_OK keys=5
+- catalogo_prompts_executadas.csv:
+  - prompt 03 definida com next/default/allowed coerentes
+  - corpo contém trecho ambíguo em “
+
+ literal”
+- painel_pipeline.txt:
+  - pipeline com 4 passos + STOP, max steps 10, max repetitions 3
+- Contradições:
+  - Sem contradição dura entre HTTP/debug/seguimento.
+  - Inconsistência funcional: execução “OK” coexistiu com READY_FOR_CSV=NAO.
+  - Peso probatório maior: DEBUG + Output efetivo da prompt > metadado declarativo.
+- Tradução leiga: “O sistema não caiu, mas ainda não entregou num formato totalmente seguro para automatizar sem supervisão.”
+
+9) Segurança, Privacidade e Conformidade
+[CONCLUSÃO:] aceitável com ressalvas — não há fuga evidente de segredo na prompt 03, mas há superfície de melhoria de governança.
+- Exposição de segredos: não observada no output analisado.
+- Dados sensíveis em logs: não observados além paths locais em DEBUG (esperado em troubleshooting).
+- Minimização: razoável; logs são detalhados mas acionáveis.
+- Retenção/storage observável: store=True; [POR CONFIRMAR] política de retenção externa.
+- Desvios: nenhum desvio crítico de segurança diretamente atribuído à prompt 03.
+
+10) Decisão Operacional (Go/No-Go)
+[CONCLUSÃO:] Go condicionado — usar em operação apenas após correções textuais mínimas + gate de prontidão.
+- Condições mínimas para avançar:
+  1) Prompt 03 reforçada para forçar TSV_*_ENC estritamente monolinha.
+  2) Validação explícita NO_REAL_NEWLINES_IN_ENC=PASS obrigatória.
+  3) Gate operacional: se READY_FOR_CSV=NAO, bloquear passo 04.
+- Pode ficar para depois:
+  - otimizações cosméticas de linguagem.
+- Responsáveis/prazo: [POR CONFIRMAR] no repositório/logs.
+- Critério de revalidação: nova run com mesma cadeia e prova de READY_FOR_CSV=SIM + conversão CSV bem-sucedida no passo 04.
+- Resposta leiga: “Pode usar já em teste controlado; para produção contínua, corrigir primeiro os pontos acima.”
+
+11) Apêndice Técnico
+[CONCLUSÃO:] OK — evidências suficientes para decisão, com lacunas explicitamente marcadas.
+- Mapeamento variável/handoff (resumo):
+  - 02 -> 03: injeta TSV_CATALOGO_DRAFT_ENC (OK)
+  - 03 -> 04: injeta TSV_CATALOGO_FINAL_ENC (com prontidão questionada)
+- Trechos curtos de evidência:
+  - DEBUG row 94: INJECT_OK|TSV_CATALOGO_DRAFT_ENC from_step=2
+  - DEBUG row 109: FILES_ITEM_TRACE ORIENTACOES ... status=OK ... file_id=...
+  - DEBUG row 121: M05_HTTP_RESULT http_status=200
+  - DEBUG row 129: CAPTURE_OK Keys=5
+  - Output passo 03: MEMORY_SHORT ... READY_FOR_CSV=NAO
+- Lista de runs encontradas: 2026-03-12 1356.
+- Lista de artefactos encontrados: Seguimento.csv, DEBUG.csv, catalogo_prompts_executadas.csv, painel_pipeline.txt, payload_dumps/*.
+- Checklist final (PASS/FAIL):
+  1. run mais recente confirmada: PASS
+  2. artefactos obrigatórios lidos/assinalados: PASS
+  3. input da prompt anterior confirmado: PASS
+  4. output transmitível para a seguinte confirmado: FAIL (frágil)
+  5. coerência com objetivo global: PASS com ressalvas
+  6. next/default/allowed sem rotas perigosas: PASS
+  7. rastreabilidade por evidência: PASS
+  8. contradições entre artefactos identificadas: PASS
+  9. separação prompt vs config/orquestrador/dados: PASS
+  10. alterações propostas com valor real: PASS
+  11. prompt integral corrigida apenas com segurança: PASS
+  12. verificação interna da proposta: PASS
+  13. relatório legível para leigo: PASS
