@@ -626,3 +626,4 @@ Se começar a ficar demasiado grande:
 - Em rotinas com `Option Explicit`, declarar explicitamente as variáveis de output passadas por referência para helpers (ex.: flags/linhas retornadas por `...Determinar...`) antes do primeiro uso; confiar em criação implícita leva a `Compile error: Variable not defined`.
 
 - Em composições de timestamp para paths remotos de auditoria Git, usar minutos (`hhmm`) em vez de dia (`hhdd`) no sufixo horário; `hhdd` reduz unicidade e mistura semânticas de data/hora no nome da pasta.
+- Em chamadas a helpers públicos que podem coexistir em módulos duplicados (ex.: importações que geram `...1`), preferir chamada qualificada `NomeModulo.Procedimento`; isto reduz `Compile error: Ambiguous name detected` em projetos com duplicação temporária.
