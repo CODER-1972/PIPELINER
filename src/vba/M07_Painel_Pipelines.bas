@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-11 | Codex | Ativa bootstrap da folha GIT LOG no arranque da pipeline
+'   - Quando o toggle Git LOG estiver ON, chama `GitLog_EnsureSheet` antes da execucao para garantir schema base da folha.
+'   - Em falha de inicializacao, regista ALERTA no DEBUG e segue o run sem bloquear a pipeline.
 ' - 2026-03-11 | Codex | Corrige compilacao em exportacao TSV do DEBUG
 '   - Alinha salto condicional com label local `NextRow` em `Painel_DebugSheetToTsv`.
 '   - Elimina referencia a `ProximaLinha` inexistente que gerava `Compile error: Label not defined`.
@@ -729,6 +732,14 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
     If Painel_GitLog_IsEnabled(pipelineIndex) Then
         painelAutoSave = "debug"
+
+        Dim wsGitLog As Worksheet
+        Set wsGitLog = GitLog_EnsureSheet()
+        If wsGitLog Is Nothing Then
+            Call Debug_Registar(0, pipelineNome, "ALERTA", "", "GIT LOG", _
+                "Nao foi possivel inicializar a folha GIT LOG; o run vai continuar sem bootstrap da folha.", _
+                "Sugestao: verificar permissao de escrita/estado do workbook e repetir a execucao.")
+        End If
     End If
 
     Dim runDumpFolder As String
