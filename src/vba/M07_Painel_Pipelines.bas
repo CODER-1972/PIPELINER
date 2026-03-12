@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-12 | Codex | Corrige chamada ambigua de preflight Git LOG
+'   - Qualifica a chamada para `M28_GitLog.GitLog_DiagnoseTarget` no arranque da pipeline.
+'   - Elimina `Compile error: Ambiguous name detected: GitLog_DiagnoseTarget` quando existem modulos duplicados no VBAProject.
 ' - 2026-03-12 | Codex | Evita erro de compilacao por nome ambiguo em GitLog_EnsureSheet
 '   - Qualifica chamada com o nome do modulo (M28_GitLogSheet.GitLog_EnsureSheet) para reduzir colisao com modulos duplicados no VBAProject.
 '   - Mantem fluxo de preflight Git LOG inalterado quando existe apenas uma definicao.
@@ -861,7 +864,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
     If Painel_GitLog_IsEnabled(pipelineIndex) Then
         Dim gitLogDiag As String
-        If GitLog_DiagnoseTarget(gitLogDiag) Then
+        If M28_GitLog.GitLog_DiagnoseTarget(gitLogDiag) Then
             Call Debug_Registar(0, startId, "INFO", "", "GIT_LOG_BIND", _
                 "Preflight Git LOG OK. " & gitLogDiag, _
                 "OK")
