@@ -1,0 +1,226 @@
+1) Resumo Executivo
+[CONCLUSÃO:] FALHA — a prompt executou com HTTP 200, mas o handoff operativo falhou porque o orquestrador não conseguiu materializar o CSV para OUTPUT_EXECUTE.
+- Objetivo em linguagem simples: transformar TSV final em CSV compatível com o template, gerar DOCX e disparar `EXECUTE: LOAD_CSV(...)` só quando o CSV existir.
+- Esperado vs observado:
+  - OBSERVADO: a resposta da API declara `EXPORT_OK_CSV: true`, `CSV_EXISTE_EM_MNT_DATA: SIM`, `ACTION=LOAD_CSV` e `EXECUTE: LOAD_CSV([...])`.
+  - OBSERVADO: o Seguimento final guarda apenas `[FILE OUTPUT/CI] Sem container_file_citation ... 0 ficheiros elegiveis`.
+  - OBSERVADO: DEBUG regista erro de resolução de ficheiro CSV para OUTPUT_EXECUTE (row 178).
+  - INFERIDO: houve sucesso lógico no modelo, mas falha no handoff técnico entre output textual/artefactos CI e importação no Excel.
+- Classificação final: Não aprovada.
+- Decisão operacional: No-Go.
+- Top riscos reais:
+  1. Quebra silenciosa de handoff para Excel (OUTPUT_EXECUTE_FILE_NOT_FOUND implícito).
+  2. Contradição entre `response_raw` e `Seguimento.csv` dificulta auditoria.
+  3. Passo final sem contrato técnico activo (`SEM_CONTRATO` + alertas C0_SUGGEST).
+  4. Sem captura ContextKV no passo 4 (`CAPTURE_MISS`), reduzindo rastreabilidade.
+  5. Dependência frágil de `container_file_citation` para materializar ficheiros.
+- Top ações recomendadas:
+  - P1 (ORQUESTRADOR/PIPELINE): aceitar fallback por nome (`FILE_CSV`/`FILE_WORD` + `MNT_DATA_LIST`) quando não há `container_file_citation`.
+  - P1 (TEXTO DA PROMPT): tornar obrigatório emitir `FILE_NAME_CSV` e `FILE_NAME_WORD` também no caminho de sucesso (não só no fallback).
+  - P1 (ORQUESTRADOR/PIPELINE): logar causa exacta da rejeição do artefacto (critério de elegibilidade e parser usado).
+  - P2 (CONFIG EXTRA): activar contrato diagnóstico para passos com `code_interpreter` + `LOAD_CSV`.
+  - P2 (TEXTO DA PROMPT): proibir links markdown de download e exigir manifesto final estritamente parseável em linhas `KEY: valor`.
+- Nota leiga: “O modelo aparentemente fez o ficheiro, mas o sistema que o devia apanhar e carregar no Excel não o reconheceu; por isso o passo final não é fiável.”
+
+2) Contexto na Cadeia de Prompts (visão de fluxo)
+[CONCLUSÃO:] RISCO — a run-alvo foi correctamente identificada, mas com inconsistência probatória entre artefactos do mesmo passo.
+2.1 Fontes, path e escolha da run
+[CONCLUSÃO:] OK — a pasta da prompt foi inferida por normalização conservadora e existe.
+- TARGET_PROMPT_ID validado: `PIPELINE_MAKER_ContextKV/04/WF_CATALOGO_FROM_LAYOUT_TXT/v1.4`.
+- Normalização aplicada: `04/WF_CATALOGO_FROM_LAYOUT_TXT` -> `04_WF_CATALOGO_FROM_LAYOUT_TXT`.
+- Pasta analisada: `pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/04_WF_CATALOGO_FROM_LAYOUT_TXT/v1.4`.
+- Runs encontradas: `2026-03-12 1356`.
+- Run escolhida: `2026-03-12 1356` (única e portanto mais recente).
+
+2.2 Artefactos encontrados e cobertura
+[CONCLUSÃO:] OK — artefactos mínimos encontrados e lidos a 100%.
+- Seguimento.csv — 4 registos (100%).
+- DEBUG.csv — 907 registos (100%).
+- catalogo_prompts_executadas.csv — 20 registos lógicos (100%).
+- painel_pipeline.txt — 1 ficheiro (100%).
+- payload_dumps/* (request/response/meta de steps 1..4) — 12 ficheiros (100%).
+
+2.3 Limitações
+[CONCLUSÃO:] [POR CONFIRMAR] — não há acesso directo ao container remoto após a run para validar fisicamente `/mnt/data` no momento exacto da execução.
+- A análise depende de evidência persistida nos dumps + logs.
+
+2.4 Papel da prompt na cadeia
+[CONCLUSÃO:] OK — é o passo final (4/4) da pipeline observada e faz handoff para STOP.
+- Passos observados: 01 -> 02 -> 03 -> 04 -> STOP (painel_pipeline e Seguimento).
+- Dependência imediata da prompt anterior: `TSV_CATALOGO_FINAL_ENC` injectado do passo 3.
+- Entregável esperado para operação: CSV resolvido + LOAD_CSV executável.
+
+2.5 Impacto no objetivo global
+[CONCLUSÃO:] RISCO ALTO — a cadeia global perde utilidade operacional se o passo 4 não materializar o CSV para carregamento.
+- Resposta explícita: “Se esta prompt falhar parcialmente, o processo global ainda serve o objetivo final?”
+  - INFERIDO: Não totalmente. A cadeia prepara conteúdo, mas sem importação fiável no Excel o objetivo final fica incompleto.
+
+3) I/O de Negócio (o que entra e o que sai)
+[CONCLUSÃO:] FALHA — input foi injectado corretamente, mas output operacional não foi consumível pelo orquestrador.
+- Entradas esperadas (contrato da prompt):
+  - `{{VAR:TSV_CATALOGO_FINAL_ENC}}`.
+  - `FLOW_TEMPLATE*.csv` (text_embed possível).
+  - `ORIENTACOES_PIPELINE*.pdf`.
+- Entradas observadas:
+  - OBSERVADO: `INJECT_OK TSV_CATALOGO_FINAL_ENC` (debug row 136), placeholder substituído 2 vezes (rows 137-138).
+  - OBSERVADO: anexação `input_file` com `file-XPU7...` e `text_embed` ativo (rows 152-154).
+- Saídas esperadas:
+  - Manifesto (`EXPORT_OK_*`, `FILE_*`, `MNT_DATA_LIST`),
+  - `ACTION=LOAD_CSV` + linha final `EXECUTE: LOAD_CSV([...])` condicional,
+  - artefactos CSV/DOCX.
+- Saídas observadas:
+  - OBSERVADO em `response_raw`: manifesto completo + `ACTION=LOAD_CSV` + `EXECUTE...`.
+  - OBSERVADO em Seguimento: texto substituído por aviso “Sem container_file_citation”.
+  - OBSERVADO em DEBUG: erro de resolução do CSV para OUTPUT_EXECUTE (row 178).
+- Critérios de sucesso: CSV detectado e carregável por `LOAD_CSV`.
+- Critério de falha: CSV não resolvido para importação apesar de `HTTP 200`.
+- Leigo: “A instrução de carregar o CSV apareceu, mas o sistema não encontrou o ficheiro no sítio certo para executar.”
+
+4) Integridade de Handoff (prompt anterior -> atual -> próxima)
+[CONCLUSÃO:] Frágil — receção foi boa, preparação para frente ficou quebrada na camada de execução.
+
+4.1 Receção da prompt anterior
+[CONCLUSÃO:] OK — handoff de entrada para o passo 4 está íntegro.
+- OBSERVADO: `injected_vars` no Seguimento inclui `TSV_CATALOGO_FINAL_ENC` vindo do passo 3 com hash `fnv32-4F58C3B5`.
+- OBSERVADO: DEBUG mostra `INJECT_OK` e `PLACEHOLDER_REPLACED` (6883 chars).
+- OBSERVADO: anexos obrigatórios presentes (`FLOW_TEMPLATE.csv`, `ORIENTACOES...pdf`).
+- Risco residual: baixo para receção.
+
+4.2 Preparação para a prompt seguinte
+[CONCLUSÃO:] FALHA — não há próxima prompt de negócio (STOP), mas o handoff para ação operacional (`LOAD_CSV`) falhou.
+- OBSERVADO: `CAPTURE_MISS` no passo 4; nenhuma variável ContextKV capturada.
+- OBSERVADO: OUTPUT_EXECUTE detectado (row 176), mas ficheiro CSV não resolvido (row 178).
+- INFERIDO: prontidão para consumo automático é insuficiente sem fallback robusto no orquestrador.
+
+4.3 Encadeamento e rotas
+[CONCLUSÃO:] OK com ressalva — next/default/allowed estão coerentes para terminar, mas a rota de execução real ficou incompleta.
+- OBSERVADO em catálogo: prompt 04 com `Next PROMPT: STOP`, `default: STOP`, `allowed: STOP`.
+- Handoff final: quebrado no acto de importação, não na lógica de transição.
+
+5) Contrato da Prompt (clareza operacional)
+[CONCLUSÃO:] RISCO — contrato textual é forte, mas falta robustez explícita para o parser de ficheiros do orquestrador.
+- ROLE/objetivo/limites: claros, determinísticos, anti-web, com gating de EXECUTE.
+- Regras nucleares: não-invenção operacional e critérios de bloqueio presentes.
+- Formato de output: bem definido (manifesto + EXECUTE condicional).
+- Lacuna prática observada:
+  - INFERIDO: contrato não obriga um identificador de ficheiro “consumível” pelo parser quando não há `container_file_citation`.
+  - OBSERVADO: mesmo com nomes e bytes no manifesto, o orquestrador não resolveu o CSV.
+- Exequibilidade: parcial (funciona no modelo, não fecha o circuito técnico).
+
+6) Qualidade e Robustez (PASS/FAIL)
+[CONCLUSÃO:] FAIL global — vários testes passam, mas os de produção/handoff final falham.
+- Teste | Resultado | Evidência | Impacto | Camada | Ação correctiva
+- run correcta identificada | PASS | única run `2026-03-12 1356` | baixo | operação | [manter]
+- artefactos obrigatórios encontrados | PASS | 4 artefactos + payload dumps presentes | médio | operação | [manter]
+- cobertura integral de leitura | PASS | 100% em CSV/TXT/JSON relevantes | baixo | operação | [manter]
+- prompt executada sem ambiguidade | PASS | passo 4 em Seguimento + catálogo | médio | pipeline | [manter]
+- input recebido da prompt anterior | PASS | INJECT_OK + hash no injected_vars | alto | pipeline | [manter]
+- ficheiros resolvidos/anexados corretamente (input) | PASS | `input_file` + `text_embed` no debug/payload | alto | dados/anexos | [manter]
+- integridade ContextKV/variáveis | PASS (entrada) / FAIL (saída) | entrada injectada; captura final `CAPTURE_MISS` | alto | prompt/orquestrador | [adicionar] output parseável de fallback
+- parsing de config extra | PASS | `config_parsed` sem erro bloqueante | médio | config | [manter]
+- coerência payload/request | PASS | request step4 com model/tool/input esperado | alto | orquestrador | [manter]
+- resultado HTTP e resposta | PASS técnico | HTTP 200 + resposta com manifesto | alto | API | [manter]
+- captura de output | FAIL operacional | Seguimento guarda aviso “Sem container_file_citation” | crítico | orquestrador | [substituir] parser de artefactos por fallback por nome
+- handoff para etapa seguinte/ação final | FAIL | erro row 178 resolve CSV | crítico | orquestrador | [adicionar] fallback via `FILE_CSV` + `MNT_DATA_LIST`
+- determinismo/parsing-safe do output | AMBÍGUO | manifesto existe, mas mistura links markdown | alto | prompt | [eliminar] links markdown; [adicionar] linhas-chave estáveis
+- coerência IDs/versões/placeholders | PASS | IDs consistentes no catálogo/run | médio | dados | [manter]
+- coerência next/default/allowed | PASS | STOP/STOP/STOP | médio | pipeline | [manter]
+- aderência idioma/regras/web policy | PASS | PT-PT, sem web observada | baixo | prompt | [manter]
+- segurança/segredos | PASS com ressalva | sem API key exposta; paths locais em logs | médio | operação | [reduzir] exposição de paths quando possível
+- rastreabilidade/auditabilidade | FAIL parcial | contradição Seguimento vs response_raw | alto | orquestrador | [adicionar] campo “raw_model_output_hash + motivo de substituição”
+- production-readiness | FAIL | não garante LOAD_CSV efetivo | crítico | cadeia completa | [corrigir] antes de produção
+- coerência entre artefactos | FAIL | inconsistente entre dumps e Seguimento/DEBUG final | crítico | orquestrador | [adicionar] reconciliação explícita
+
+7) Ficheiros e Anexos (técnico-operacional)
+[CONCLUSÃO:] Não production-ready — ingestão de anexos funciona, mas output CI não é consumido de forma robusta.
+- Anexos obrigatórios:
+  - FLOW_TEMPLATE.csv: OK (text_embed observado).
+  - ORIENTACOES*.pdf: OK (`file_id` observado).
+- Transporte:
+  - mode misto observado: `input_file` (`file_id`) + `text_embed`.
+- Evidência técnica:
+  - `REQ_INPUT_JSON` com `has_input_file=SIM` e `has_text_embed=SIM`.
+  - `Anexacao OK (input_file/input_image com file_id)` + `Anexacao OK via text_embed`.
+- Output files:
+  - OBSERVADO em `response_raw`: nomes + bytes de CSV e DOCX em `/mnt/data`.
+  - OBSERVADO em DEBUG: “container acessível, sem artefactos elegíveis”; apenas item `file-*` detectado.
+- Conclusão técnica: produção com ressalva não é suficiente; estado atual = não production-ready.
+
+8) Evidência de Execução (Seguimento + DEBUG em linguagem leiga)
+[CONCLUSÃO:] Há inconsistência probatória material; para factos de runtime de output, DEBUG+response_raw têm maior peso que Seguimento resumido.
+- Linha temporal resumida:
+  - 13:53:28: entrada no passo 4, inject ContextKV, parse config.
+  - 13:53:30-31: anexação OK e chamada API iniciada.
+  - 13:56:03-05: fim de API e tentativa de recolha de artefactos CI.
+  - 13:56:06: OUTPUT_EXECUTE detectado, mas CSV não resolvido.
+- Seguimento.csv (passo 4):
+  - modelo gpt-5.2, HTTP 200, file_ids usados, injected_vars presente.
+  - output guardado: aviso sem container citation (não o manifesto completo).
+- DEBUG.csv (passo 4):
+  - alerta de contrato não activo para CSV/EXECUTE.
+  - erro explícito no `LOAD_CSV` por ficheiro não resolvido (row 178).
+  - CAPTURE_MISS no fim.
+- catalogo_prompts_executadas.csv:
+  - confirma contrato textual forte e gating de EXECUTE.
+  - next/default/allowed = STOP consistente.
+- painel_pipeline.txt:
+  - confirma sequência 01->02->03->04->STOP e pastas INPUT/OUTPUT iguais.
+- Contradição principal:
+  - `response_raw` indica CSV/DOCX existentes; pipeline final diz “0 ficheiros elegíveis”.
+  - Prevalência probatória para “falha operacional”: DEBUG + efeito final (não carregou CSV).
+- Tradução leiga:
+  - “A resposta disse que criou os ficheiros, mas o mecanismo automático que os devia apanhar não os reconheceu.”
+
+9) Segurança, Privacidade e Conformidade
+[CONCLUSÃO:] Aceitável com ressalvas.
+- Segredos:
+  - Não foi observado vazamento de API key nos artefactos analisados.
+- Dados sensíveis:
+  - Logs expõem caminhos locais de Windows (operacionalmente útil; pode ser sensível em ambientes partilhados).
+- Minimização:
+  - Output sem dumps de segredo; mas há bastante detalhe técnico de path em DEBUG.
+- Boas práticas:
+  - anti-web e idioma cumpridos.
+- Desvios:
+  - rastreabilidade inconsistente de output final fragiliza conformidade operacional/auditoria.
+
+10) Decisão Operacional (Go/No-Go)
+[CONCLUSÃO:] No-Go até corrigir handoff de ficheiros CI para LOAD_CSV.
+- Decisão: No-Go.
+- Condições mínimas para avançar:
+  1) Fallback no orquestrador para resolver CSV por `FILE_CSV`/`MNT_DATA_LIST` quando não houver `container_file_citation`.
+  2) Prompt emitir identificadores de ficheiro estáveis em modo sucesso (não apenas fallback).
+  3) Revalidação com run de prova e confirmação de importação automática no Excel.
+- O que pode ficar para depois:
+  - melhoria cosmética de logs e nomenclatura (P3).
+- Responsáveis/prazo: [POR CONFIRMAR].
+- Critério de revalidação:
+  - 2 runs consecutivas com `HTTP 200` + `OUTPUT_EXECUTE` + CSV efetivamente carregado sem erro row 178.
+- Frase leiga: “Ainda não devemos usar em produção; primeiro é preciso garantir que o ficheiro final é realmente encontrado e carregado.”
+
+11) Apêndice Técnico
+[CONCLUSÃO:] A análise cumpriu cobertura integral dos artefactos relevantes e separou claramente observação vs inferência.
+- Lista de runs encontradas:
+  - `2026-03-12 1356`.
+- Lista de artefactos encontrados:
+  - DEBUG.csv, Seguimento.csv, catalogo_prompts_executadas.csv, painel_pipeline.txt, 12 ficheiros em payload_dumps.
+- Trechos curtos de evidência:
+  - DEBUG row 154: `has_input_file=SIM | has_text_embed=SIM`.
+  - DEBUG row 176: `OUTPUT_EXECUTE` detectado (`directives=1`).
+  - DEBUG row 178: `Nao foi possivel resolver ficheiro CSV`.
+  - Seguimento passo 4: output guardado `Sem container_file_citation`.
+  - response_raw step4: manifesto com `CSV_EXISTE_EM_MNT_DATA: SIM` + `EXECUTE: LOAD_CSV([...])`.
+- Checklist final (PASS/FAIL):
+  1. run mais recente confirmada: PASS
+  2. leitura integral dos artefactos obrigatórios: PASS
+  3. input da prompt anterior confirmado: PASS
+  4. output transmitível para seguinte/ação final confirmado: FAIL
+  5. coerência com objetivo global da cadeia: FAIL (parcial)
+  6. next/default/allowed sem rotas perigosas: PASS
+  7. rastreabilidade por evidência: PASS com ressalva
+  8. contradições entre artefactos identificadas: PASS
+  9. separação prompt vs config vs orquestrador vs dados: PASS
+  10. alterações propostas com valor real: PASS
+  11. prompt integral corrigida apenas com segurança razoável: PASS
+  12. verificação interna da proposta: PASS
+  13. relatório legível para leigo: PASS
