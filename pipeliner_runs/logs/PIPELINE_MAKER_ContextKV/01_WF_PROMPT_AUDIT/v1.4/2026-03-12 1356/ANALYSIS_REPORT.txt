@@ -1,0 +1,258 @@
+1) Resumo Executivo
+[CONCLUSÃO:] RISCO — a prompt-alvo executou com HTTP 200 e capturou RESULTS_JSON utilizável para o passo seguinte, mas a cadeia global da run terminou com falha operacional no passo 4 e há fragilidade de contrato/captura que exige mitigação antes de uso estável.
+- Objetivo da prompt (linguagem simples): auditar prompts recebidas e produzir um pacote estruturado (RESULTS_JSON + MEMORY_SHORT) para handoff por ContextKV.
+- Esperado vs observado (prompt-alvo):
+  - OBSERVADO: execução da prompt 01 com modelo gpt-5.4, anexos resolvidos (2 file_id + 2 text_embed), resposta 200 e captura de 2 variáveis (RESULTS_JSON, MEMORY_SHORT).
+  - OBSERVADO: passo 2 injetou RESULTS_JSON vindo do passo 1 com sucesso.
+  - OBSERVADO: campo Next prompt decidido ficou vazio no Seguimento para todos os passos.
+  - INFERIDO: o handoff mínimo da prompt 01 funcionou, mas o trilho de controlo (next/contrato) não está totalmente auditável no Seguimento.
+- Classificação final da execução da prompt-alvo: Aprovada com ressalvas.
+- Decisão operacional da prompt-alvo: Go condicionado.
+- Top riscos (reais, com impacto):
+  1. Fragilidade de captura ContextKV: MEMORY_SHORT ficou com o mesmo hash/tamanho de RESULTS_JSON (risco de parsing ambíguo).
+  2. Contrato diagnóstico desativado (SEM_CONTRATO) no passo 01, reduzindo validação formal de saída.
+  3. Campo "Next prompt decidido" vazio no Seguimento, reduzindo rastreabilidade do encadeamento.
+  4. Falha real no passo 4 (OUTPUT_EXECUTE_FILE_NOT_FOUND), comprometendo a entrega final da cadeia.
+  5. Ausência de NEXT_PROMPT_ID no output textual (dependência total de next determinístico fora do output).
+- Top ações recomendadas:
+  - P1 (ORQUESTRADOR/PIPELINE): reforçar parser de captura para labels múltiplos e multiline, evitando colisão RESULTS_JSON vs MEMORY_SHORT.
+  - P1 (ORQUESTRADOR/PIPELINE): preencher explicitamente "Next prompt decidido" em Seguimento.
+  - P1 (TEXTO DA PROMPT): exigir MEMORY_SHORT em linha única e curta para reduzir ambiguidade de captura.
+  - P2 (CONFIG EXTRA): ativar contrato diagnóstico explícito nos passos com output estruturado.
+  - P2 (ORQUESTRADOR/PIPELINE): corrigir resolução de ficheiro no OUTPUT_EXECUTE do passo 4.
+- Nota para leigo: "A primeira prompt fez o seu trabalho principal, mas há pontos técnicos de robustez e uma falha no último passo da cadeia; por isso ainda não está pronto para operação sem condições."
+
+2) Contexto na Cadeia de Prompts (visão de fluxo)
+[CONCLUSÃO:] OK com ressalvas — a run correta foi identificada sem ambiguidade e os artefactos principais foram lidos integralmente.
+2.1 Fontes e resolução da run
+[CONCLUSÃO:] OK — TARGET_PROMPT_ID válido e pasta inferida compatível com a estrutura real.
+- TARGET_PROMPT_ID validado: PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.4.
+- Normalização aplicada: <step>/<prompt_name> => <step>_<prompt_name>.
+- Pasta inferida: pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/01_WF_PROMPT_AUDIT/v1.4.
+- Runs encontradas: 2026-03-12 1345; 2026-03-12 1356.
+- Run escolhida: 2026-03-12 1356 (mais recente por ordenação temporal real).
+
+2.2 Artefactos encontrados
+[CONCLUSÃO:] OK — todos os artefactos mínimos pedidos foram encontrados.
+- Seguimento.csv (encontrado).
+- DEBUG.csv (encontrado).
+- catalogo_prompts_executadas.csv (encontrado).
+- painel_pipeline.txt (encontrado).
+- payload_dumps/* request/response/meta (encontrados para passos 1..4).
+- Evidência capture/inject ContextKV (encontrada em DEBUG + Seguimento).
+- Evidência files_used/files_ops/file_ids (encontrada em Seguimento + DEBUG).
+
+2.3 Cobertura de leitura por artefacto
+[CONCLUSÃO:] OK — cobertura 100% dos artefactos textuais da run analisada.
+- DEBUG.csv: 100% (907 registos lógicos; 1921 linhas físicas por campos multiline).
+- Seguimento.csv: 100% (4 registos lógicos).
+- catalogo_prompts_executadas.csv: 100% (20 registos lógicos; bloco da prompt-alvo e blocos seguintes).
+- painel_pipeline.txt: 100%.
+- payload_dumps/*.json e *.txt: 100% (12 ficheiros lidos).
+
+2.4 Papel da prompt na cadeia e impacto global
+[CONCLUSÃO:] OK com ressalvas — passo 1 de 4 entregou input útil ao passo 2, mas a cadeia global falhou no passo 4.
+- Papel observável: Passo 1/4 (auditoria e geração de RESULTS_JSON).
+- Dependência da prompt anterior: não aplicável (primeiro passo).
+- Entregáveis para a seguinte: RESULTS_JSON capturado e injetado no passo 2.
+- Resposta explícita: "Se esta prompt falhar parcialmente, o processo global ainda serve o objetivo final?"
+  - INFERIDO: Parcialmente. Se falhar o RESULTS_JSON, a cadeia quebra cedo; nesta run o passo 1 funcionou, mas o objetivo final falhou por erro no passo 4.
+
+3) I/O de Negócio (o que entra e o que sai)
+[CONCLUSÃO:] OK com RISCO — input/output principal funcionou, mas há sinais de fragilidade no contrato de saída capturada.
+3.1 Entradas esperadas vs observadas
+[CONCLUSÃO:] OK — os inputs declarados foram resolvidos conforme esperado.
+- Esperado (prompt): FORMULARIO_DE_PROMPTS*.docx (as pdf), ORIENTACOES_PIPELINE*.pdf, PROMPT_TEMPLATE*.csv, FLOW_TEMPLATE*.csv.
+- OBSERVADO:
+  - file_id: FORMULARIO...docx convertido via PDF cache e ORIENTACOES...pdf.
+  - text_embed: PROMPT_TEMPLATE.csv e FLOW_TEMPLATE.csv.
+  - REQ_INPUT_JSON com has_input_file=SIM e has_text_embed=SIM.
+
+3.2 Saídas esperadas vs observadas
+[CONCLUSÃO:] OK com ressalvas — RESULTS_JSON foi produzido/capturado; MEMORY_SHORT teve indício de captura inconsistente.
+- Esperado: RESULTS_JSON (1 linha minificada) + MEMORY_SHORT.
+- OBSERVADO:
+  - Output textual contém RESULTS_JSON e MEMORY_SHORT.
+  - captured_vars tem keys=2 (RESULTS_JSON, MEMORY_SHORT).
+  - captured_vars_meta mostra chars/hash iguais para ambas (indício de colisão de captura).
+
+3.3 Critérios de sucesso/falha
+[CONCLUSÃO:] OK — sucesso da prompt-alvo cumprido; falha global da cadeia fora desta prompt.
+- Sucesso da prompt-alvo: HTTP 200, output com RESULTS_JSON, captura e injeção no passo 2.
+- Falha/paragem global: erro no passo 4 ao resolver ficheiro LOAD_CSV.
+- Tradução leiga: "A primeira etapa entregou o pacote, mas a etapa final não conseguiu materializar o ficheiro pedido."
+
+4) Integridade de Handoff (prompt anterior -> atual -> próxima)
+[CONCLUSÃO:] FRÁGIL — handoff de conteúdo crítico funcionou, porém metadados/contrato têm lacunas.
+4.1 Receção da prompt anterior
+[CONCLUSÃO:] OK (não aplicável) — esta prompt é o primeiro passo.
+- Variáveis esperadas/recebidas: não aplicável.
+- Ficheiros esperados/resolvidos: resolvidos com sucesso (required=SIM e status=OK).
+- Risco para a prompt atual: baixo nesta run.
+
+4.2 Preparação para a prompt seguinte
+[CONCLUSÃO:] OK com RISCO — RESULTS_JSON foi transmitido e consumido no passo 2; MEMORY_SHORT tem qualidade duvidosa.
+- OBSERVADO: INJECT_OK|RESULTS_JSON no passo 2, origem passo 1.
+- OBSERVADO: passo 2 capturou novas variáveis e prosseguiu.
+- Risco de quebra silenciosa: médio (captura de MEMORY_SHORT aparentemente colidida com RESULTS_JSON).
+
+4.3 Encadeamento e rotas
+[CONCLUSÃO:] FRÁGIL — rota executada existiu, mas não ficou espelhada no campo de next do Seguimento.
+- Coerência next/default/allowed no catálogo da prompt 01: Next = passo 02; default = passo 02; allowed = STOP + passo 02.
+- OBSERVADO: "Next prompt decidido" vazio no Seguimento (passos 1..4).
+- Conclusão de handoff: robusto no payload de dados, frágil na auditabilidade da decisão de rota.
+
+5) Contrato da Prompt (clareza operacional)
+[CONCLUSÃO:] OK com melhorias — contrato é forte, mas há ambiguidade prática para captura de MEMORY_SHORT.
+- ROLE/objetivo/limites: claros e orientados a não invenção, anti-injection e idioma PT-PT.
+- Regras nucleares: explícitas (não inventar, web proibida, consistência transversal).
+- Formato de output: definido (RESULTS_JSON + MEMORY_SHORT).
+- [POR CONFIRMAR]: governança de validação humana final não está explícita nos logs.
+- Exequibilidade: alta; execução real confirmou viabilidade.
+- Ambiguidade perigosa identificada: MEMORY_SHORT multiline pode degradar parser key_colon_line em alguns cenários.
+
+6) Qualidade e Robustez (PASS/FAIL)
+[CONCLUSÃO:] PASS PARCIAL — prompt-alvo passa nos critérios essenciais, com falhas/ambiguidade em rastreabilidade e contrato técnico.
+| Teste | Resultado | Evidência | Impacto | Camada de correção | Ação corretiva |
+|---|---|---|---|---|---|
+| run correcta identificada | PASS | runs 1345 e 1356; escolhida 1356 por recência | baixo | operação | [adicionar] registo automático da regra de seleção no relatório de run |
+| artefactos obrigatórios encontrados | PASS | Seguimento, DEBUG, catálogo, painel, payload_dumps presentes | baixo | operação | [manter] |
+| cobertura integral de leitura | PASS | leitura integral de todos os ficheiros textuais da run | baixo | operação | [manter] |
+| prompt executada sem ambiguidade | PASS | Passo 1 com Prompt ID alvo e HTTP 200 | alto (positivo) | orquestrador | [manter] |
+| input recebido da prompt anterior | PASS (N/A) | passo inicial da cadeia | baixo | n/a | [manter] |
+| ficheiros resolvidos/anexados | PASS | FILES_ITEM_TRACE status=OK; REQ_INPUT_JSON has_input_file=SIM | médio (positivo) | orquestrador | [manter] |
+| integridade ContextKV/variáveis | AMBÍGUO | CAPTURE_OK keys=2 mas meta de MEMORY_SHORT colide com RESULTS_JSON | médio | orquestrador | [substituir] parser de captura por extração delimitada por labels e fronteiras |
+| parsing config extra | PASS | config_parsed sem erro; JSON convertido válido | baixo | orquestrador | [manter] |
+| coerência payload/request | PASS | request step1 com model/store/instructions/truncation/metadata e inputs | médio | orquestrador | [manter] |
+| resultado HTTP e resposta | PASS | M05_HTTP_RESULT e response status completed | alto (positivo) | orquestrador | [manter] |
+| captura de output | PASS com ressalvas | CAPTURE_OK no passo 1; colisão de meta em MEMORY_SHORT | médio | orquestrador + prompt | [adicionar] MEMORY_SHORT em linha única |
+| handoff para etapa seguinte | PASS | INJECT_OK|RESULTS_JSON no passo 2 | alto (positivo) | orquestrador | [manter] |
+| determinismo/parsing-safe output | AMBÍGUO | RESULTS_JSON minificado OK; MEMORY_SHORT multiline | médio | texto da prompt | [substituir] formato MEMORY_SHORT para 1 linha |
+| coerência IDs/versões/placeholders | AMBÍGUO | id gerado no JSON: WF_PROMPT_AUDIT_v1.4 (não formato catálogo completo) | médio | texto da prompt | [adicionar] regra explícita do formato de ID completo |
+| coerência next/default/allowed | PASS (catálogo) / FAIL (seguimento) | catálogo coerente; campo next decidido vazio | médio | orquestrador | [adicionar] preenchimento obrigatório de next decidido |
+| aderência idioma/regras/web policy | PASS | output em PT-PT; sem citação web | baixo | prompt | [manter] |
+| segurança e exposição de segredos | PASS com ressalvas | OPENAI_API_KEY aparece apenas como validação técnica; sem segredo explícito | médio | orquestrador | [manter] mascaramento rigoroso |
+| rastreabilidade e auditabilidade | AMBÍGUO | next vazio + contrato sem diagnóstico forte | médio | config/orquestrador | [adicionar] contrato diagnóstico e next efetivo |
+| production-readiness | FAIL (cadeia global) | erro OUTPUT_EXECUTE_FILE_NOT_FOUND no passo 4 | alto | orquestrador | [corrigir] resolução de artefacto LOAD_CSV |
+| coerência entre artefactos | AMBÍGUO | output contém MEMORY_SHORT curto; captured meta aponta cópia de RESULTS_JSON | médio | orquestrador | [corrigir] mecanismo capture key_colon_line |
+
+7) Ficheiros e Anexos (técnico-operacional)
+[CONCLUSÃO:] production-ready com ressalvas para a prompt 01; não production-ready para a cadeia completa desta run.
+- Anexos obrigatórios do passo 01: OK.
+  - FORMULARIO...docx -> PDF cache hit + reuse file_id.
+  - ORIENTACOES...pdf -> reuse file_id.
+  - PROMPT_TEMPLATE.csv e FLOW_TEMPLATE.csv -> text_embed.
+- Modo de transporte observado: híbrido file_id + text_embed.
+- Compatibilidade e riscos:
+  - PDF cache e reuse funcionaram.
+  - text_embed foi aplicado com rastreio de tamanho/hash.
+  - [POR CONFIRMAR] duplicidade de hash_short em TEXT_EMBED_TRACE do mesmo ficheiro (duas entradas) sem erro.
+- Evidência files_used/files_ops/file_ids/capture/inject: presente em Seguimento e DEBUG.
+- Conclusão técnica: passo 01 pronto com ressalvas; run global não pronta por falha no passo 4.
+
+8) Evidência de Execução (Seguimento + DEBUG em linguagem leiga)
+[CONCLUSÃO:] RISCO controlado no passo 01; FALHA material no passo 4.
+8.1 Linha temporal resumida
+[CONCLUSÃO:] OK — cronologia consistente entre logs.
+- 13:49:30–13:49:33: preparação, anexação e payload do passo 01.
+- 13:50:26: resposta HTTP 200 + captura ContextKV do passo 01.
+- 13:50:xx–13:53:xx: passos 2 e 3 com injeção/captura bem-sucedidas.
+- 13:56:03+: passo 4 encontra OUTPUT_EXECUTE, mas falha ao resolver ficheiro CSV.
+
+8.2 Leitura de Seguimento.csv
+[CONCLUSÃO:] OK com lacunas de auditoria.
+- Mostra 4 passos, todos HTTP 200, com texto da prompt, config e variáveis capturadas/injetadas.
+- Para passo 01: response_id presente, files_used completo, captured_vars inclui RESULTS_JSON e MEMORY_SHORT.
+- Inconsistência: coluna "Next prompt decidido" vazia em todos os passos.
+
+8.3 Leitura de DEBUG.csv
+[CONCLUSÃO:] Forte para evidência técnica — contém eventos FILES, payload, HTTP, contrato e captura.
+- Passo 01:
+  - FILES_ITEM_TRACE status=OK para os 4 anexos.
+  - REQ_INPUT_JSON confirma estrutura com input_file e text_embed.
+  - M05_HTTP_RESULT confirma sucesso da chamada API.
+  - CONTRACT_* informa "SEM_CONTRATO" (informativo, não bloqueante).
+  - CAPTURE_OK confirma extração de 2 keys.
+- Falhas/alertas-chave fora da prompt 01:
+  - OUTPUT_EXECUTE_FILE_NOT_FOUND no passo 4 (erro real da cadeia).
+
+8.4 Análise de catalogo_prompts_executadas.csv e painel_pipeline.txt
+[CONCLUSÃO:] OK — confirmam desenho da cadeia e encadeamento esperado.
+- Catálogo confirma next/default/allowed da prompt 01 para o passo 02.
+- Painel confirma pipeline com 4 prompts + STOP.
+
+8.5 Contradições e peso probatório
+[CONCLUSÃO:] INCONSISTÊNCIA identificada — prevalece DEBUG/response_raw sobre interpretação superficial do Seguimento.
+- Inconsistência A: Seguimento "Next prompt decidido" vazio vs execução efetiva de passos 2/3/4.
+  - Prevalece evidência combinada DEBUG (INJECT_OK subsequente) + presença dos passos seguintes.
+- Inconsistência B: MEMORY_SHORT textual curto no response_raw vs meta de captura com chars/hash iguais a RESULTS_JSON.
+  - Prevalece response_raw para conteúdo verdadeiro; meta indica bug/fragilidade de captura.
+- Tradução sem jargão: "Os dados essenciais passaram, mas parte do registo automático está imprecisa."
+
+9) Segurança, Privacidade e Conformidade
+[CONCLUSÃO:] aceitável com ressalvas.
+- Exposição de segredos:
+  - Não foi encontrado segredo em claro nos artefactos da run.
+  - Existe referência técnica a OPENAI_API_KEY como verificação/configuração.
+- Dados sensíveis em log:
+  - Paths locais do Windows aparecem em DEBUG (aceitável operacionalmente, mas convém avaliar minimização).
+- Minimização de dados:
+  - Logs técnicos são detalhados; para operação produtiva recomenda-se reduzir detalhes não essenciais em ambientes partilhados.
+- Storage/retenção observável:
+  - store=True no request da prompt 01.
+- Conclusão: aceitável com ressalvas de minimização e hygiene de logs.
+
+10) Decisão Operacional (Go/No-Go)
+[CONCLUSÃO:] Go condicionado para a prompt 01; No-Go para esta run como prova de cadeia ponta-a-ponta.
+- Decisão:
+  - Prompt 01 isolada: Go condicionado.
+  - Cadeia completa nesta run: No-Go.
+- Condições mínimas para avançar:
+  1. Corrigir OUTPUT_EXECUTE_FILE_NOT_FOUND no passo 4.
+  2. Corrigir captura ContextKV para evitar colisão MEMORY_SHORT/RESULTS_JSON.
+  3. Garantir preenchimento de "Next prompt decidido" no Seguimento.
+- O que pode ficar para depois:
+  - Ajustes cosméticos de relatório e detalhe de logs (P3).
+- Responsáveis/prazo: [POR CONFIRMAR] (não observável nos artefactos).
+- Critério de revalidação:
+  - Reexecutar cadeia completa e verificar: sem erros ERRO/FAIL, next preenchido, capture meta coerente por key.
+- Resposta curta para leigo:
+  - "A primeira prompt pode ser usada com cautela, mas o processo completo ainda não pode."
+
+11) Apêndice Técnico
+[CONCLUSÃO:] OK — checklist final cumprida com ressalvas explicitadas.
+11.1 Mapeamento de variáveis e handoff
+[CONCLUSÃO:] OK com ressalvas.
+- Passo 01 captura: RESULTS_JSON, MEMORY_SHORT.
+- Passo 02 injeta: RESULTS_JSON (from_step=1).
+- Passo 03 injeta: TSV_CATALOGO_DRAFT_ENC (from_step=2).
+- Passo 04 injeta: TSV_CATALOGO_FINAL_ENC (from_step=3).
+
+11.2 Trechos curtos de evidência
+[CONCLUSÃO:] OK.
+- DEBUG row 28: REQ_INPUT_JSON has_input_file=SIM; has_text_embed=SIM.
+- DEBUG row 37: M05_HTTP_RESULT com response_id do passo 01.
+- DEBUG row 44: CAPTURE_OK Keys=2.
+- DEBUG row 51: INJECT_OK|RESULTS_JSON from_step=1.
+- DEBUG row 178: ERRO OUTPUT_EXECUTE_FILE_NOT_FOUND (passo 4).
+
+11.3 Lista de runs e artefactos
+[CONCLUSÃO:] OK.
+- Runs no diretório v1.4: 2026-03-12 1345; 2026-03-12 1356.
+- Artefactos da run 1356: DEBUG.csv, Seguimento.csv, catalogo_prompts_executadas.csv, painel_pipeline.txt, payload_dumps (12 ficheiros).
+
+11.4 Checklist final obrigatória (PASS/FAIL)
+[CONCLUSÃO:] PASS com ressalvas.
+1. confirmei a run mais recente ou justifiquei URL_RUN_FIXA: PASS
+2. li integralmente os artefactos obrigatórios ou assinalei o que faltou: PASS
+3. confirmei input da prompt anterior: PASS (N/A para passo 1)
+4. confirmei output transmitível para a seguinte: PASS
+5. confirmei coerência com o objetivo global da cadeia: PASS
+6. confirmei next/default/allowed sem rotas perigosas: PASS com ressalva (campo next vazio em Seguimento)
+7. confirmei rastreabilidade por evidência: PASS
+8. identifiquei contradições entre artefactos: PASS
+9. separei problemas de prompt vs config vs orquestrador vs dados: PASS
+10. só propus alterações com valor real: PASS
+11. produzi prompt integral corrigida apenas se era seguro fazê-lo: PASS
+12. fiz verificação interna da minha própria proposta: PASS
+13. o relatório está legível para um leigo: PASS
