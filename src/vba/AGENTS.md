@@ -624,3 +624,5 @@ Se começar a ficar demasiado grande:
 - Em mensagens de progresso no PAINEL, separar semântica de execução interna vs planeamento: `Step x of y` deve refletir um plano dinâmico de fases internas da prompt atual (núcleo fixo + fases condicionais), enquanto `Row n of z (pipeline)` representa a posição da lista planeada na coluna INICIAR.
 
 - Em rotinas com `Option Explicit`, declarar explicitamente as variáveis de output passadas por referência para helpers (ex.: flags/linhas retornadas por `...Determinar...`) antes do primeiro uso; confiar em criação implícita leva a `Compile error: Variable not defined`.
+
+- Em composições de timestamp para paths remotos de auditoria Git, usar minutos (`hhmm`) em vez de dia (`hhdd`) no sufixo horário; `hhdd` reduz unicidade e mistura semânticas de data/hora no nome da pasta.

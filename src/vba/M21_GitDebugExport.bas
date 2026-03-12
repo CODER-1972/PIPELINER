@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-12 | Codex | Corrige timestamp de run folder para hora:minuto
+'   - Substitui formato `hhdd` por `hhmm` na composicao do `RUN_STAMP` usado na pasta remota.
+'   - Alinha o nome da pasta com granularidade temporal esperada para organizacao no GitHub.
 ' - 2026-03-12 | Codex | Espelha estado do upload Git na folha GIT LOG
 '   - Regista eventos GH_UPLOAD_DONE/GH_UPLOAD_FAILED via `GitLog_AppendEvent` para rastreabilidade da run.
 '   - Mantem fluxo de upload inalterado e nao bloqueante em caso de falha no log auxiliar.
@@ -69,7 +72,7 @@ Option Explicit
 ' - 2026-03-08 | Codex | Ajusta template default da pasta GitHub para hierarquia pipeline/prompt/versao
 '   - Define default de run folder como {{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{RUN_STAMP}}.
 '   - Extrai prompt/version a partir do primeiro Prompt ID da lista da pipeline no PAINEL (com fallback seguro).
-'   - Adiciona placeholder {{YYYY-MM-DD HHDD}} por compatibilidade com templates legados de timestamp.
+'   - Adiciona placeholder {{YYYY-MM-DD HHMM}} por compatibilidade com templates legados de timestamp.
 ' - 2026-03-08 | Codex | Alerta explicito quando GH_API_VERSION e normalizado
 '   - Emite GH_CONFIG (ALERTA) quando valor em Config nao estiver no formato canonico yyyy-mm-dd.
 '   - Mostra raw/normalizado no detalhe para diagnostico rapido sem interromper o fluxo.
@@ -160,7 +163,7 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     End If
 
     Dim runStampHhdd As String
-    runStampHhdd = Format$(Now, "yyyy-mm-dd") & " " & Format$(Now, "hhdd")
+    runStampHhdd = Format$(Now, "yyyy-mm-dd") & " " & Format$(Now, "hhmm")
 
     Dim remoteFolders As Collection
     Set remoteFolders = GitDebug_BuildRemoteFoldersForPipeline(cfg, pipelineNome, pipelineIndex, runStampHhdd)
@@ -313,7 +316,7 @@ Private Function GitDebug_BuildRunFolder(ByVal cfg As Object, ByVal pipelineNome
     safeVersion = GitDebug_SanitizePathPart(GitDebug_PromptVersionFromId(firstPromptId))
 
     Dim runStampHhdd As String
-    runStampHhdd = Format$(Now, "yyyy-mm-dd") & " " & Format$(Now, "hhdd")
+    runStampHhdd = Format$(Now, "yyyy-mm-dd") & " " & Format$(Now, "hhmm")
 
     GitDebug_BuildRunFolder = GitDebug_SanitizePathTemplate( _
         safePipeline & "/" & safePromptName & "/" & safeVersion & "/" & runStampHhdd)
@@ -1375,7 +1378,7 @@ Private Function GitDebug_Config_Definitions() As Collection
     Call GitDebug_Config_Add(defs, "GH_BINARY_MODE", "base64", "Encoding recomendado para ficheiros binarios.", "base64")
 
     Call GitDebug_Config_Add(defs, "GH_BASE_PATH", "pipeliner_runs", "Pasta base no repo para agrupar execucoes.", "path relativo sem / inicial")
-    Call GitDebug_Config_Add(defs, "GH_RUN_FOLDER_TEMPLATE", "{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}", "Template de referencia da subpasta do run (estrutura canonica obrigatoria).", "formato fixo: {{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}")
+    Call GitDebug_Config_Add(defs, "GH_RUN_FOLDER_TEMPLATE", "{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHMM}}", "Template de referencia da subpasta do run (estrutura canonica obrigatoria).", "formato fixo: {{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHMM}}")
     Call GitDebug_Config_Add(defs, "GH_LOG_FOLDER", "logs", "Subpasta para logs complementares (quando aplicavel).", "path relativo")
 
     Call GitDebug_Config_Add(defs, "GH_RETRY_ON_CONFLICT", "true", "Se true, tenta novamente quando o HEAD muda durante commit.", "true | false")

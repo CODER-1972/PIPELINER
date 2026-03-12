@@ -119,7 +119,7 @@ Também suporta exportação opcional de debug para GitHub (Git Data API) no fim
 - publicação de `DEBUG.csv`, `catalogo_prompts_executadas.csv`, `Seguimento.csv` e `painel_pipeline.txt`;
 - quando existirem dumps da run, publicação adicional em `payload_dumps/` (ex.: `step001_<timestamp>_<prompt>_request_payload_raw.json`, `..._response_raw.json`, `..._meta.txt`) para troubleshooting detalhado por passo;
 - `catalogo_prompts_executadas.csv` espelha o layout físico do catálogo: colunas A:K e blocos de 5 linhas por prompt (linha principal + `Next PROMPT`/`default`/`allowed` + linha em branco), preservando `Descrição textual`, `INPUTS` e `OUTPUTS`;
-- composição da pasta remota por run em `GH_BASE_PATH/GH_LOG_FOLDER/<run_folder>`, onde `<run_folder>` por default segue `{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}`;
+- composição da pasta remota por run em `GH_BASE_PATH/GH_LOG_FOLDER/<run_folder>`, onde `<run_folder>` por default segue `{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHMM}}`;
 - quando uma execução tem múltiplas prompts, o runtime cria/publica uma pasta por prompt executada (mesmo `RUN_STAMP`), em vez de concentrar tudo apenas na pasta da primeira prompt;
 - quando o Prompt ID segue `<Folha>/<ordem>/<nomeCurto>/<versão>`, o runtime deriva `PROMPT_NAME` como `<ordem>_<nomeCurto>` (ex.: `PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.4` -> `01_WF_PROMPT_AUDIT`) e `VERSION` como `v1.4`;
 - na recolha de prompts executadas em `Seguimento`, o runtime normaliza `pipeline_name` (trim + CR/LF/TAB/NBSP + case-insensitive) para evitar perda de passos por variações invisíveis;
@@ -130,7 +130,7 @@ Também suporta exportação opcional de debug para GitHub (Git Data API) no fim
 - após `GH_UPLOAD_DONE`, o runtime faz uma republicação final apenas de `DEBUG.csv` para aproximar o artefacto remoto ao estado final da folha `DEBUG` no fim da rotina.
 - em cada execução de upload Git, o DEBUG regista a fonte do token (`token_source`) e a `path` de cada ficheiro enviado.
 - publicação de `DEBUG.csv`, `catalogo_prompts_executadas.csv`, `Seguimento.csv` e `painel_pipeline.txt`;
-- composição da pasta remota por run em `GH_BASE_PATH/GH_LOG_FOLDER/<run_folder>`, onde `<run_folder>` segue obrigatoriamente `{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}`;
+- composição da pasta remota por run em `GH_BASE_PATH/GH_LOG_FOLDER/<run_folder>`, onde `<run_folder>` segue obrigatoriamente `{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHMM}}`;
 - atualização da coluna `GIT_DEBUG` nas folhas `Seguimento` e `HISTÓRICO` com o link da pasta remota.
 - no arranque/fim do export, o DEBUG regista INFO/ALERTA para `run_folder`, `remote_folder` e gravação de link em `Seguimento/HISTÓRICO`.
 - macro `GitDebug_Config_InstalarParametros` para preencher/atualizar na folha `Config` as chaves `GH_*` com `default`, explicação pedagógica (coluna C) e valores/intervalos possíveis (coluna E), sem forçar overwrite dos valores atuais por defeito.
@@ -179,7 +179,7 @@ No `contents_api`, o runtime tambem suporta delete por linha na folha `GIT LOG` 
 | `GH_COMMIT_MESSAGE_TEMPLATE` | `PIPELINER run {{RUN_ID}}` | template com placeholders |
 | `GH_BASE_PATH` | `pipeliner_runs` | path relativo sem `/` inicial |
 | `GH_LOG_FOLDER` | `logs` | subpasta relativa (ex.: `logs`) |
-| `GH_RUN_FOLDER_TEMPLATE` | `{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHDD}}` | formato canónico aplicado pelo runtime (compatível com organização de pastas por pipeline/prompt/versão/data) |
+| `GH_RUN_FOLDER_TEMPLATE` | `{{PIPELINE_NAME}}/{{PROMPT_NAME}}/{{VERSION}}/{{YYYY-MM-DD HHMM}}` | formato canónico aplicado pelo runtime (compatível com organização de pastas por pipeline/prompt/versão/data) |
 | `GH_API_VERSION` | `2022-11-28` | formato `YYYY-MM-DD` |
 | `GH_USER_AGENT` | `PIPELINER-VBA` | texto não vazio |
 | `GH_FORCE_UPDATE` | `false` | `true` ou `false` |
