@@ -102,6 +102,7 @@ Comportamentos esperados:
 - no formato `Step x of y`, o `y` mostra o total planeado da lista ativa no PAINEL (`Row n de z`) e não apenas o limite técnico de `Max Steps`.
 - durante cada passo, a status bar inclui fase operacional antes da execução (ex.: `A preparar passo`, `Uploading file`, `A executar prompt`).
 - a status bar também mostra a posição da lista no PAINEL no formato `Row n de z` e inclui o `Prompt ID` completo em execução antes do detalhe da fase (ex.: `... | Row 5 de 6 | PIPELINE_MAKER/01/WF_PROMPT_AUDIT/v1.3 | A executar prompt`).
+- o campo `Retry` da status bar representa o acumulado de **novas tentativas HTTP** (retries reais) realizadas pelo motor da API no run atual; não conta a primeira tentativa bem-sucedida de cada passo.
 
 ## 3.2 Config
 

@@ -8,6 +8,9 @@ Option Explicit
 ' - Evitar estruturas ad-hoc e manter contratos internos explicitos.
 '
 ' Atualizacoes:
+' - 2026-03-12 | Codex | Explicita metrica de tentativas/retries no contrato da API
+'   - Acrescenta `apiAttemptCount` e `retryCount` ao tipo `ApiResultado` para transportar contagem real de novas tentativas HTTP.
+'   - Mantem compatibilidade retroativa: defaults continuam zero quando nao ha retry.
 ' - 2026-02-12 | Codex | Implementacao do padrao de header obrigatorio
 '   - Adiciona proposito, historico de alteracoes e inventario de rotinas publicas.
 '   - Mantem documentacao tecnica do modulo alinhada com AGENTS.md.
@@ -41,6 +44,8 @@ Public Type ApiResultado
     responseId As String
     outputText As String
     rawResponseJson As String
+    apiAttemptCount As Long
+    retryCount As Long
     Erro As String
 End Type
 

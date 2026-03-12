@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-12 | Codex | Retry da status bar passa a refletir novas tentativas reais de API
+'   - Substitui contador de chamadas por acumulador de retries reais devolvidos pelo M05 (`ApiResultado.retryCount`).
+'   - Mantem formato visual da barra e atualiza o valor apos cada resposta recebida.
 ' - 2026-03-11 | Codex | Ativa bootstrap da folha GIT LOG no arranque da pipeline
 '   - Quando o toggle Git LOG estiver ON, chama `GitLog_EnsureSheet` antes da execucao para garantir schema base da folha.
 '   - Em falha de inicializacao, regista ALERTA no DEBUG e segue o run sem bloquear a pipeline.
@@ -842,8 +845,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     Dim inicioHHMM As String
     inicioHHMM = Format$(Now, "hh:nn")
 
-    Dim execCount As Long
-    execCount = 0
+    Dim retryCountTotal As Long
+    retryCountTotal = 0
 
     mStepLastStage = "pipeline_start"
 
@@ -881,7 +884,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         If rowTotal < rowPos Then rowTotal = rowPos
         stepTotalVisivel = Painel_TotalVisivelStep(maxSteps, rowTotal, passo)
 
-        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "A preparar passo", rowPos, rowTotal, atual)
+        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, retryCountTotal, "A preparar passo", rowPos, rowTotal, atual)
         Call Painel_LogStepStage(passo, atual, "enter_step", "row=" & CStr(rowPos) & "/" & CStr(rowTotal))
         Call Painel_LogStepStage(passo, atual, "before_context_inject", "")
         DoEvents
@@ -1009,7 +1012,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         Dim okFiles As Boolean
         tMark = Timer
         If promptTemFiles Then
-            Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "Uploading file", rowPos, rowTotal, prompt.Id)
+            Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, retryCountTotal, "Uploading file", rowPos, rowTotal, prompt.Id)
             Call Painel_LogStepStage(passo, prompt.Id, "files_prepare_start", "temFiles=SIM")
             DoEvents
 
@@ -1116,7 +1119,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         End If
 
         Call Painel_LogStepStage(passo, prompt.Id, "api_call_start", "model=" & modeloUsado)
-        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "A executar prompt", rowPos, rowTotal, prompt.Id)
+        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, retryCountTotal, "A executar prompt", rowPos, rowTotal, prompt.Id)
         DoEvents
 
         Dim debugFingerprintSeed As String
@@ -1131,8 +1134,8 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         apiCallMs = CLng((Timer - tMark) * 1000)
         If apiCallMs < 0 Then apiCallMs = 0
 
-        execCount = execCount + 1
-        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, execCount, "Resposta recebida", rowPos, rowTotal, prompt.Id)
+        retryCountTotal = retryCountTotal + resultado.retryCount
+        Call Painel_StatusBar_Set(inicioHHMM, passo, stepTotalVisivel, retryCountTotal, "Resposta recebida", rowPos, rowTotal, prompt.Id)
         DoEvents
 
                 ' -------------------------------
@@ -1594,7 +1597,7 @@ Private Function Painel_TotalVisivelStep(ByVal maxSteps As Long, ByVal rowTotal 
     Painel_TotalVisivelStep = total
 End Function
 
-Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long, ByVal total As Long, ByVal execCount As Long, Optional ByVal detalhe As String = "", Optional ByVal rowPos As Long = 0, Optional ByVal rowTotal As Long = 0, Optional ByVal promptId As String = "")
+Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long, ByVal total As Long, ByVal retryCount As Long, Optional ByVal detalhe As String = "", Optional ByVal rowPos As Long = 0, Optional ByVal rowTotal As Long = 0, Optional ByVal promptId As String = "")
     On Error Resume Next
 
     Dim passoTxt As String
@@ -1618,7 +1621,7 @@ Private Sub Painel_StatusBar_Set(ByVal inicioHHMM As String, ByVal passo As Long
         rowLabel = "  |  Row " & CStr(rowPos) & " de " & CStr(rowTotal)
     End If
 
-    Application.StatusBar = "(" & inicioHHMM & ") Step: " & passoTxt & " of " & CStr(total) & "  |  Retry: " & CStr(execCount) & _
+    Application.StatusBar = "(" & inicioHHMM & ") Step: " & passoTxt & " of " & CStr(total) & "  |  Retry: " & CStr(retryCount) & _
                             rowLabel & IIf(promptIdLimpo = "", "", "  |  " & promptIdLimpo) & _
                             IIf(detalheLimpo = "", "", "  |  " & detalheLimpo)
     On Error GoTo 0
