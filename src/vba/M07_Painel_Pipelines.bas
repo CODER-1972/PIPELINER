@@ -185,6 +185,14 @@ Private Const LIST_START_ROW As Long = 10
 Private Const LIST_MAX_ROWS As Long = 40
 
 Private Const PIPELINES As Long = 10
+Private Const STEP_INTERNAL_TOTAL As Long = 7
+Private Const STEP_INTERNAL_PREP As Long = 1
+Private Const STEP_INTERNAL_CONTEXT As Long = 2
+Private Const STEP_INTERNAL_FILES As Long = 3
+Private Const STEP_INTERNAL_REQUEST_READY As Long = 4
+Private Const STEP_INTERNAL_API_CALL As Long = 5
+Private Const STEP_INTERNAL_RESPONSE As Long = 6
+Private Const STEP_INTERNAL_COMPLETED As Long = 7
 
 Private mStepLastStage As String
 
@@ -1234,6 +1242,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
             textoSeguimento, pipelineNome, "", filesUsedResumo, filesOpsResumo, fileIds)
         Call Painel_GitLog_RegisterStepExecution(pipelineNome, prompt.Id, resultado, textoSeguimento, runToken)
         Call Painel_LogStepStage(passo, prompt.Id, "step_completed", "http=" & CStr(resultado.httpStatus) & " | response_id=" & Left$(Trim$(resultado.responseId), 24))
+        Call Painel_StatusBar_Set(inicioHHMM, STEP_INTERNAL_COMPLETED, STEP_INTERNAL_TOTAL, retryCountTotal, "Passo concluido", rowPos, rowTotal, prompt.Id)
 
         ' ================================
         ' CONTEXTKV - REGISTAR + CAPTURAR
