@@ -4,11 +4,15 @@ Option Explicit
 ' =============================================================================
 ' Modulo: M28_GitLog
 ' Proposito:
-' - Escrever entradas de execucao Git LOG no topo da folha HISTORICO.
+' - Escrever entradas de execucao Git LOG no topo da folha de log (linha 2).
 ' - Separar visualmente runs distintas sem quebrar a continuidade entre prompts da mesma run.
 ' - Persistir metadado de run por linha atraves de coluna auxiliar oculta.
 '
 ' Atualizacoes:
+' - 2026-03-12 | Codex | Diagnostico e resolucao robusta da folha alvo do Git LOG
+'   - Passa a resolver folha alvo por candidatos: "GIT LOG", "GIT_LOG", "HISTORICO" e "HISTÃ“RICO".
+'   - Adiciona GitLog_DiagnoseTarget para registar diagnostico acionavel no DEBUG quando nao houver escrita.
+'   - Exponibiliza estado de sucesso/falha em GitLog_InsertEntryTop e GitLog_InsertRunSeparatorIfNeeded.
 ' - 2026-03-11 | Codex | Cria modulo de insercao top-down para Git LOG por run
 '   - Implementa separador de run (linha preta com 6 pt) apenas quando a run muda.
 '   - Implementa insercao no topo (linha 2), empurrando historico para baixo.
@@ -16,23 +20,79 @@ Option Explicit
 '   - Garante timestamp textual no formato `yyyy-mm-dd hh:mm`.
 '
 ' Funcoes e procedimentos:
-' - GitLog_InsertRunSeparatorIfNeeded(runId As String)
+' - GitLog_DiagnoseTarget(ByRef detail As String) As Boolean
+'   - Valida e descreve a folha alvo/cabecalhos para troubleshooting.
+' - GitLog_InsertRunSeparatorIfNeeded(runId As String, ...)
 '   - Insere linha separadora no topo quando a run corrente difere da ultima run registada.
 ' - GitLog_InsertEntryTop(...)
 '   - Escreve entrada na linha 2 e garante metadados/continuidade do bloco da run.
 ' =============================================================================
 
-Private Const GITLOG_SHEET As String = "HISTORICO"
 Private Const GITLOG_META_HEADER As String = "__RUN_ID_META"
 Private Const GITLOG_TOP_ROW As Long = 2
 Private Const GITLOG_SEPARATOR_HEIGHT As Double = 6#
 
-Public Sub GitLog_InsertRunSeparatorIfNeeded(ByVal runId As String)
+Private Const GITLOG_SHEET_A As String = "GIT LOG"
+Private Const GITLOG_SHEET_B As String = "GIT_LOG"
+Private Const GITLOG_SHEET_C As String = "HISTORICO"
+
+Public Function GitLog_DiagnoseTarget(ByRef detail As String) As Boolean
     On Error GoTo EH
 
+    detail = ""
+
     Dim ws As Worksheet
-    Set ws = GitLog_GetSheet()
-    If ws Is Nothing Then Exit Sub
+    Dim resolvedName As String
+    Set ws = GitLog_GetSheet(resolvedName)
+
+    If ws Is Nothing Then
+        detail = "target_sheet=NAO_ENCONTRADA | candidatos=GIT LOG;GIT_LOG;HISTORICO;HISTÃ“RICO"
+        GitLog_DiagnoseTarget = False
+        Exit Function
+    End If
+
+    Dim map As Object
+    Set map = GitLog_HeaderMap(ws)
+
+    Dim hasTs As Boolean
+    Dim hasPrompt As Boolean
+    hasTs = map.exists("Timestamp")
+    hasPrompt = map.exists("Prompt ID")
+
+    Dim metaCol As Long
+    metaCol = GitLog_EnsureMetaColumn(ws)
+
+    detail = "target_sheet=" & resolvedName & _
+             " | headers_count=" & CStr(map.Count) & _
+             " | has_timestamp=" & IIf(hasTs, "SIM", "NAO") & _
+             " | has_prompt_id=" & IIf(hasPrompt, "SIM", "NAO") & _
+             " | meta_col=" & CStr(metaCol)
+
+    GitLog_DiagnoseTarget = hasTs
+    Exit Function
+
+EH:
+    detail = "diag_err=" & CStr(Err.Number) & " | " & Left$(Err.Description, 160)
+    GitLog_DiagnoseTarget = False
+End Function
+
+Public Sub GitLog_InsertRunSeparatorIfNeeded( _
+    ByVal runId As String, _
+    Optional ByRef outOk As Boolean = False, _
+    Optional ByRef outReason As String = "")
+
+    On Error GoTo EH
+
+    outOk = False
+    outReason = ""
+
+    Dim ws As Worksheet
+    Dim resolvedName As String
+    Set ws = GitLog_GetSheet(resolvedName)
+    If ws Is Nothing Then
+        outReason = "folha alvo nao encontrada (GIT LOG/GIT_LOG/HISTORICO/HISTÃ“RICO)"
+        Exit Sub
+    End If
 
     Dim metaCol As Long
     metaCol = GitLog_EnsureMetaColumn(ws)
@@ -40,8 +100,17 @@ Public Sub GitLog_InsertRunSeparatorIfNeeded(ByVal runId As String)
     Dim topRunId As String
     topRunId = Trim$(CStr(ws.Cells(GITLOG_TOP_ROW, metaCol).Value))
 
-    If topRunId = "" Then Exit Sub
-    If StrComp(topRunId, Trim$(runId), vbTextCompare) = 0 Then Exit Sub
+    If topRunId = "" Then
+        outOk = True
+        outReason = "sem separador: topo vazio"
+        Exit Sub
+    End If
+
+    If StrComp(topRunId, Trim$(runId), vbTextCompare) = 0 Then
+        outOk = True
+        outReason = "sem separador: mesma run"
+        Exit Sub
+    End If
 
     ws.Rows(GITLOG_TOP_ROW).Insert Shift:=xlDown
     With ws.Rows(GITLOG_TOP_ROW)
@@ -51,12 +120,12 @@ Public Sub GitLog_InsertRunSeparatorIfNeeded(ByVal runId As String)
     End With
 
     ws.Cells(GITLOG_TOP_ROW, metaCol).Value = "__RUN_SEPARATOR__"
+    outOk = True
+    outReason = "separador inserido"
     Exit Sub
 
 EH:
-    Call Debug_Registar(0, "", "ALERTA", "", "GIT_LOG", _
-        "Falha ao inserir separador de run no Git LOG: " & Err.Description, _
-        "Validar existencia da folha HISTORICO e permissao de escrita.")
+    outReason = "separator_err=" & CStr(Err.Number) & " | " & Left$(Err.Description, 160)
 End Sub
 
 Public Sub GitLog_InsertEntryTop( _
@@ -67,15 +136,30 @@ Public Sub GitLog_InsertEntryTop( _
     ByVal httpStatus As Long, _
     ByVal responseId As String, _
     Optional ByVal outputResumo As String = "", _
-    Optional ByVal nextPromptDecidido As String = "")
+    Optional ByVal nextPromptDecidido As String = "", _
+    Optional ByRef outOk As Boolean = False, _
+    Optional ByRef outReason As String = "")
 
     On Error GoTo EH
 
-    Dim ws As Worksheet
-    Set ws = GitLog_GetSheet()
-    If ws Is Nothing Then Exit Sub
+    outOk = False
+    outReason = ""
 
-    Call GitLog_InsertRunSeparatorIfNeeded(runId)
+    Dim ws As Worksheet
+    Dim resolvedName As String
+    Set ws = GitLog_GetSheet(resolvedName)
+    If ws Is Nothing Then
+        outReason = "folha alvo nao encontrada (GIT LOG/GIT_LOG/HISTORICO/HISTÃ“RICO)"
+        Exit Sub
+    End If
+
+    Dim sepOk As Boolean
+    Dim sepReason As String
+    Call GitLog_InsertRunSeparatorIfNeeded(runId, sepOk, sepReason)
+    If Not sepOk Then
+        outReason = "falha separador: " & sepReason
+        Exit Sub
+    End If
 
     Dim map As Object
     Set map = GitLog_HeaderMap(ws)
@@ -100,18 +184,41 @@ Public Sub GitLog_InsertEntryTop( _
         ws.Cells(GITLOG_TOP_ROW, CLng(map("Timestamp"))).NumberFormat = "yyyy-mm-dd hh:mm"
     End If
 
+    outOk = True
+    outReason = "ok | target_sheet=" & resolvedName & " | sep=" & sepReason
     Exit Sub
 
 EH:
-    Call Debug_Registar(0, promptId, "ALERTA", "", "GIT_LOG", _
-        "Falha ao inserir entrada no topo do Git LOG: " & Err.Description, _
-        "Validar cabecalhos no HISTORICO e existencia da coluna auxiliar de metadado.")
+    outReason = "entry_err=" & CStr(Err.Number) & " | " & Left$(Err.Description, 160)
 End Sub
 
-Private Function GitLog_GetSheet() As Worksheet
+Private Function GitLog_GetSheet(Optional ByRef resolvedName As String = "") As Worksheet
     On Error Resume Next
-    Set GitLog_GetSheet = ThisWorkbook.Worksheets(GITLOG_SHEET)
-    If GitLog_GetSheet Is Nothing Then Set GitLog_GetSheet = ThisWorkbook.Worksheets("HIST" & ChrW$(&HD3) & "RICO")
+
+    resolvedName = ""
+
+    Set GitLog_GetSheet = ThisWorkbook.Worksheets(GITLOG_SHEET_A)
+    If Not GitLog_GetSheet Is Nothing Then
+        resolvedName = GITLOG_SHEET_A
+        GoTo CleanExit
+    End If
+
+    Set GitLog_GetSheet = ThisWorkbook.Worksheets(GITLOG_SHEET_B)
+    If Not GitLog_GetSheet Is Nothing Then
+        resolvedName = GITLOG_SHEET_B
+        GoTo CleanExit
+    End If
+
+    Set GitLog_GetSheet = ThisWorkbook.Worksheets(GITLOG_SHEET_C)
+    If Not GitLog_GetSheet Is Nothing Then
+        resolvedName = GITLOG_SHEET_C
+        GoTo CleanExit
+    End If
+
+    Set GitLog_GetSheet = ThisWorkbook.Worksheets("HIST" & ChrW$(&HD3) & "RICO")
+    If Not GitLog_GetSheet Is Nothing Then resolvedName = "HISTÃ“RICO"
+
+CleanExit:
     On Error GoTo 0
 End Function
 
