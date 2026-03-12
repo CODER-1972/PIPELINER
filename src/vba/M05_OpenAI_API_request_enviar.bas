@@ -8,6 +8,9 @@ Option Explicit
 ' - Extrair campos uteis da resposta JSON para consumo da orquestracao.
 '
 ' Atualizacoes:
+' - 2026-03-12 | Codex | Explicita contagem real de retries por chamada API
+'   - Passa a preencher `resultado.apiAttemptCount` e `resultado.retryCount` (tentativas-1) em todos os caminhos de saida.
+'   - Permite ao orquestrador mostrar `Retry` como novas tentativas reais em vez de total de chamadas.
 ' - 2026-03-10 | Codex | Publica dumps request/response por passo para export Git
 '   - Introduz contexto de run para escrever request_payload_raw/response_raw por chamada da API em pasta dedicada.
 '   - Regista INFO/ALERTA no DEBUG para escrita dos dumps e disponibiliza inventario para upload no M21.
@@ -676,6 +679,8 @@ Public Function OpenAI_Executar( _
 
     If Trim$(apiKey) = "" Then
         resultado.Erro = "API key vazia."
+        resultado.apiAttemptCount = 0
+        resultado.retryCount = 0
         OpenAI_Executar = resultado
         Exit Function
     End If
@@ -699,6 +704,8 @@ Public Function OpenAI_Executar( _
         If inputLit = "" Or Left$(inputLit, 1) <> "[" Or Json_LastNonWhitespaceChar(inputLit) <> "]" Then
             resultado.Erro = "INPUT override fornecido mas nao e um JSON array valido. " & _
                              "Comeca por: [" & Left$(Trim$(inputLit), 60) & "]"
+            resultado.apiAttemptCount = 0
+            resultado.retryCount = 0
             OpenAI_Executar = resultado
             Exit Function
         End If
@@ -723,6 +730,8 @@ Public Function OpenAI_Executar( _
         If hasInputFile Then
             If (Not hasFileData) And (Not hasFileId) Then
                 resultado.Erro = "INPUT array contem input_file mas nao tem file_data nem file_id."
+                resultado.apiAttemptCount = 0
+                resultado.retryCount = 0
                 OpenAI_Executar = resultado
                 Exit Function
             End If
@@ -842,6 +851,8 @@ Public Function OpenAI_Executar( _
         On Error GoTo TrataErro
 
         resultado.Erro = "Payload invalido (utf8_roundtrip): " & utf8Diag
+        resultado.apiAttemptCount = 0
+        resultado.retryCount = 0
         OpenAI_Executar = resultado
         Exit Function
     Else
@@ -861,6 +872,8 @@ Public Function OpenAI_Executar( _
         On Error GoTo TrataErro
 
         resultado.Erro = "Payload invalido (preflight): controlo nao escapado em string JSON. " & preflightDetail
+        resultado.apiAttemptCount = 0
+        resultado.retryCount = 0
         OpenAI_Executar = resultado
         Exit Function
     End If
@@ -873,6 +886,8 @@ Public Function OpenAI_Executar( _
         On Error GoTo TrataErro
 
         resultado.Erro = "Payload invalido (preflight): estrutura JSON invalida. " & preflightDetail
+        resultado.apiAttemptCount = 0
+        resultado.retryCount = 0
         OpenAI_Executar = resultado
         Exit Function
     End If
@@ -1069,6 +1084,8 @@ On Error Resume Next
 
             resultado.responseId = ExtrairCampoJsonSimples(resposta, """id"":")
             resultado.outputText = ExtrairTextoOutputText(resposta)
+            resultado.apiAttemptCount = attempt
+            resultado.retryCount = IIf(attempt > 1, attempt - 1, 0)
             OpenAI_Executar = resultado
             Exit Function
         End If
@@ -1100,6 +1117,8 @@ On Error Resume Next
                     "Sugestao: tente mais tarde. Se persistir, contacte suporte com o req_id.")
                 On Error GoTo TrataErro
 
+                resultado.apiAttemptCount = attempt
+                resultado.retryCount = IIf(attempt > 1, attempt - 1, 0)
                 OpenAI_Executar = resultado
                 Exit Function
             End If
@@ -1131,6 +1150,8 @@ On Error Resume Next
                 End If
             End If
 
+            resultado.apiAttemptCount = attempt
+            resultado.retryCount = IIf(attempt > 1, attempt - 1, 0)
             OpenAI_Executar = resultado
             Exit Function
         End If
@@ -1210,6 +1231,8 @@ TrataErro:
         resultado.Erro = resultado.Erro & " | Err.Source=" & errSource
     End If
 
+    resultado.apiAttemptCount = attempt
+    resultado.retryCount = IIf(attempt > 1, attempt - 1, 0)
     OpenAI_Executar = resultado
 End Function
 

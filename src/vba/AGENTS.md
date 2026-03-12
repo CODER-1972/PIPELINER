@@ -619,3 +619,7 @@ Se começar a ficar demasiado grande:
 - Em filtros de `pipeline_name` no Seguimento (export/auditoria), comparar com normalização de tokens (`CR/LF/TAB/NBSP`, trim, case-insensitive) em vez de igualdade textual direta; isto evita fallback indevido para a primeira prompt em runs multi-step.
 - Sempre que criar um modulo utilitario novo (ex.: EnsureSheet/Bootstrap), ligar explicitamente pelo menos um call-site no fluxo operacional (entrypoint de botao/pipeline/export) e documentar o gatilho no README; evitar utilitarios "orfãos" sem ativacao em runtime.
 - Ao introduzir uma nova folha de auditoria (ex.: GIT LOG), implementar no mesmo PR pelo menos um writer operacional (`Append`/`Record`) e respetivo call-site; criar apenas o bootstrap estrutural (headers/formato) sem escrita de dados gera falso positivo de "funcionalidade ativa".
+
+- Em mensagens de progresso no PAINEL, separar semântica de execução interna vs planeamento: `Step x of y` deve refletir um plano dinâmico de fases internas da prompt atual (núcleo fixo + fases condicionais), enquanto `Row n of z (pipeline)` representa a posição da lista planeada na coluna INICIAR.
+
+- Em rotinas com `Option Explicit`, declarar explicitamente as variáveis de output passadas por referência para helpers (ex.: flags/linhas retornadas por `...Determinar...`) antes do primeiro uso; confiar em criação implícita leva a `Compile error: Variable not defined`.

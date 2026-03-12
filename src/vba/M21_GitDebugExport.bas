@@ -1368,6 +1368,7 @@ Private Function GitDebug_Config_Definitions() As Collection
 
     Call GitDebug_Config_Add(defs, "GH_BATCH_MODE", "tree_commit", "Modo de upload em batch para este modulo.", "tree_commit")
     Call GitDebug_Config_Add(defs, "GH_CONTENTS_BATCH_POLICY", "fail_fast", "Politica de lote para contents_api (aborta no 1o erro ou continua).", "fail_fast | best_effort")
+    Call GitDebug_Config_Add(defs, "GH_GITLOG_DELETE_POLICY", "after_remote_success", "Politica de remocao da linha local no GIT LOG apos delete remoto.", "after_remote_success | always | keep_local")
     Call GitDebug_Config_Add(defs, "GH_MAX_FILES", "200", "Numero maximo de ficheiros por commit (protecao).", "1..1000")
     Call GitDebug_Config_Add(defs, "GH_MAX_FILE_MB", "50", "Tamanho maximo por ficheiro (MB).", "1..200")
     Call GitDebug_Config_Add(defs, "GH_ENCODING_TEXT", "utf-8", "Encoding dos ficheiros de texto enviados para blobs.", "utf-8")
