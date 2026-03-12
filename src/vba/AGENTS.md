@@ -619,4 +619,4 @@ Se começar a ficar demasiado grande:
 - Em filtros de `pipeline_name` no Seguimento (export/auditoria), comparar com normalização de tokens (`CR/LF/TAB/NBSP`, trim, case-insensitive) em vez de igualdade textual direta; isto evita fallback indevido para a primeira prompt em runs multi-step.
 - Sempre que criar um modulo utilitario novo (ex.: EnsureSheet/Bootstrap), ligar explicitamente pelo menos um call-site no fluxo operacional (entrypoint de botao/pipeline/export) e documentar o gatilho no README; evitar utilitarios "orfãos" sem ativacao em runtime.
 
-- Em mensagens de progresso no PAINEL, separar semântica de execução interna vs planeamento: `Step x of y` deve refletir etapas internas da prompt atual (contexto/files/request/api/resposta/fecho), enquanto `Row n of z (pipeline)` representa a posição da lista planeada na coluna INICIAR.
+- Em mensagens de progresso no PAINEL, separar semântica de execução interna vs planeamento: `Step x of y` deve refletir um plano dinâmico de fases internas da prompt atual (núcleo fixo + fases condicionais), enquanto `Row n of z (pipeline)` representa a posição da lista planeada na coluna INICIAR.
