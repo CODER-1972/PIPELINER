@@ -275,6 +275,8 @@ Regras de normalização aplicadas antes do registo:
 - `summary` é saneado para CRLF (remove quebras vazias redundantes) e limitado a **4 linhas**;
 - `Success` é mapeado para domínio controlado: `Sim`, `Não`, `Condicionado`, `Outro`;
 - `New version` é mapeado para `Sim`/`Não`.
+- a escrita top-down no `GIT LOG` aceita aliases de cabeçalho PT/EN (ex.: `Step|Passo`, `Pipeline|Nome do Pipeline`) para manter compatibilidade entre templates.
+- após inserir linha no topo, o registo de dados é normalizado para fundo branco e fonte preta, evitando herdar cores de separadores visuais.
 
 ### Fluxo de eliminação/remediação (GIT LOG)
 

@@ -637,3 +637,5 @@ Se começar a ficar demasiado grande:
 - No fecho da run no `M07_Painel_Pipelines` (`SaidaLimpa`), chamar `PipelineGitDebug_ExportIfEnabled` de forma qualificada (`M21_GitDebugExport.PipelineGitDebug_ExportIfEnabled`) para evitar ambiguidade quando coexistirem módulos duplicados (`...1`).
 
 - No ciclo principal de run no `M07_Painel_Pipelines`, chamar helpers de dumps do `M05` de forma qualificada (`M05_OpenAI_API_request_enviar.M05_SetRunDumpFolder` e `M05_OpenAI_API_request_enviar.M05_ClearRunDumpFolder`) para evitar ambiguidades em projetos com módulos `...1`.
+- Em writers do GIT LOG que inserem no topo (linha 2), mapear colunas por aliases PT/EN (`Step|Passo`, `Pipeline|Nome do Pipeline`, etc.) em vez de depender de um unico schema; mismatch de header causa registos parcialmente vazios e falsa percecao de "log nao preenche".
+- Ao inserir nova linha no topo para registos (GIT LOG/DEBUG auxiliares), normalizar explicitamente o estilo da linha de dados (`Interior=branco`, `Font=preto`) para nao herdar cor de separadores/linhas anteriores.
