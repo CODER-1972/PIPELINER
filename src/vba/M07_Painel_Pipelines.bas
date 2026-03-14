@@ -8,6 +8,12 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-14 | Codex | Corrige chamada ambigua de RUN_FINISH no Git LOG
+'   - Qualifica `GitLog_AppendEvent` como `M28_GitLogSheet.GitLog_AppendEvent` na saida limpa da pipeline.
+'   - Evita `Compile error: Ambiguous name detected: GitLog_AppendEvent` com modulos duplicados no VBAProject.
+' - 2026-03-14 | Codex | Corrige chamada ambigua em escrita no Git LOG
+'   - Qualifica `GitLog_InsertEntryTop` como `M28_GitLog.GitLog_InsertEntryTop` no loop principal.
+'   - Evita `Compile error: Ambiguous name detected: GitLog_InsertEntryTop` quando existem modulos duplicados no VBAProject.
 ' - 2026-03-12 | Codex | Corrige chamada ambigua de preflight Git LOG
 '   - Qualifica a chamada para `M28_GitLog.GitLog_DiagnoseTarget` no arranque da pipeline.
 '   - Elimina `Compile error: Ambiguous name detected: GitLog_DiagnoseTarget` quando existem modulos duplicados no VBAProject.
@@ -1282,7 +1288,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         If Painel_GitLog_IsEnabled(pipelineIndex) Then
             Dim gitLogOk As Boolean
             Dim gitLogReason As String
-            Call GitLog_InsertEntryTop(runToken, pipelineNome, passo, prompt.Id, resultado.httpStatus, resultado.responseId, textoSeguimento, "", gitLogOk, gitLogReason)
+            Call M28_GitLog.GitLog_InsertEntryTop(runToken, pipelineNome, passo, prompt.Id, resultado.httpStatus, resultado.responseId, textoSeguimento, "", gitLogOk, gitLogReason)
             If Not gitLogOk Then
                 Call Debug_Registar(passo, prompt.Id, "ERRO", "", "GIT_LOG_WRITE", _
                     "Falha ao escrever na folha Git LOG. " & gitLogReason, _
@@ -1450,7 +1456,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
 SaidaLimpa:
     If gitLogEnabled Then
-        Call GitLog_AppendEvent(runToken, passoCtx, pipelineNome, promptCtx, "INFO", "RUN_FINISH", "PAINEL", _
+        Call M28_GitLogSheet.GitLog_AppendEvent(runToken, passoCtx, pipelineNome, promptCtx, "INFO", "RUN_FINISH", "PAINEL", _
             "Execucao da pipeline concluida.", _
             "executou_passos=" & IIf(runExecutouPassos, "SIM", "NAO") & " | ultimo_stage=" & mStepLastStage)
     End If
