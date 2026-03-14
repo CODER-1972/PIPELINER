@@ -1,0 +1,76 @@
+﻿{
+  "id": "resp_08f6d719867c8a6a0069b5b5866b0c819fa74a512bf3b741e5",
+  "object": "response",
+  "created_at": 1773516168,
+  "status": "completed",
+  "background": false,
+  "billing": {
+    "payer": "developer"
+  },
+  "completed_at": 1773516179,
+  "error": null,
+  "frequency_penalty": 0.0,
+  "incomplete_details": null,
+  "instructions": "Responde em Portugu\u00eas de Portugal. Web=N\u00e3o. N\u00e3o inventes factos: marca [POR CONFIRMAR].",
+  "max_output_tokens": 400000,
+  "max_tool_calls": null,
+  "model": "gpt-5.4-2026-03-05",
+  "output": [
+    {
+      "id": "msg_08f6d719867c8a6a0069b5b58f66dc819fb93382525eabcb6e",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [],
+          "logprobs": [],
+          "text": "[Descarregar ficheiro](sandbox:/mnt/data/indisponivel.txt)\nok"
+        }
+      ],
+      "phase": "final_answer",
+      "role": "assistant"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0.0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_retention": null,
+  "reasoning": {
+    "effort": "none",
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": true,
+  "temperature": 0.7,
+  "text": {
+    "format": {
+      "type": "text"
+    },
+    "verbosity": "medium"
+  },
+  "tool_choice": "auto",
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 0.98,
+  "truncation": "auto",
+  "usage": {
+    "input_tokens": 150766,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 23,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 150789
+  },
+  "user": null,
+  "metadata": {
+    "prompt_family": "WF_PROMPT_AUDIT",
+    "versao": "v1.4",
+    "handoff": "ContextKV_RESULTS_JSON"
+  }
+}
