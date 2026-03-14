@@ -1,0 +1,224 @@
+1) Resumo Executivo
+[CONCLUSÃO:] RISCO — A execução da prompt-alvo concluiu com HTTP 200 e capturou variáveis para handoff, mas falhou um requisito crítico de determinismo: o `TSV_CATALOGO_DRAFT_ENC` saiu com quebras reais, contrariando o contrato de “1 linha codificada”.
+- Objetivo em linguagem simples: transformar `RESULTS_JSON` (do passo anterior) + template de colunas num TSV de catálogo pronto para consumo automático.
+- Esperado vs observado:
+  - Esperado: `TSV_CATALOGO_DRAFT_ENC` em 1 linha, com `\n` e `\t` literais.
+  - Observado: output com múltiplas linhas reais e validação interna FAIL para este ponto.
+- Classificação final: **Aprovada com ressalvas**.
+- Decisão operacional: **Go condicionado**.
+- Top riscos reais:
+  1. Quebra de parsing/handoff por multiline real no `TSV_CATALOGO_DRAFT_ENC`.
+  2. Saída sem contrato técnico ativo (`SEM_CONTRATO`) para passo que manipula CSV/TSV.
+  3. `Next prompt decidido` vazio no Seguimento (dependência de roteamento externo/manual).
+  4. Persistência de `[POR CONFIRMAR]` em campos estruturais (ID/Storage/next/default/allowed) por dependência do passo anterior.
+  5. Captura de chaves parcialmente desalinhada com output opcional (`TSV_TRACE_PROMPTS_ENC` não capturada).
+- Top ações recomendadas:
+  - P1: reforçar instrução de serialização final no texto da prompt (normalização célula-a-célula + validação final de 1 linha).
+  - P1: exigir auto-verificação textual de ausência de `\n` reais no payload final codificado.
+  - P2: ativar contrato diagnóstico (`ci_csv_v1`) para aumentar prova operacional de integridade.
+  - P2: alinhar política de captura de variáveis opcionais vs obrigatórias no orquestrador.
+  - P3: clarificar regra de preenchimento de campos `[POR CONFIRMAR]` quando não há evidência suficiente.
+- Nota leiga: o passo “funcionou”, mas ainda pode partir automações na passagem para o próximo passo por formato de saída não totalmente seguro.
+
+2) Contexto na Cadeia de Prompts (visão de fluxo)
+[CONCLUSÃO:] OK — A run analisada é a mais recente dentro do diretório normalizado da prompt-alvo e os artefactos nucleares existem.
+- Fontes analisadas: `DEBUG.csv`, `Seguimento.csv`, `catalogo_prompts_executadas.csv`, `painel_pipeline.txt`, e 6 dumps em `payload_dumps/`.
+- Normalização de caminho aplicada:
+  - TARGET: `PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.3`
+  - Pasta inferida: `pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/02_WF_LAYOUT_FROM_TXT/v1.3`
+- Runs encontradas na pasta da versão:
+  - `2026-03-12 1356`
+  - `2026-03-14 1717`
+- Run escolhida: `2026-03-14 1717` (mais recente por ordem temporal).
+- Artefactos encontrados (obrigatórios + técnicos): todos os obrigatórios presentes.
+- Cobertura de leitura por artefacto:
+  - `DEBUG.csv`: 100%
+  - `Seguimento.csv`: 100%
+  - `catalogo_prompts_executadas.csv`: 100%
+  - `painel_pipeline.txt`: 100%
+  - `payload_dumps/*`: 100%
+- Limitações:
+  - Sem workbook Excel live; inferência limitada ao que foi persistido nos logs.
+  - Sem prova direta da folha ativa para `next` no momento exato de roteamento (apenas logs).
+- Papel desta prompt na cadeia: Passo 2 de uma sequência observada de 2 passos executados nesta run (o passo 3 está no REGISTAR, mas não foi executado aqui).
+- Dependências da prompt anterior: `RESULTS_JSON` capturado no passo 1 e injetado no passo 2.
+- Entregáveis para a seguinte: `TSV_CATALOGO_DRAFT_ENC`, `TSV_VALIDACOES_ENC`, `MEMORY_SHORT` (e `RESULTS_JSON` espelho do draft).
+- Impacto no objetivo global: parcialmente positivo; gera draft, mas com risco de consumo automático por formatação.
+- Resposta explícita: “Se esta prompt falhar parcialmente, o processo global ainda serve o objetivo final?”
+  - **INFERIDO:** Serve parcialmente para inspeção humana; para automação determinística fica em risco até corrigir serialização final.
+
+3) I/O de Negócio (o que entra e o que sai)
+[CONCLUSÃO:] RISCO — Inputs críticos foram recebidos, mas o output principal não cumpriu totalmente o contrato de codificação “1 linha”.
+- Entradas esperadas:
+  - Variável: `{{VAR:RESULTS_JSON}}`.
+  - Ficheiros: `ORIENTACOES_PIPELINE*.pdf`, `FLOW_TEMPLATE*.csv`.
+- Entradas observadas:
+  - `RESULTS_JSON` injetado com sucesso (from step 1, source captured_vars).
+  - `files_used`: PDF + FLOW_TEMPLATE.csv(text).
+  - request com `input_file(file_id)` + `input_text` com conteúdo expandido.
+- Saídas esperadas:
+  - `TSV_CATALOGO_DRAFT_ENC` (1 linha codificada), opcionalmente trace/validações e `MEMORY_SHORT`.
+- Saídas observadas:
+  - Output contém `TSV_CATALOGO_DRAFT_ENC`, `TSV_TRACE_PROMPTS_ENC`, `TSV_VALIDACOES_ENC`, `MEMORY_SHORT`.
+  - `captured_vars`: `RESULTS_JSON`, `TSV_CATALOGO_DRAFT_ENC`, `TSV_VALIDACOES_ENC`, `MEMORY_SHORT`.
+- Critérios de sucesso:
+  - HTTP 200 + captura de variáveis + formato parsing-safe.
+- Critérios de falha/paragem:
+  - ausência de `RESULTS_JSON` (não ocorreu), ou saída fora do contrato determinístico (ocorreu parcialmente).
+- Diferença esperado vs observado:
+  - FAIL explícito no próprio texto de validações: quebras reais no TSV codificado.
+- Tradução leiga: os dados foram gerados, mas o “empacotamento” para passar ao próximo passo não ficou totalmente à prova de máquina.
+
+4) Integridade de Handoff (prompt anterior -> atual -> próxima)
+4.1 Receção da prompt anterior
+[CONCLUSÃO:] OK — O handoff de entrada foi tecnicamente íntegro para `RESULTS_JSON`.
+- Esperado vs recebido: `RESULTS_JSON` esperado e recebido via injeção ContextKV.
+- Evidência de integridade: `INJECT_OK|RESULTS_JSON`; placeholder substituído 4x; `injected_vars` identifica passo/origem/hash.
+- Ficheiros esperados vs resolvidos: FLOW_TEMPLATE + ORIENTACOES presentes em `files_used`; upload por `file_id` e `text_embed` coexistente.
+- Lacunas/fallback: nenhuma lacuna bloqueante nesta receção.
+- Risco para prompt atual: baixo na entrada; problema principal migra para serialização de saída.
+
+4.2 Preparação para a prompt seguinte
+[CONCLUSÃO:] FRÁGIL — Há variáveis capturadas, mas o formato do draft ameaça consumo determinístico.
+- Variáveis capturadas: 4 chaves, metadados com chars/hash.
+- Ficheiros para seguinte: não há artefacto físico obrigatório; handoff é por variável.
+- Parsing-safe: comprometido pela presença de quebras reais no bloco codificado.
+- Risco de quebra silenciosa: médio/alto (importadores podem ler linhas/colunas erradas).
+- Risco para a próxima prompt: elevado se depender estritamente de linha única codificada.
+
+4.3 Encadeamento e rotas
+[CONCLUSÃO:] [POR CONFIRMAR] — O catálogo define next/default/allowed para passo 3, mas `Next prompt decidido` ficou vazio no Seguimento desta execução.
+- Coerência no catálogo: next/default/allowed do passo 2 apontam para `.../03/WF_LAYOUT_QA/v1.2` + STOP.
+- Rota observada na run: apenas 2 passos executados; não há registo de transição para passo 3.
+- Conclusão handoff: **frágil** (dados existem, mas roteamento efetivo não ficou provado na execução atual).
+
+5) Contrato da Prompt (clareza operacional)
+[CONCLUSÃO:] RISCO — Contrato é globalmente claro, mas insuficientemente prescritivo no ponto crítico de serialização final sem quebras reais.
+- ROLE/objetivo/limites: claros e operacionais.
+- Regras nucleares: não invenção, anti-injection, idioma PT-PT e sem web estão explícitas.
+- Formato de output: existe, mas a instrução “1 linha com \n e \t literais” não foi cumprida na prática.
+- Governance `[POR CONFIRMAR]`: prevista na prompt e usada.
+- Clareza de I/O: boa para entradas; melhorável para transformação final de texto.
+- Exequibilidade operacional: viável, porém sujeita a erro de formatação em outputs extensos com multiline.
+
+6) Qualidade e Robustez (PASS/FAIL)
+[CONCLUSÃO:] RISCO — Matriz global com maioria PASS, mas com FAIL material em determinismo do output e sinal de governança técnica em alerta.
+- Teste | Resultado | Evidência | Impacto | Camada | Ação corretiva
+- Run correcta identificada | PASS | versão com 2 runs, selecionada mais recente | baixo | OPERAÇÃO | [adicionar] regra explícita de seleção temporal no playbook.
+- Artefactos obrigatórios encontrados | PASS | 4/4 presentes + dumps | baixo | OPERAÇÃO | manter.
+- Cobertura integral de leitura | PASS | 100% dos artefactos relevantes | baixo | OPERAÇÃO | manter.
+- Prompt executada sem ambiguidade | PASS | Prompt ID do passo 2 consistente | baixo | ORQUESTRADOR | manter.
+- Input da anterior recebido | PASS | `INJECT_OK|RESULTS_JSON` | médio+ | ORQUESTRADOR | manter monitorização.
+- Ficheiros resolvidos/anexados | PASS | `FILES` + `REQ_INPUT_JSON` com file_id/text_embed | médio | DADOS/ANEXOS | manter.
+- Integridade ContextKV | PASS | injected/captured vars com hash/meta | médio | ORQUESTRADOR | manter.
+- Parsing config extra | PASS | execução sem erro de parse | baixo | CONFIG EXTRA | manter.
+- Coerência payload/request | PASS | request step2 com model/store/input consistentes | médio | ORQUESTRADOR | manter.
+- Resultado HTTP/resposta | PASS | HTTP 200, status completed | baixo | MODELO/API | manter.
+- Captura de output | PASS | `CAPTURE_OK` com 4 keys | médio | ORQUESTRADOR | manter.
+- Handoff seguinte | AMBÍGUO | next decidido vazio nesta run | médio | ORQUESTRADOR/PIPELINE | [adicionar] log explícito de decisão next por passo.
+- Determinismo/parsing-safe do output | FAIL | validação interna do próprio output marca FAIL por multiline real | alto | TEXTO DA PROMPT | [substituir] bloco OUTPUT por algoritmo de serialização + autochecagem.
+- Coerência IDs/versões/placeholders | AMBÍGUO | vários `[POR CONFIRMAR]` herdados | médio | DADOS/INPUT anterior | [adicionar] regras de resolução no passo 1.
+- Coerência next/default/allowed | AMBÍGUO | catálogo coerente; execução não transitou | médio | ORQUESTRADOR/PIPELINE | [adicionar] prova de roteamento no log.
+- Aderência idioma/regras/web policy | PASS | output PT-PT; sem web | baixo | TEXTO DA PROMPT | manter.
+- Segurança/segredos | PASS | sem API key em logs observados | alto positivo | OPERAÇÃO | manter masking.
+- Rastreabilidade/auditabilidade | PASS | logs detalhados + payload dumps | médio | ORQUESTRADOR | manter.
+- Production-readiness | FAIL | dependente de correção do encoding final | alto | TEXTO DA PROMPT | aplicar revisão proposta.
+- Coerência entre artefactos | PASS com ressalva | Seguimento e payload consistentes; alerta de contrato em DEBUG | médio | CONFIG/ORQUESTRADOR | considerar contrato diagnóstico.
+
+7) Ficheiros e Anexos (técnico-operacional)
+[CONCLUSÃO:] production-ready com ressalvas — anexação funcionou, mas a robustez fim-a-fim depende da correção do formato de saída.
+- Anexos obrigatórios: observados como usados (`FLOW_TEMPLATE.csv` texto + PDF orientações).
+- Modo de transporte: híbrido (`input_file` via file_id + text_embed no `input_text`).
+- Compatibilidades/riscos:
+  - PDF anexado corretamente por file_id.
+  - FLOW_TEMPLATE em text_embed funcionou, mas aumenta risco de ruído no prompt expandido grande.
+- Dumps técnicos: request/response completos para step1/step2 presentes e parseáveis.
+- Evidência de files_used/files_ops/file_ids:
+  - `files_used` preenchido.
+  - `file_ids_used` com 1 id no passo 2.
+  - `files_ops_log` vazio no passo 2 (não é erro por si, mas reduz detalhe).
+- Evidência capture/inject: presente e consistente (`INJECT_OK`, `CAPTURE_OK`, metadados hash/chars).
+
+8) Evidência de Execução (Seguimento + DEBUG em linguagem leiga)
+[CONCLUSÃO:] OK com alerta técnico — a execução é rastreável e concluída, mas o próprio output admite falha de serialização.
+- Linha temporal simplificada:
+  1. Passo 1 gera `RESULTS_JSON`.
+  2. Passo 2 injeta `RESULTS_JSON`, prepara anexos, chama API, captura variáveis.
+- Seguimento.csv (passo 2):
+  - Modelo `gpt-5.2`, HTTP 200, `response_id` presente.
+  - `files_used` coerente com anexos previstos.
+  - output contém blocos de handoff, mas com multiline real.
+  - `Next prompt decidido` vazio.
+- DEBUG.csv (passo 2):
+  - cronologia técnica íntegra (`STEP_STAGE` até `step_completed`).
+  - 1 alerta relevante: `CONTRACT_SUGGEST_ENABLE` por passo sem contrato ativo apesar de menção CSV.
+  - sem erros HTTP, sem timeout, sem falha de injeção/captura.
+- catalogo_prompts_executadas.csv:
+  - texto da prompt v1.3 confirmado.
+  - next/default/allowed de catálogo coerentes para passo 3.
+- painel_pipeline.txt:
+  - INICIAR inclui STOP após passo 2 (explica por que run pode terminar sem ir ao passo 3).
+  - REGISTAR inclui passo 3.
+- Contradições:
+  - Não há contradição técnica forte; há tensão entre “prompt aponta para passo 3” vs “pipeline INICIAR com STOP no passo 3”.
+  - Peso probatório maior para `painel_pipeline.txt` sobre rota efetivamente iniciada.
+- Tradução sem jargão: o sistema gerou o conteúdo esperado, mas o modo de “embrulho” do texto ainda pode falhar quando outra máquina o tentar ler automaticamente.
+
+9) Segurança, Privacidade e Conformidade
+[CONCLUSÃO:] aceitável com ressalvas — não foram vistos segredos expostos, mas há conteúdo potencialmente extenso em logs/payload que deve manter minimização.
+- Exposição de segredos: não observada (sem API key em claro).
+- Dados sensíveis: [POR CONFIRMAR] quanto ao conteúdo de prompts de negócio; há armazenamento em logs detalhados.
+- Minimização de dados: razoável, mas dumps raw podem conter texto integral extenso.
+- Storage/retenção: `store=True` observado; política organizacional [POR CONFIRMAR].
+- Boas práticas/desvios: boas práticas de rastreio presentes; desvio técnico principal é determinismo de saída.
+
+10) Decisão Operacional (Go/No-Go)
+[CONCLUSÃO:] Go condicionado — usar apenas após correção da serialização final da saída e validação rápida de regressão.
+- Decisão: **Go condicionado**.
+- Condições mínimas para avançar:
+  1. aplicar revisão textual da prompt para serialização rígida “1 linha”; 
+  2. reexecutar e confirmar PASS na validação “Separador TSV e codificação 1 linha”.
+- O que pode ficar para depois:
+  - ativação de contrato diagnóstico (`ci_csv_v1`) pode ser fase 2.
+- Responsáveis/prazo: [POR CONFIRMAR].
+- Critério de revalidação: execução nova com `TSV_CATALOGO_DRAFT_ENC` sem quebras reais + handoff íntegro.
+- Resposta curta leiga: “Podemos usar já?”
+  - Ainda não em pleno automático; só após corrigir o formato final para evitar erros no próximo passo.
+
+11) Apêndice Técnico
+[CONCLUSÃO:] OK — Evidência base foi consolidada e checklist final ficou maioritariamente PASS, com 1 FAIL material.
+- Mapeamento variáveis/handoff (passo 2):
+  - Entrada: `RESULTS_JSON` (inject)
+  - Saída: `TSV_CATALOGO_DRAFT_ENC`, `TSV_VALIDACOES_ENC`, `MEMORY_SHORT`, `RESULTS_JSON`(espelho)
+- Trechos curtos de evidência:
+  - DEBUG: `INJECT_OK|RESULTS_JSON ... from_step=1 ...`
+  - DEBUG: `REQ_INPUT_JSON ... has_input_file=SIM ... has_text_embed=SIM`
+  - Output: validação `FAIL` para “TSV_CATALOGO_DRAFT_ENC contém quebras de linha reais...`
+- Lista de runs encontradas:
+  - `2026-03-12 1356`
+  - `2026-03-14 1717`
+- Lista de artefactos encontrados:
+  - `DEBUG.csv`, `Seguimento.csv`, `catalogo_prompts_executadas.csv`, `painel_pipeline.txt`, `payload_dumps/*`
+- Checklist final obrigatório:
+  1. run mais recente confirmada — PASS
+  2. artefactos obrigatórios lidos integralmente — PASS
+  3. input da prompt anterior confirmado — PASS
+  4. output transmitível para a seguinte — FAIL (formatação 1 linha)
+  5. coerência com objetivo global — PASS com ressalva
+  6. next/default/allowed sem rotas perigosas — AMBÍGUO
+  7. rastreabilidade por evidência — PASS
+  8. contradições entre artefactos identificadas — PASS
+  9. separação prompt vs config/orquestrador/dados — PASS
+  10. propostas com valor real apenas — PASS
+  11. prompt integral corrigida apenas quando seguro — PASS
+  12. verificação interna da proposta — PASS
+  13. legível para leigo — PASS
+
+PROPOSTAS DE ALTERAÇÕES
+Subsecção PROMPT
+[CONCLUSÃO:] P1 — Recomendada revisão textual local na secção de output/serialização para forçar codificação em 1 linha e autovalidação antes da emissão final.
+- Problema: saída multiline real em `TSV_CATALOGO_DRAFT_ENC`.
+- Evidência: validação interna do próprio output marca FAIL para codificação 1 linha.
+- Impacto: risco alto de quebra no handoff automático.
+- Racional: instrução atual é clara em intenção, mas insuficiente em procedimento determinístico passo-a-passo.
+- Ficheiro correspondente: `PROMPT_REVISAO.txt`.
