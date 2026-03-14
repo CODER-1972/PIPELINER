@@ -635,3 +635,5 @@ Se começar a ficar demasiado grande:
 - Em eventos de ciclo de vida da run (ex.: `GitLog_AppendEvent` para `RUN_FINISH`/`GH_UPLOAD_*`), usar chamada qualificada com o módulo (`M28_GitLogSheet.<helper>`) para evitar `Compile error: Ambiguous name detected` quando existirem cópias automáticas (`...1`).
 
 - No fecho da run no `M07_Painel_Pipelines` (`SaidaLimpa`), chamar `PipelineGitDebug_ExportIfEnabled` de forma qualificada (`M21_GitDebugExport.PipelineGitDebug_ExportIfEnabled`) para evitar ambiguidade quando coexistirem módulos duplicados (`...1`).
+
+- No ciclo principal de run no `M07_Painel_Pipelines`, chamar helpers de dumps do `M05` de forma qualificada (`M05_OpenAI_API_request_enviar.M05_SetRunDumpFolder` e `M05_OpenAI_API_request_enviar.M05_ClearRunDumpFolder`) para evitar ambiguidades em projetos com módulos `...1`.

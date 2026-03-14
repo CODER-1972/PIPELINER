@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-14 | Codex | Qualifica helpers M05 no ciclo da pipeline para evitar ambiguidade
+'   - Usa `M05_OpenAI_API_request_enviar.M05_SetRunDumpFolder` e `M05_OpenAI_API_request_enviar.M05_ClearRunDumpFolder`.
+'   - Reduz risco de `Compile error: Ambiguous name detected` quando existir modulo `M05_...1` no VBAProject.
 ' - 2026-03-14 | Codex | Corrige chamada ambigua de export Git debug no fecho da run
 '   - Qualifica `PipelineGitDebug_ExportIfEnabled` como `M21_GitDebugExport.PipelineGitDebug_ExportIfEnabled` na saida limpa.
 '   - Evita `Compile error: Ambiguous name detected: PipelineGitDebug_ExportIfEnabled` com modulos duplicados no VBAProject.
@@ -797,7 +800,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     If Trim$(runDumpFolder) = "" Then runDumpFolder = Environ$("TEMP")
     If Right$(runDumpFolder, 1) = "\" Then runDumpFolder = Left$(runDumpFolder, Len(runDumpFolder) - 1)
     runDumpFolder = runDumpFolder & "\DEBUG_PAYLOAD_DUMPS\" & Format$(Now, "yyyymmdd_hhnnss") & "_" & Replace$(Replace$(pipelineNome, " ", "_"), "/", "_")
-    Call M05_SetRunDumpFolder(runDumpFolder, pipelineNome)
+    Call M05_OpenAI_API_request_enviar.M05_SetRunDumpFolder(runDumpFolder, pipelineNome)
 
     Dim maxSteps As Long, maxRep As Long
     Call Painel_LerLimitesPipeline(wsPainel, pipelineIndex, maxSteps, maxRep)
@@ -1468,7 +1471,7 @@ SaidaLimpa:
         Call M21_GitDebugExport.PipelineGitDebug_ExportIfEnabled(pipelineIndex, pipelineNome, painelAutoSave)
     End If
 
-    Call M05_ClearRunDumpFolder
+    Call M05_OpenAI_API_request_enviar.M05_ClearRunDumpFolder
 
     Application.StatusBar = False
     Application.DisplayStatusBar = oldDisplayStatusBar

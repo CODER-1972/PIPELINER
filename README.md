@@ -450,6 +450,7 @@ Boas práticas de manutenção VBA (preventivas):
 - em chamadas entre módulos com nomes potencialmente repetidos após importações (ex.: `M07_Painel_Pipelines1`), preferir qualificação explícita (`Modulo.Funcao`) para reduzir risco de `Compile error: Ambiguous name detected`.
 - no fluxo de Git LOG, qualificar explicitamente as chamadas de helper (`M28_GitLog.GitLog_DiagnoseTarget`, `M28_GitLog.GitLog_InsertEntryTop` e `M28_GitLogSheet.GitLog_AppendEvent`) para evitar ambiguidades quando o VBAProject contém módulos duplicados (`...1`).
 - no fecho da pipeline em `M07_Painel_Pipelines`, qualificar também `M21_GitDebugExport.PipelineGitDebug_ExportIfEnabled` para prevenir colisão com módulos duplicados (`M21_GitDebugExport1`, etc.).
+- no ciclo de execução do `M07_Painel_Pipelines`, qualificar também helpers transversais de dump (`M05_OpenAI_API_request_enviar.M05_SetRunDumpFolder` / `M05_OpenAI_API_request_enviar.M05_ClearRunDumpFolder`) para evitar ambiguidades com módulos duplicados (`...1`).
 
 
 ### Diagnóstico rápido: web_search + anexos + ContextKV
