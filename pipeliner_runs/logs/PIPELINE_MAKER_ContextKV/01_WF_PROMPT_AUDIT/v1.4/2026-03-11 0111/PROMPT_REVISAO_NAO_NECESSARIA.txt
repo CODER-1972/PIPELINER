@@ -1,0 +1,17 @@
+PROMPT_REVISAO_NAO_NECESSARIA
+
+1) Justificação objectiva
+A prompt PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.3 executou com sucesso técnico (HTTP 200), recebeu o RESULTS_JSON via ContextKV, anexou os ficheiros esperados e produziu os blocos obrigatórios (TSV_CATALOGO_DRAFT_ENC, TSV_TRACE_PROMPTS_ENC, TSV_VALIDACOES_ENC, MEMORY_SHORT).
+
+2) Evidência resumida
+- Seguimento: step 2 com Prompt ID correcto, modelo gpt-5.2, status 200 e output capturado.
+- DEBUG: INJECT_OK|RESULTS_JSON, FILES_ITEM_TRACE OK, REQ_INPUT_JSON com input_file+text_embed, CAPTURE_OK Keys=4.
+- Payload dumps: request/response do step 2 coerentes e response.status=completed.
+
+3) Confirmação de camada dos problemas observados
+Os riscos principais não exigem alteração textual desta prompt:
+- mismatch de encadeamento (INICIAR pára em STOP antes do passo 3) => ORQUESTRADOR/PIPELINE;
+- API key literal em Config => OPERAÇÃO/GOVERNAÇÃO;
+- ausência de contrato formal (SEM_CONTRATO) => ORQUESTRADOR/CONFIGURAÇÃO.
+
+Conclusão: não se recomenda revisão textual obrigatória da prompt neste momento.
