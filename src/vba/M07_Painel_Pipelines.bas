@@ -8,6 +8,18 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-14 | Codex | Qualifica helpers M05 no ciclo da pipeline para evitar ambiguidade
+'   - Usa `M05_OpenAI_API_request_enviar.M05_SetRunDumpFolder` e `M05_OpenAI_API_request_enviar.M05_ClearRunDumpFolder`.
+'   - Reduz risco de `Compile error: Ambiguous name detected` quando existir modulo `M05_...1` no VBAProject.
+' - 2026-03-14 | Codex | Corrige chamada ambigua de export Git debug no fecho da run
+'   - Qualifica `PipelineGitDebug_ExportIfEnabled` como `M21_GitDebugExport.PipelineGitDebug_ExportIfEnabled` na saida limpa.
+'   - Evita `Compile error: Ambiguous name detected: PipelineGitDebug_ExportIfEnabled` com modulos duplicados no VBAProject.
+' - 2026-03-14 | Codex | Corrige chamada ambigua de RUN_FINISH no Git LOG
+'   - Qualifica `GitLog_AppendEvent` como `M28_GitLogSheet.GitLog_AppendEvent` na saida limpa da pipeline.
+'   - Evita `Compile error: Ambiguous name detected: GitLog_AppendEvent` com modulos duplicados no VBAProject.
+' - 2026-03-14 | Codex | Corrige chamada ambigua em escrita no Git LOG
+'   - Qualifica `GitLog_InsertEntryTop` como `M28_GitLog.GitLog_InsertEntryTop` no loop principal.
+'   - Evita `Compile error: Ambiguous name detected: GitLog_InsertEntryTop` quando existem modulos duplicados no VBAProject.
 ' - 2026-03-12 | Codex | Corrige chamada ambigua de preflight Git LOG
 '   - Qualifica a chamada para `M28_GitLog.GitLog_DiagnoseTarget` no arranque da pipeline.
 '   - Elimina `Compile error: Ambiguous name detected: GitLog_DiagnoseTarget` quando existem modulos duplicados no VBAProject.
@@ -788,7 +800,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
     If Trim$(runDumpFolder) = "" Then runDumpFolder = Environ$("TEMP")
     If Right$(runDumpFolder, 1) = "\" Then runDumpFolder = Left$(runDumpFolder, Len(runDumpFolder) - 1)
     runDumpFolder = runDumpFolder & "\DEBUG_PAYLOAD_DUMPS\" & Format$(Now, "yyyymmdd_hhnnss") & "_" & Replace$(Replace$(pipelineNome, " ", "_"), "/", "_")
-    Call M05_SetRunDumpFolder(runDumpFolder, pipelineNome)
+    Call M05_OpenAI_API_request_enviar.M05_SetRunDumpFolder(runDumpFolder, pipelineNome)
 
     Dim maxSteps As Long, maxRep As Long
     Call Painel_LerLimitesPipeline(wsPainel, pipelineIndex, maxSteps, maxRep)
@@ -1282,7 +1294,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
         If Painel_GitLog_IsEnabled(pipelineIndex) Then
             Dim gitLogOk As Boolean
             Dim gitLogReason As String
-            Call GitLog_InsertEntryTop(runToken, pipelineNome, passo, prompt.Id, resultado.httpStatus, resultado.responseId, textoSeguimento, "", gitLogOk, gitLogReason)
+            Call M28_GitLog.GitLog_InsertEntryTop(runToken, pipelineNome, passo, prompt.Id, resultado.httpStatus, resultado.responseId, textoSeguimento, "", gitLogOk, gitLogReason)
             If Not gitLogOk Then
                 Call Debug_Registar(passo, prompt.Id, "ERRO", "", "GIT_LOG_WRITE", _
                     "Falha ao escrever na folha Git LOG. " & gitLogReason, _
@@ -1450,16 +1462,16 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
 SaidaLimpa:
     If gitLogEnabled Then
-        Call GitLog_AppendEvent(runToken, passoCtx, pipelineNome, promptCtx, "INFO", "RUN_FINISH", "PAINEL", _
+        Call M28_GitLogSheet.GitLog_AppendEvent(runToken, passoCtx, pipelineNome, promptCtx, "INFO", "RUN_FINISH", "PAINEL", _
             "Execucao da pipeline concluida.", _
             "executou_passos=" & IIf(runExecutouPassos, "SIM", "NAO") & " | ultimo_stage=" & mStepLastStage)
     End If
 
     If runExecutouPassos Then
-        Call PipelineGitDebug_ExportIfEnabled(pipelineIndex, pipelineNome, painelAutoSave)
+        Call M21_GitDebugExport.PipelineGitDebug_ExportIfEnabled(pipelineIndex, pipelineNome, painelAutoSave)
     End If
 
-    Call M05_ClearRunDumpFolder
+    Call M05_OpenAI_API_request_enviar.M05_ClearRunDumpFolder
 
     Application.StatusBar = False
     Application.DisplayStatusBar = oldDisplayStatusBar
