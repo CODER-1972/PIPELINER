@@ -9,6 +9,9 @@ Option Explicit
 ' - Persistir metadado de run por linha atraves de coluna auxiliar oculta.
 '
 ' Atualizacoes:
+' - 2026-03-14 | Codex | Corrige escrita no GIT LOG com cabecalhos canonicos e estilo de linha
+'   - Passa a mapear colunas por aliases (PT/EN) para evitar falha silenciosa quando o schema da folha usa "Step/Pipeline".
+'   - Forca estilo base da nova linha de dados (fundo branco + texto preto) para impedir heranca de cores apos insercao no topo.
 ' - 2026-03-12 | Codex | Diagnostico e resolucao robusta da folha alvo do Git LOG
 '   - Passa a resolver folha alvo por candidatos: "GIT LOG", "GIT_LOG", "HISTORICO" e "HISTÃ“RICO".
 '   - Adiciona GitLog_DiagnoseTarget para registar diagnostico acionavel no DEBUG quando nao houver escrita.
@@ -26,6 +29,8 @@ Option Explicit
 '   - Insere linha separadora no topo quando a run corrente difere da ultima run registada.
 ' - GitLog_InsertEntryTop(...)
 '   - Escreve entrada na linha 2 e garante metadados/continuidade do bloco da run.
+' - GitLog_MapFirstExisting(map As Object, headerAliases As String) As Long
+'   - Resolve a primeira coluna existente para um conjunto de aliases de cabecalho separados por '|'.
 ' =============================================================================
 
 Private Const GITLOG_META_HEADER As String = "__RUN_ID_META"
@@ -169,19 +174,42 @@ Public Sub GitLog_InsertEntryTop( _
 
     ws.Rows(GITLOG_TOP_ROW).Insert Shift:=xlDown
 
-    If map.exists("Timestamp") Then ws.Cells(GITLOG_TOP_ROW, CLng(map("Timestamp"))).Value = Format$(Now, "yyyy-mm-dd hh:mm")
-    If map.exists("Nome do Pipeline") Then ws.Cells(GITLOG_TOP_ROW, CLng(map("Nome do Pipeline"))).Value = pipelineNome
-    If map.exists("Passo") Then ws.Cells(GITLOG_TOP_ROW, CLng(map("Passo"))).Value = passo
-    If map.exists("Prompt ID") Then ws.Cells(GITLOG_TOP_ROW, CLng(map("Prompt ID"))).Value = promptId
-    If map.exists("HTTP Status") Then ws.Cells(GITLOG_TOP_ROW, CLng(map("HTTP Status"))).Value = httpStatus
-    If map.exists("Response ID") Then ws.Cells(GITLOG_TOP_ROW, CLng(map("Response ID"))).Value = responseId
-    If map.exists("Output (texto)") Then ws.Cells(GITLOG_TOP_ROW, CLng(map("Output (texto)"))).Value = outputResumo
-    If map.exists("Next prompt decidido") Then ws.Cells(GITLOG_TOP_ROW, CLng(map("Next prompt decidido"))).Value = nextPromptDecidido
+    Dim cTimestamp As Long
+    Dim cRunId As Long
+    Dim cPipeline As Long
+    Dim cStep As Long
+    Dim cPromptId As Long
+    Dim cHttpStatus As Long
+    Dim cResponseId As Long
+    Dim cOutput As Long
+    Dim cNextPrompt As Long
+
+    cTimestamp = GitLog_MapFirstExisting(map, "Timestamp")
+    cRunId = GitLog_MapFirstExisting(map, "Run ID|RunID")
+    cPipeline = GitLog_MapFirstExisting(map, "Pipeline|Nome do Pipeline")
+    cStep = GitLog_MapFirstExisting(map, "Step|Passo")
+    cPromptId = GitLog_MapFirstExisting(map, "Prompt ID")
+    cHttpStatus = GitLog_MapFirstExisting(map, "HTTP Status")
+    cResponseId = GitLog_MapFirstExisting(map, "Response ID")
+    cOutput = GitLog_MapFirstExisting(map, "Output (texto)|Output|Summary")
+    cNextPrompt = GitLog_MapFirstExisting(map, "Next prompt decidido|Next Prompt|Next Prompt ID")
+
+    If cTimestamp > 0 Then ws.Cells(GITLOG_TOP_ROW, cTimestamp).Value = Format$(Now, "yyyy-mm-dd hh:mm")
+    If cRunId > 0 Then ws.Cells(GITLOG_TOP_ROW, cRunId).Value = Trim$(runId)
+    If cPipeline > 0 Then ws.Cells(GITLOG_TOP_ROW, cPipeline).Value = pipelineNome
+    If cStep > 0 Then ws.Cells(GITLOG_TOP_ROW, cStep).Value = passo
+    If cPromptId > 0 Then ws.Cells(GITLOG_TOP_ROW, cPromptId).Value = promptId
+    If cHttpStatus > 0 Then ws.Cells(GITLOG_TOP_ROW, cHttpStatus).Value = httpStatus
+    If cResponseId > 0 Then ws.Cells(GITLOG_TOP_ROW, cResponseId).Value = responseId
+    If cOutput > 0 Then ws.Cells(GITLOG_TOP_ROW, cOutput).Value = outputResumo
+    If cNextPrompt > 0 Then ws.Cells(GITLOG_TOP_ROW, cNextPrompt).Value = nextPromptDecidido
 
     ws.Cells(GITLOG_TOP_ROW, metaCol).Value = Trim$(runId)
 
-    If map.exists("Timestamp") Then
-        ws.Cells(GITLOG_TOP_ROW, CLng(map("Timestamp"))).NumberFormat = "yyyy-mm-dd hh:mm"
+    Call GitLog_ApplyInsertedRowStyle(ws, GITLOG_TOP_ROW, metaCol)
+
+    If cTimestamp > 0 Then
+        ws.Cells(GITLOG_TOP_ROW, cTimestamp).NumberFormat = "yyyy-mm-dd hh:mm"
     End If
 
     outOk = True
@@ -191,6 +219,36 @@ Public Sub GitLog_InsertEntryTop( _
 EH:
     outReason = "entry_err=" & CStr(Err.Number) & " | " & Left$(Err.Description, 160)
 End Sub
+
+Private Sub GitLog_ApplyInsertedRowStyle(ByVal ws As Worksheet, ByVal targetRow As Long, ByVal metaCol As Long)
+    Dim lastCol As Long
+    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+    If lastCol < 1 Then lastCol = 1
+    If metaCol > lastCol Then lastCol = metaCol
+
+    With ws.Range(ws.Cells(targetRow, 1), ws.Cells(targetRow, lastCol))
+        .Interior.Pattern = xlSolid
+        .Interior.Color = vbWhite
+        .Font.Color = vbBlack
+    End With
+End Sub
+
+Private Function GitLog_MapFirstExisting(ByVal map As Object, ByVal headerAliases As String) As Long
+    Dim parts As Variant
+    parts = Split(headerAliases, "|")
+
+    Dim i As Long
+    For i = LBound(parts) To UBound(parts)
+        Dim key As String
+        key = Trim$(CStr(parts(i)))
+        If key <> "" Then
+            If map.exists(key) Then
+                GitLog_MapFirstExisting = CLng(map(key))
+                Exit Function
+            End If
+        End If
+    Next i
+End Function
 
 Private Function GitLog_GetSheet(Optional ByRef resolvedName As String = "") As Worksheet
     On Error Resume Next
