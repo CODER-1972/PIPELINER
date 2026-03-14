@@ -1,0 +1,77 @@
+﻿{
+  "id": "resp_08f6d719867c8a6a0069b5b5dcd6e0819f83f361f9c63fa248",
+  "object": "response",
+  "created_at": 1773516256,
+  "status": "completed",
+  "background": false,
+  "billing": {
+    "payer": "developer"
+  },
+  "completed_at": 1773516269,
+  "error": null,
+  "frequency_penalty": 0.0,
+  "incomplete_details": null,
+  "instructions": "Responde em Portugu\u00eas de Portugal. Web=N\u00e3o. Corrige apenas com evid\u00eancia; caso contr\u00e1rio [POR CONFIRMAR].",
+  "max_output_tokens": 400000,
+  "max_tool_calls": null,
+  "model": "gpt-5.4-2026-03-05",
+  "output": [
+    {
+      "id": "msg_08f6d719867c8a6a0069b5b5e916d0819f84f7e7baf9637200",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [],
+          "logprobs": [],
+          "text": "TSV_CATALOGO_DRAFT_ENC: [ERRO:CONTEXTKV_MISSING_RESULTS_JSON]\nMEMORY_SHORT: O valor fornecido em RESULTS_JSON n\u00e3o \u00e9 um RESULTS_JSON v\u00e1lido; \u00e9 apenas a mensagem de falha segura do passo anterior.\\nPara corrigir: 1) reexecutar o passo anterior com ContextKV activo; 2) garantir captura da linha exacta \u201cRESULTS_JSON: <json minificado>\u201d; 3) injectar essa vari\u00e1vel neste passo.\\nSem JSON v\u00e1lido n\u00e3o \u00e9 poss\u00edvel listar prompts, preservar ordem, nem montar o cat\u00e1logo em bloco de 5 linhas."
+        }
+      ],
+      "phase": "final_answer",
+      "role": "assistant"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0.0,
+  "previous_response_id": "resp_08f6d719867c8a6a0069b5b59e5a7c819f951b2cb18020d34d",
+  "prompt_cache_key": null,
+  "prompt_cache_retention": null,
+  "reasoning": {
+    "effort": "none",
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": true,
+  "temperature": 0.7,
+  "text": {
+    "format": {
+      "type": "text"
+    },
+    "verbosity": "medium"
+  },
+  "tool_choice": "auto",
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 0.98,
+  "truncation": "auto",
+  "usage": {
+    "input_tokens": 388786,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 129,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 388915
+  },
+  "user": null,
+  "metadata": {
+    "prompt_family": "WF_LAYOUT_QA",
+    "versao": "v1.2",
+    "handoff_in": "TSV_CATALOGO_DRAFT_ENC",
+    "handoff_out": "TSV_CATALOGO_FINAL_ENC"
+  }
+}
