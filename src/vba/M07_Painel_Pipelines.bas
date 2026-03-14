@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-14 | Codex | Corrige chamada ambigua de export Git debug no fecho da run
+'   - Qualifica `PipelineGitDebug_ExportIfEnabled` como `M21_GitDebugExport.PipelineGitDebug_ExportIfEnabled` na saida limpa.
+'   - Evita `Compile error: Ambiguous name detected: PipelineGitDebug_ExportIfEnabled` com modulos duplicados no VBAProject.
 ' - 2026-03-14 | Codex | Corrige chamada ambigua de RUN_FINISH no Git LOG
 '   - Qualifica `GitLog_AppendEvent` como `M28_GitLogSheet.GitLog_AppendEvent` na saida limpa da pipeline.
 '   - Evita `Compile error: Ambiguous name detected: GitLog_AppendEvent` com modulos duplicados no VBAProject.
@@ -1462,7 +1465,7 @@ SaidaLimpa:
     End If
 
     If runExecutouPassos Then
-        Call PipelineGitDebug_ExportIfEnabled(pipelineIndex, pipelineNome, painelAutoSave)
+        Call M21_GitDebugExport.PipelineGitDebug_ExportIfEnabled(pipelineIndex, pipelineNome, painelAutoSave)
     End If
 
     Call M05_ClearRunDumpFolder

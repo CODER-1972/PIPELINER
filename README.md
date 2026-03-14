@@ -449,7 +449,7 @@ Boas práticas de manutenção VBA (preventivas):
 - no VBA, usar `IsMissing` apenas em parâmetros `Optional Variant`; em helpers utilitários como `Nz`, preferir contrato explícito (fallback opcional) e tratar `Null`/`Error` sem `IsMissing` para evitar `Compile error: Invalid use of IsMissing`.
 - em chamadas entre módulos com nomes potencialmente repetidos após importações (ex.: `M07_Painel_Pipelines1`), preferir qualificação explícita (`Modulo.Funcao`) para reduzir risco de `Compile error: Ambiguous name detected`.
 - no fluxo de Git LOG, qualificar explicitamente as chamadas de helper (`M28_GitLog.GitLog_DiagnoseTarget`, `M28_GitLog.GitLog_InsertEntryTop` e `M28_GitLogSheet.GitLog_AppendEvent`) para evitar ambiguidades quando o VBAProject contém módulos duplicados (`...1`).
-- no fluxo de Git LOG do `M07_Painel_Pipelines`, qualificar explicitamente `M28_GitLog.GitLog_DiagnoseTarget` e `M28_GitLog.GitLog_InsertEntryTop` para evitar ambiguidades quando o VBAProject contém módulos duplicados (`M28_GitLog1`, etc.).
+- no fecho da pipeline em `M07_Painel_Pipelines`, qualificar também `M21_GitDebugExport.PipelineGitDebug_ExportIfEnabled` para prevenir colisão com módulos duplicados (`M21_GitDebugExport1`, etc.).
 
 
 ### Diagnóstico rápido: web_search + anexos + ContextKV
