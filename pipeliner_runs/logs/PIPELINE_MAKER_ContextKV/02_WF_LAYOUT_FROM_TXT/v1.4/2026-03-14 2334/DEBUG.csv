@@ -1,0 +1,414 @@
+﻿"row_number","Timestamp","Passo","Prompt ID","Severidade","Linha (Config extra)","Parâmetro","Funcionalidade","Problema","Sugestão","pipeline_name","action","var","result","details","pipeline_name"
+"2","14/03/2026 23:31:13","0","PIPELINE_MAKER_ContextKV","INFO","","M05_RUN_DUMP","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso","Run dump ativo em C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\DEBUG_PAYLOAD_DUMPS\20260314_233113_PIPELINE_MAKER_ContextKV","Os ficheiros request/response desta run serao elegiveis para upload Git quando Git LOG estiver ON.","","","","","",""
+"3","14/03/2026 23:31:13","0","PIPELINE_MAKER_ContextKV","ALERTA","","OPENAI_API_KEY","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Leitura de configuracao e metadados do passo | Validacao de disponibilidade da chave API em Config","Config!B1 contém API key literal, mas OPENAI_API_KEY do ambiente foi priorizada. Recomenda-se remover a key literal da folha Config.","Sem ação imediata; recomendado migrar para variável de ambiente.","","","","","",""
+"4","14/03/2026 23:31:13","0","PIPELINE_MAKER_ContextKV","INFO","","PIPELINE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Validacao de transicao de Next PROMPT | Aplicacao de limites de execucao da pipeline | Controlo de transicao/limites da pipeline | contexto: inputFolder=[C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER]","Inicio pipeline. startId=[PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5] maxSteps=10 maxRep=3 inputFolder=[C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER]","OK","","","","","",""
+"5","14/03/2026 23:31:13","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","GIT_LOG_BIND","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso","Preflight Git LOG OK. target_sheet=GIT LOG | headers_count=10 | has_timestamp=SIM | has_prompt_id=SIM | meta_col=11","OK","","","","","",""
+"6","14/03/2026 23:31:14","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=enter_step","stage=enter_step | row=1/3","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"7","14/03/2026 23:31:14","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=before_context_inject","stage=before_context_inject","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"8","14/03/2026 23:31:14","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=catalog_loaded | prompt=4260","stage=catalog_loaded | lenPrompt=4260","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"9","14/03/2026 23:31:14","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=after_context_inject","stage=after_context_inject | injectOk=SIM","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"10","14/03/2026 23:31:14","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=before_inputs_attach","stage=before_inputs_attach","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"11","14/03/2026 23:31:14","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=after_inputs_attach | prompt=4488","stage=after_inputs_attach | lenPrompt=4488","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"12","14/03/2026 23:31:14","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=config_parse_start","stage=config_parse_start | lenConfigExtra=208","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"13","14/03/2026 23:31:14","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=config_parsed","stage=config_parsed | lenAudit=224|lenInputJson=0","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"14","14/03/2026 23:31:14","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=files_prepare_start","stage=files_prepare_start | temFiles=SIM","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"15","14/03/2026 23:31:14","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","PDF_CACHE_HIT","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Gestao da cache de conversao PDF para anexos Office","PDF em cache usado (sidecar OK): FORMULARIO_DE_PROMPTS_1_2_2026-02-23.docx","Sem reconversão. Se o DOCX mudar, o sourceHash muda e será reconvertido.","","","","","",""
+"16","14/03/2026 23:31:16","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","FILES UPLOAD","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload | contexto: file_id=file-VPm4UpaLthNvF5hiXXJx8Y","Upload OK | HTTP 200 | file_id=file-VPm4UpaLthNvF5hiXXJx8Y | purpose=user_data | reuse=TRUE (config) | cache_invalida: file_id inativo (GET /v1/files/file-J88f7QKxVgciNDnRzBMLCL => HTTP 404 | {
+  ""error"": {
+    ""message"": ""No such File object: file-J88f7QKxVgciNDnRzBMLCL"",
+    ""type"": ""invalid_request_error"",
+    ""param"": ""id"",
+    ""code"": null
+  },
+  ""detail"": {
+    ""message"": ""No such Fi); cache_ignorada(path): ficheiro mudou (size/lastmod)","","","","","","",""
+"17","14/03/2026 23:31:16","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","FILES_ITEM_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Resolucao de item FILES declarado no INPUTS | Aplicacao de flags required/latest/as_pdf/as_is/text_embed | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload | contexto: requested=FORMULARIO_DE_PROMPTS*.docx | resolved=FORMULARIO_DE_PROMPTS_1_2_2026-02-23.docx | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\FORMULARIO_DE_PROMPTS_1_2_2026-02-23.docx | file_id=file-VPm4UpaLthNvF5hiXXJx8Y | status=OK | mode=pdf_upload","status=OK | required=SIM | requested=FORMULARIO_DE_PROMPTS*.docx | resolved=FORMULARIO_DE_PROMPTS_1_2_2026-02-23.docx | mode=pdf_upload | file_id=file-VPm4UpaLthNvF5hiXXJx8Y | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\FORMULARIO_DE_PROMPTS_1_2_2026-02-23.docx | problema_tipo=ANEXADO_COM_SUCESSO | explicacao=Ficheiro resolvido e processado sem erro para o modo pedido/efetivo. Regra latest ativa.","Sem acao necessaria.","","","","","",""
+"18","14/03/2026 23:31:19","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","FILES UPLOAD","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload | contexto: file_id=file-5svtxrnq26TMnrUtU8YeCH","Upload OK | HTTP 200 | file_id=file-5svtxrnq26TMnrUtU8YeCH | purpose=user_data | reuse=TRUE (config) | cache_invalida: file_id inativo (GET /v1/files/file-XPU7AQoAbjaxysxzqji7Yq => HTTP 404 | {
+  ""error"": {
+    ""message"": ""No such File object: file-XPU7AQoAbjaxysxzqji7Yq"",
+    ""type"": ""invalid_request_error"",
+    ""param"": ""id"",
+    ""code"": null
+  },
+  ""detail"": {
+    ""message"": ""No such Fi); cache_invalida(path): file_id inativo (GET /v1/files/file-XPU7AQoAbjaxysxzqji7Yq => HTTP 404 | {
+  ""error"": {
+    ""message"": ""No such File object: file-XPU7AQoAbjaxysxzqji7Yq"",
+    ""type"": ""invalid_request_error"",
+    ""param"": ""id"",
+    ""code"": null
+  },
+  ""detail"": {
+    ""message"": ""No such Fi)","","","","","","",""
+"19","14/03/2026 23:31:19","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","FILES_ITEM_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Resolucao de item FILES declarado no INPUTS | Aplicacao de flags required/latest/as_pdf/as_is/text_embed | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload | contexto: requested=ORIENTACOES_PIPELINE*.pdf | resolved=ORIENTACOES_PIPELINE_E_PROMPT_CREATION_automatica_2026-02-28_index_yaml_sec_id_v6_7.pdf | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\ORIENTACOES_PIPELINE_E_PROMPT_CREATION_automatica_2026-02-28_index_yaml_sec_id_v6_7.pdf | file_id=file-5svtxrnq26TMnrUtU8YeCH | status=OK | mode=pdf_upload","status=OK | required=SIM | requested=ORIENTACOES_PIPELINE*.pdf | resolved=ORIENTACOES_PIPELINE_E_PROMPT_CREATION_automatica_2026-02-28_index_yaml_sec_id_v6_7.pdf | mode=pdf_upload | file_id=file-5svtxrnq26TMnrUtU8YeCH | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\ORIENTACOES_PIPELINE_E_PROMPT_CREATION_automatica_2026-02-28_index_yaml_sec_id_v6_7.pdf | problema_tipo=ANEXADO_COM_SUCESSO | explicacao=Ficheiro resolvido e processado sem erro para o modo pedido/efetivo. Regra latest ativa.","Sem acao necessaria.","","","","","",""
+"20","14/03/2026 23:31:19","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","TEXT_EMBED_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Rastreio de integridade de text_embed (name/len_chars/hash_short)","name=PROMPT_TEMPLATE.csv | len_chars=33250 | hash_short=a1a28ca8","Trace tecnico de text_embed para diagnostico de consistencia de conteudo.","","","","","",""
+"21","14/03/2026 23:31:19","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","TEXT_EMBED_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Rastreio de integridade de text_embed (name/len_chars/hash_short)","name=PROMPT_TEMPLATE.csv | len_chars=33250 | hash_short=7c334738","Trace tecnico de text_embed para diagnostico de consistencia de conteudo.","","","","","",""
+"22","14/03/2026 23:31:19","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","FILES_ITEM_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Resolucao de item FILES declarado no INPUTS | Aplicacao de flags required/latest/as_pdf/as_is/text_embed | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload | contexto: requested=PROMPT_TEMPLATE*.csv | resolved=PROMPT_TEMPLATE.csv | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\PROMPT_TEMPLATE.csv | status=OK | mode=text_embed","status=OK | required=SIM | requested=PROMPT_TEMPLATE*.csv | resolved=PROMPT_TEMPLATE.csv | mode=text_embed | file_id= | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\PROMPT_TEMPLATE.csv | problema_tipo=ANEXADO_COM_SUCESSO | explicacao=Ficheiro resolvido e processado sem erro para o modo pedido/efetivo. Regra latest ativa.","Sem acao necessaria.","","","","","",""
+"23","14/03/2026 23:31:19","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","TEXT_EMBED_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Rastreio de integridade de text_embed (name/len_chars/hash_short)","name=FLOW_TEMPLATE.csv | len_chars=1825 | hash_short=380af404","Trace tecnico de text_embed para diagnostico de consistencia de conteudo.","","","","","",""
+"24","14/03/2026 23:31:19","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","TEXT_EMBED_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Rastreio de integridade de text_embed (name/len_chars/hash_short)","name=FLOW_TEMPLATE.csv | len_chars=1825 | hash_short=a59a8e54","Trace tecnico de text_embed para diagnostico de consistencia de conteudo.","","","","","",""
+"25","14/03/2026 23:31:19","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","FILES_ITEM_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Resolucao de item FILES declarado no INPUTS | Aplicacao de flags required/latest/as_pdf/as_is/text_embed | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload | contexto: requested=FLOW_TEMPLATE*.csv | resolved=FLOW_TEMPLATE.csv | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\FLOW_TEMPLATE.csv | status=OK | mode=text_embed","status=OK | required=SIM | requested=FLOW_TEMPLATE*.csv | resolved=FLOW_TEMPLATE.csv | mode=text_embed | file_id= | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\FLOW_TEMPLATE.csv | problema_tipo=ANEXADO_COM_SUCESSO | explicacao=Ficheiro resolvido e processado sem erro para o modo pedido/efetivo. Regra latest ativa.","Sem acao necessaria.","","","","","",""
+"26","14/03/2026 23:31:19","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","FILES","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload","Anexacao OK (input_file/input_image com file_id). fileIds=[file-VPm4UpaLthNvF5hiXXJx8Y; file-5svtxrnq26TMnrUtU8YeCH]","Nota: file_id presente implica que houve upload anterior ou reutilizacao valida.","","","","","",""
+"27","14/03/2026 23:31:19","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","FILES","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload","Anexacao OK via text_embed. blocos_text_embed=2","Nota: text_embed coexiste com input_file/input_image quando ha anexos mistos; neste modo nao existe file_id para os ficheiros textuais.","","","","","",""
+"28","14/03/2026 23:31:20","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","REQ_INPUT_JSON","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem do bloco input do request | Validacao de anexos (input_file/input_image/text_embed) | Associacao de ficheiro por file_id no payload | contexto: file=SIM","len=40396 | has_input_file=SIM | has_input_image=NAO | has_text_embed=SIM | preview=[{""role"":""user"",""content"":[{""type"":""input_file"",""file_id"":""file-VPm4UpaLthNvF5hiXXJx8Y""},{""type"":""input_file"",""file_id"":""file-5svtxrnq26TMnrUtU8YeCH""},{""type"":""input_text"",""text"":""NOME DA PROMPT (metadado interno — NÃO IMPRIMIR NO OUTPUT)\nNome curto: Auditoria e Optimização de Prompts + Configuração para PIPELINER (handoff via variáveis ContextKV)","Input final construído; este retrato confirma se anexos seguiram como file/image e/ou text_embed. Se esperava text_embed, validar has_text_embed=SIM e blocos BEGIN/END FILE no payload dump.","","","","","",""
+"29","14/03/2026 23:31:20","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | Preparacao da chamada /v1/responses | contexto: stage=before_api","stage=before_api | lenInputJsonFinal=40396","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"30","14/03/2026 23:31:20","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | Disparo do pedido HTTP para a API | contexto: stage=api_call_start","stage=api_call_start | model=gpt-5.4","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"31","14/03/2026 23:31:20","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","M05_CI_INTENT_EVAL","Download, validacao e contrato dos ficheiros finais gerados pelo Code Interpreter.
+ACAO EM CURSO: Avaliacao da intencao explicita de Code Interpreter | Gate da auto-injecao da tool code_interpreter | Inspecao de artefactos de output no container do Code Interpreter | contexto: file=SIM | resolved=NAO","ci_in_extra=NAO | ci_intent_resolved=NAO | ci_explicit_intent=NAO | modos_ci=NAO | has_input_file=SIM | has_input_image=NAO","Diagnostico de origem da intencao de CI (extraFragment vs modo efetivo resolvido no orquestrador).","","","","","",""
+"32","14/03/2026 23:31:20","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","M05_UTF8_ROUNDTRIP","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | contexto: payload_len=40705","roundtrip UTF-8 OK | payload_len=40705","Gate de codificacao concluido antes do envio HTTP.","","","","","",""
+"33","14/03/2026 23:31:20","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","M05_PAYLOAD_DUMP","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP","Payload final gravado em C:\Temp\payload.json | len=40705","Use este ficheiro para validar text.format.schema e outros fragmentos antes de novo envio.","","","","","",""
+"34","14/03/2026 23:31:20","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","M05_PAYLOAD_CHECK","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | Checklist pre-envio do payload (tools/input/tamanho) | Associacao de ficheiro por file_id no payload | contexto: file=SIM | endpoint=https://api.openai.com/v1/responses | prompt=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5 | pipeline=PIPELINE_MAKER_ContextKV | file_id=SIM | mode=text/metadata | payload_len=40705","FP=pipeline=PIPELINE_MAKER_ContextKV|step=1|prompt=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5|mode=text/metadata|resp=[pendente]|model=gpt-5.4|ok_http=[pendente]|mode=[pendente] | endpoint=https://api.openai.com/v1/responses | model=gpt-5.4 | input_is_array=SIM | has_input_file=SIM | has_file_data=NAO | has_file_id=SIM | has_input_image=NAO | web_search=OFF | code_interpreter=OFF | payload_len=40705","Pedido preparado e enviado com sucesso técnico; validação de contrato de output será feita após resposta (correlacionar com M10_* do mesmo FP).","","","","","",""
+"35","14/03/2026 23:31:20","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","M05_HTTP_TIMEOUTS","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | Calculo e aplicacao de timeouts efetivos | contexto: prompt=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5 | pipeline=PIPELINE_MAKER_ContextKV | mode=text/metadata","FP=pipeline=PIPELINE_MAKER_ContextKV|step=1|prompt=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5|mode=text/metadata|resp=[pendente]|model=gpt-5.4|ok_http=[pendente]|mode=[pendente] | resolve_ms=15000 | connect_ms=15000 | send_ms=480000 | receive_ms=360000","Time-outs aplicados nesta execucao; util para distinguir lentidao de erro logico. Se houver timeout, aumentar HTTP_TIMEOUT_RECEIVE_MS e repetir 1 vez.","","","","","",""
+"36","14/03/2026 23:33:25","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","M05_RUN_DUMP","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso | contexto: status=200","Dumps request/response guardados para a run.","step=1 | status=200 | folder=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\DEBUG_PAYLOAD_DUMPS\20260314_233113_PIPELINE_MAKER_ContextKV","","","","","",""
+"37","14/03/2026 23:33:25","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","M05_HTTP_RESULT","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | Correlacao de status HTTP com acao de recuperacao | contexto: prompt=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5 | pipeline=PIPELINE_MAKER_ContextKV | status=200 | http_status=200 | mode=text/metadata","FP=pipeline=PIPELINE_MAKER_ContextKV|step=1|prompt=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5|mode=text/metadata|resp=resp_02d69874ac3ede820069b5efc9d3c881a2b00b3414db45dd4a|model=gpt-5.4|ok_http=SIM|mode=[pendente] | http_status=200","Transporte HTTP concluido com sucesso (2xx). O contrato funcional de output deve ser confirmado pelos eventos M10.","","","","","",""
+"38","14/03/2026 23:33:25","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","CONTRACT_EVAL_START","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso | contexto: promptId=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5]","[RunID: 20260314_233046_4007]
+[Passo: 1]
+[PromptID: PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5]
+[Contrato: SEM_CONTRATO]
+[Estado: OK]
+[Regra: C0_NO_CONTRACT]
+[Severidade: INFO]
+Validacao de consistencia desativada neste passo.","Se houver intermitencia de ficheiros, considerar ativar diagnostic_contract: ci_csv_v1.
+[DetailJsonCompact]
+{""contract"":""SEM_CONTRATO""}","","","","","",""
+"39","14/03/2026 23:33:25","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","ALERTA","","CONTRACT_SUGGEST_ENABLE","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso | contexto: promptId=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5]","[RunID: 20260314_233046_4007]
+[Passo: 1]
+[PromptID: PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5]
+[Contrato: SEM_CONTRATO]
+[Estado: OK]
+[Regra: C0_SUGGEST]
+[Severidade: ALERTA]
+Este passo menciona CSV/LOAD_CSV sem contrato ativo.","Sugestao: ativar diagnostic_contract: ci_csv_v1 e exigir prova textual minima (CSV_EXISTE_EM_MNT_DATA, FILE_CSV, MNT_DATA_LIST).
+[DetailJsonCompact]
+{""hint"":""csv_or_execute_without_contract"",""hasFlowTemplateCsvMention"":true,""hasExecute"":false,""hasLoadCsv"":false,""processModeHint"":""""}","","","","","",""
+"40","14/03/2026 23:33:25","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","CONTRACT_STATE_DECISION","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso | contexto: promptId=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5]","[RunID: 20260314_233046_4007]
+[Passo: 1]
+[PromptID: PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5]
+[Contrato: SEM_CONTRATO]
+[Estado: OK]
+[Regra: C0_NO_CONTRACT]
+[Severidade: INFO]
+Passo sem contrato explicito; execucao segue com observacao diagnostica.","Sem acao obrigatoria. Se houver falhas recorrentes, ativar diagnostic_contract: ci_csv_v1 no passo.
+[DetailJsonCompact]
+{""contract"":""SEM_CONTRATO""}","","","","","",""
+"41","14/03/2026 23:33:25","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","CONTRACT_NEXT_ACTION","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Controlo de transicao/limites da pipeline | contexto: promptId=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5]","[RunID: 20260314_233046_4007]
+[Passo: 1]
+[PromptID: PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5]
+[Contrato: SEM_CONTRATO]
+[Estado: OK]
+[Regra: C0_NO_CONTRACT]
+[Severidade: INFO]
+Proxima acao recomendada definida.","Sem acao obrigatoria. Se houver falhas recorrentes, ativar diagnostic_contract: ci_csv_v1 no passo.
+[DetailJsonCompact]
+{""action"":""continue_pipeline""}","","","","","",""
+"42","14/03/2026 23:33:25","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","OUTPUT_EXECUTE_FOUND","Aplicacao do plano de output e validacao dos artefactos guardados no OUTPUT Folder.
+ACAO EM CURSO: Execucao da diretiva OUTPUT_EXECUTE | Importacao/validacao de CSV em worksheet dedicada | Validacao de output esperado e artefacto final | contexto: response_id=resp_02d69874ac3ede820069b5efc9d3c881a2b00b3414db45dd4a","response_id=resp_02d69874ac3ede820069b5efc9d3c881a2b00b3414db45dd4a | directives=0 | m10_ctx=filesUsed= | filesOps=","","","","","","",""
+"43","14/03/2026 23:33:26","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | Fecho tecnico do passo com logging final | contexto: stage=step_completed | response_id=resp_02d69874ac3ede82006","stage=step_completed | http=200 | response_id=resp_02d69874ac3ede82006","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"44","14/03/2026 23:33:26","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","CAPTURE_START","","Início da captura (ContextKV). Output chars=11828.","","PIPELINE_MAKER_ContextKV","CAPTURE_START","","INFO","Início da captura (ContextKV). Output chars=11828.",""
+"45","14/03/2026 23:33:26","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","CAPTURE_OK","","Captura concluída. Keys=2 | captured_vars chars=24303.","","PIPELINE_MAKER_ContextKV","CAPTURE_OK","","INFO","Captura concluída. Keys=2 | captured_vars chars=24303.",""
+"46","14/03/2026 23:33:26","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","DEBUG_SNAPSHOT","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso","DEBUG consolidado no catalogo com sucesso para consulta rapida.","Foi atualizado o bloco de Notas para desenvolvimento (linhas 3 e 4 da prompt), substituindo conteudo anterior.","","","","","",""
+"47","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=enter_step","stage=enter_step | row=2/3","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"48","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=before_context_inject","stage=before_context_inject","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"49","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=catalog_loaded | prompt=2066","stage=catalog_loaded | lenPrompt=2066","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"50","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","PLACEHOLDER_FOUND","","Encontrados 4 placeholders {{VAR:...}}.","","PIPELINE_MAKER_ContextKV","PLACEHOLDER_FOUND","","INFO","Encontrados 4 placeholders {{VAR:...}}.",""
+"51","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","INJECT_START","","Início da injeção (ContextKV).","","PIPELINE_MAKER_ContextKV","INJECT_START","","INFO","Início da injeção (ContextKV).",""
+"52","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","INJECT_OK|RESULTS_JSON","","from_step=1; from_prompt=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5; source=captured_vars","","PIPELINE_MAKER_ContextKV","INJECT_OK","RESULTS_JSON","INFO","from_step=1; from_prompt=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5; source=captured_vars",""
+"53","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","PLACEHOLDER_REPLACED|RESULTS_JSON","","Placeholder substituído (11638 chars).","","PIPELINE_MAKER_ContextKV","PLACEHOLDER_REPLACED","RESULTS_JSON","INFO","Placeholder substituído (11638 chars).",""
+"54","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","PLACEHOLDER_REPLACED|RESULTS_JSON","","Placeholder substituído (11638 chars).","","PIPELINE_MAKER_ContextKV","PLACEHOLDER_REPLACED","RESULTS_JSON","INFO","Placeholder substituído (11638 chars).",""
+"55","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","PLACEHOLDER_REPLACED|RESULTS_JSON","","Placeholder substituído (11638 chars).","","PIPELINE_MAKER_ContextKV","PLACEHOLDER_REPLACED","RESULTS_JSON","INFO","Placeholder substituído (11638 chars).",""
+"56","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","PLACEHOLDER_REPLACED|RESULTS_JSON","","Placeholder substituído (11638 chars).","","PIPELINE_MAKER_ContextKV","PLACEHOLDER_REPLACED","RESULTS_JSON","INFO","Placeholder substituído (11638 chars).",""
+"57","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","INJECT_END","","Injeção concluída. injected_vars chars=148.","","PIPELINE_MAKER_ContextKV","INJECT_END","","INFO","Injeção concluída. injected_vars chars=148.",""
+"58","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=after_context_inject","stage=after_context_inject | injectOk=SIM","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"59","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=before_inputs_attach","stage=before_inputs_attach","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"60","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=after_inputs_attach | prompt=48686","stage=after_inputs_attach | lenPrompt=48686","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"61","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=config_parse_start","stage=config_parse_start | lenConfigExtra=220","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"62","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=config_parsed","stage=config_parsed | lenAudit=238|lenInputJson=0","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"63","14/03/2026 23:33:26","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=files_prepare_start","stage=files_prepare_start | temFiles=SIM","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"64","14/03/2026 23:33:26","0","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","TEXT_EMBED_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Rastreio de integridade de text_embed (name/len_chars/hash_short)","name=FLOW_TEMPLATE.csv | len_chars=1825 | hash_short=380af404","Trace tecnico de text_embed para diagnostico de consistencia de conteudo.","","","","","",""
+"65","14/03/2026 23:33:26","0","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","TEXT_EMBED_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Rastreio de integridade de text_embed (name/len_chars/hash_short)","name=FLOW_TEMPLATE.csv | len_chars=1825 | hash_short=a59a8e54","Trace tecnico de text_embed para diagnostico de consistencia de conteudo.","","","","","",""
+"66","14/03/2026 23:33:26","0","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","FILES_ITEM_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Resolucao de item FILES declarado no INPUTS | Aplicacao de flags required/latest/as_pdf/as_is/text_embed | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload | contexto: requested=FLOW_TEMPLATE*.csv | resolved=FLOW_TEMPLATE.csv | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\FLOW_TEMPLATE.csv | status=OK | mode=text_embed","status=OK | required=SIM | requested=FLOW_TEMPLATE*.csv | resolved=FLOW_TEMPLATE.csv | mode=text_embed | file_id= | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\FLOW_TEMPLATE.csv | problema_tipo=ANEXADO_COM_SUCESSO | explicacao=Ficheiro resolvido e processado sem erro para o modo pedido/efetivo. Regra latest ativa.","Sem acao necessaria.","","","","","",""
+"67","14/03/2026 23:33:30","0","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","FILES UPLOAD","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload | contexto: file_id=file-3992m861jLa98ydTqPp8j2","Upload OK | HTTP 200 | file_id=file-3992m861jLa98ydTqPp8j2 | purpose=user_data | reuse=TRUE (config) | cache_invalida: file_id inativo (GET /v1/files/file-XPU7AQoAbjaxysxzqji7Yq => HTTP 404 | {
+  ""error"": {
+    ""message"": ""No such File object: file-XPU7AQoAbjaxysxzqji7Yq"",
+    ""type"": ""invalid_request_error"",
+    ""param"": ""id"",
+    ""code"": null
+  },
+  ""detail"": {
+    ""message"": ""No such Fi); cache_invalida(path): file_id inativo (GET /v1/files/file-XPU7AQoAbjaxysxzqji7Yq => HTTP 404 | {
+  ""error"": {
+    ""message"": ""No such File object: file-XPU7AQoAbjaxysxzqji7Yq"",
+    ""type"": ""invalid_request_error"",
+    ""param"": ""id"",
+    ""code"": null
+  },
+  ""detail"": {
+    ""message"": ""No such Fi)","","","","","","",""
+"68","14/03/2026 23:33:30","0","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","FILES_ITEM_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Resolucao de item FILES declarado no INPUTS | Aplicacao de flags required/latest/as_pdf/as_is/text_embed | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload | contexto: requested=ORIENTACOES_PIPELINE*.pdf | resolved=ORIENTACOES_PIPELINE_E_PROMPT_CREATION_automatica_2026-02-28_index_yaml_sec_id_v6_7.pdf | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\ORIENTACOES_PIPELINE_E_PROMPT_CREATION_automatica_2026-02-28_index_yaml_sec_id_v6_7.pdf | file_id=file-3992m861jLa98ydTqPp8j2 | status=OK | mode=pdf_upload","status=OK | required=SIM | requested=ORIENTACOES_PIPELINE*.pdf | resolved=ORIENTACOES_PIPELINE_E_PROMPT_CREATION_automatica_2026-02-28_index_yaml_sec_id_v6_7.pdf | mode=pdf_upload | file_id=file-3992m861jLa98ydTqPp8j2 | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\ORIENTACOES_PIPELINE_E_PROMPT_CREATION_automatica_2026-02-28_index_yaml_sec_id_v6_7.pdf | problema_tipo=ANEXADO_COM_SUCESSO | explicacao=Ficheiro resolvido e processado sem erro para o modo pedido/efetivo. Regra latest ativa.","Sem acao necessaria.","","","","","",""
+"69","14/03/2026 23:33:30","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","FILES","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload","Anexacao OK (input_file/input_image com file_id). fileIds=[file-3992m861jLa98ydTqPp8j2]","Nota: file_id presente implica que houve upload anterior ou reutilizacao valida.","","","","","",""
+"70","14/03/2026 23:33:30","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","FILES","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload","Anexacao OK via text_embed. blocos_text_embed=1","Nota: text_embed coexiste com input_file/input_image quando ha anexos mistos; neste modo nao existe file_id para os ficheiros textuais.","","","","","",""
+"71","14/03/2026 23:33:30","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","REQ_INPUT_JSON","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem do bloco input do request | Validacao de anexos (input_file/input_image/text_embed) | Associacao de ficheiro por file_id no payload | contexto: file=SIM","len=53062 | has_input_file=SIM | has_input_image=NAO | has_text_embed=SIM | preview=[{""role"":""user"",""content"":[{""type"":""input_file"",""file_id"":""file-3992m861jLa98ydTqPp8j2""},{""type"":""input_text"",""text"":""ROLE\nÉs um(a) Especialista em Layouts de Catálogo/Execução PIPELINER e normalização determinística para automação.\n\nOBJETIVO\nCom base nos anexos fornecidos, deves:\n1) Ler o RESULTS_JSON do passo anterior (via ContextKV): {\""sch","Input final construído; este retrato confirma se anexos seguiram como file/image e/ou text_embed. Se esperava text_embed, validar has_text_embed=SIM e blocos BEGIN/END FILE no payload dump.","","","","","",""
+"72","14/03/2026 23:33:30","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | Preparacao da chamada /v1/responses | contexto: stage=before_api","stage=before_api | lenInputJsonFinal=53062","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"73","14/03/2026 23:33:30","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | Disparo do pedido HTTP para a API | contexto: stage=api_call_start","stage=api_call_start | model=gpt-5.4","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"74","14/03/2026 23:33:31","0","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","M05_CI_INTENT_EVAL","Download, validacao e contrato dos ficheiros finais gerados pelo Code Interpreter.
+ACAO EM CURSO: Avaliacao da intencao explicita de Code Interpreter | Gate da auto-injecao da tool code_interpreter | Inspecao de artefactos de output no container do Code Interpreter | contexto: file=SIM | resolved=NAO","ci_in_extra=NAO | ci_intent_resolved=NAO | ci_explicit_intent=NAO | modos_ci=NAO | has_input_file=SIM | has_input_image=NAO","Diagnostico de origem da intencao de CI (extraFragment vs modo efetivo resolvido no orquestrador).","","","","","",""
+"75","14/03/2026 23:33:31","0","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","M05_UTF8_ROUNDTRIP","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | contexto: payload_len=53466","roundtrip UTF-8 OK | payload_len=53466","Gate de codificacao concluido antes do envio HTTP.","","","","","",""
+"76","14/03/2026 23:33:31","0","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","M05_PAYLOAD_DUMP","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP","Payload final gravado em C:\Temp\payload.json | len=53466","Use este ficheiro para validar text.format.schema e outros fragmentos antes de novo envio.","","","","","",""
+"77","14/03/2026 23:33:31","0","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","M05_PAYLOAD_CHECK","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | Checklist pre-envio do payload (tools/input/tamanho) | Associacao de ficheiro por file_id no payload | contexto: file=SIM | endpoint=https://api.openai.com/v1/responses | prompt=PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4 | pipeline=PIPELINE_MAKER_ContextKV | file_id=SIM | mode=text/metadata | payload_len=53466","FP=pipeline=PIPELINE_MAKER_ContextKV|step=2|prompt=PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4|mode=text/metadata|resp=[pendente]|model=gpt-5.4|ok_http=[pendente]|mode=[pendente] | endpoint=https://api.openai.com/v1/responses | model=gpt-5.4 | input_is_array=SIM | has_input_file=SIM | has_file_data=NAO | has_file_id=SIM | has_input_image=NAO | web_search=OFF | code_interpreter=OFF | payload_len=53466","Pedido preparado e enviado com sucesso técnico; validação de contrato de output será feita após resposta (correlacionar com M10_* do mesmo FP).","","","","","",""
+"78","14/03/2026 23:33:31","0","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","M05_HTTP_TIMEOUTS","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | Calculo e aplicacao de timeouts efetivos | contexto: prompt=PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4 | pipeline=PIPELINE_MAKER_ContextKV | mode=text/metadata","FP=pipeline=PIPELINE_MAKER_ContextKV|step=2|prompt=PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4|mode=text/metadata|resp=[pendente]|model=gpt-5.4|ok_http=[pendente]|mode=[pendente] | resolve_ms=15000 | connect_ms=15000 | send_ms=480000 | receive_ms=360000","Time-outs aplicados nesta execucao; util para distinguir lentidao de erro logico. Se houver timeout, aumentar HTTP_TIMEOUT_RECEIVE_MS e repetir 1 vez.","","","","","",""
+"79","14/03/2026 23:34:09","0","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","M05_RUN_DUMP","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso | contexto: status=200","Dumps request/response guardados para a run.","step=2 | status=200 | folder=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\DEBUG_PAYLOAD_DUMPS\20260314_233113_PIPELINE_MAKER_ContextKV","","","","","",""
+"80","14/03/2026 23:34:09","0","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","M05_HTTP_RESULT","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | Correlacao de status HTTP com acao de recuperacao | contexto: prompt=PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4 | pipeline=PIPELINE_MAKER_ContextKV | status=200 | http_status=200 | mode=text/metadata","FP=pipeline=PIPELINE_MAKER_ContextKV|step=2|prompt=PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4|mode=text/metadata|resp=resp_02d69874ac3ede820069b5f04cd58881a2b5ac1455fc0e9374|model=gpt-5.4|ok_http=SIM|mode=[pendente] | http_status=200","Transporte HTTP concluido com sucesso (2xx). O contrato funcional de output deve ser confirmado pelos eventos M10.","","","","","",""
+"81","14/03/2026 23:34:09","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","CONTRACT_EVAL_START","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso | contexto: promptId=PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4]","[RunID: 20260314_233046_4007]
+[Passo: 2]
+[PromptID: PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4]
+[Contrato: SEM_CONTRATO]
+[Estado: OK]
+[Regra: C0_NO_CONTRACT]
+[Severidade: INFO]
+Validacao de consistencia desativada neste passo.","Se houver intermitencia de ficheiros, considerar ativar diagnostic_contract: ci_csv_v1.
+[DetailJsonCompact]
+{""contract"":""SEM_CONTRATO""}","","","","","",""
+"82","14/03/2026 23:34:09","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","ALERTA","","CONTRACT_SUGGEST_ENABLE","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso | contexto: promptId=PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4]","[RunID: 20260314_233046_4007]
+[Passo: 2]
+[PromptID: PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4]
+[Contrato: SEM_CONTRATO]
+[Estado: OK]
+[Regra: C0_SUGGEST]
+[Severidade: ALERTA]
+Este passo menciona CSV/LOAD_CSV sem contrato ativo.","Sugestao: ativar diagnostic_contract: ci_csv_v1 e exigir prova textual minima (CSV_EXISTE_EM_MNT_DATA, FILE_CSV, MNT_DATA_LIST).
+[DetailJsonCompact]
+{""hint"":""csv_or_execute_without_contract"",""hasFlowTemplateCsvMention"":true,""hasExecute"":false,""hasLoadCsv"":false,""processModeHint"":""""}","","","","","",""
+"83","14/03/2026 23:34:10","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","CONTRACT_STATE_DECISION","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso | contexto: promptId=PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4]","[RunID: 20260314_233046_4007]
+[Passo: 2]
+[PromptID: PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4]
+[Contrato: SEM_CONTRATO]
+[Estado: OK]
+[Regra: C0_NO_CONTRACT]
+[Severidade: INFO]
+Passo sem contrato explicito; execucao segue com observacao diagnostica.","Sem acao obrigatoria. Se houver falhas recorrentes, ativar diagnostic_contract: ci_csv_v1 no passo.
+[DetailJsonCompact]
+{""contract"":""SEM_CONTRATO""}","","","","","",""
+"84","14/03/2026 23:34:10","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","CONTRACT_NEXT_ACTION","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Controlo de transicao/limites da pipeline | contexto: promptId=PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4]","[RunID: 20260314_233046_4007]
+[Passo: 2]
+[PromptID: PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4]
+[Contrato: SEM_CONTRATO]
+[Estado: OK]
+[Regra: C0_NO_CONTRACT]
+[Severidade: INFO]
+Proxima acao recomendada definida.","Sem acao obrigatoria. Se houver falhas recorrentes, ativar diagnostic_contract: ci_csv_v1 no passo.
+[DetailJsonCompact]
+{""action"":""continue_pipeline""}","","","","","",""
+"85","14/03/2026 23:34:10","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","OUTPUT_EXECUTE_FOUND","Aplicacao do plano de output e validacao dos artefactos guardados no OUTPUT Folder.
+ACAO EM CURSO: Execucao da diretiva OUTPUT_EXECUTE | Importacao/validacao de CSV em worksheet dedicada | Validacao de output esperado e artefacto final | contexto: response_id=resp_02d69874ac3ede820069b5f04cd58881a2b5ac1455fc0e9374","response_id=resp_02d69874ac3ede820069b5f04cd58881a2b5ac1455fc0e9374 | directives=0 | m10_ctx=filesUsed= | filesOps=","","","","","","",""
+"86","14/03/2026 23:34:10","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | Fecho tecnico do passo com logging final | contexto: stage=step_completed | response_id=resp_02d69874ac3ede82006","stage=step_completed | http=200 | response_id=resp_02d69874ac3ede82006","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"87","14/03/2026 23:34:10","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","CAPTURE_START","","Início da captura (ContextKV). Output chars=10699.","","PIPELINE_MAKER_ContextKV","CAPTURE_START","","INFO","Início da captura (ContextKV). Output chars=10699.",""
+"88","14/03/2026 23:34:10","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","CAPTURE_OK","","Captura concluída. Keys=4 | captured_vars chars=22482.","","PIPELINE_MAKER_ContextKV","CAPTURE_OK","","INFO","Captura concluída. Keys=4 | captured_vars chars=22482.",""
+"89","14/03/2026 23:34:10","2","PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4","INFO","","DEBUG_SNAPSHOT","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso","DEBUG consolidado no catalogo com sucesso para consulta rapida.","Foi atualizado o bloco de Notas para desenvolvimento (linhas 3 e 4 da prompt), substituindo conteudo anterior.","","","","","",""
+"90","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=enter_step","stage=enter_step | row=3/3","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"91","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=before_context_inject","stage=before_context_inject","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"92","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=catalog_loaded | prompt=1796","stage=catalog_loaded | lenPrompt=1796","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"93","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","PLACEHOLDER_FOUND","","Encontrados 3 placeholders {{VAR:...}}.","","PIPELINE_MAKER_ContextKV","PLACEHOLDER_FOUND","","INFO","Encontrados 3 placeholders {{VAR:...}}.",""
+"94","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","INJECT_START","","Início da injeção (ContextKV).","","PIPELINE_MAKER_ContextKV","INJECT_START","","INFO","Início da injeção (ContextKV).",""
+"95","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","INJECT_OK|TSV_CATALOGO_DRAFT_ENC","","from_step=2; from_prompt=PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4; source=captured_vars","","PIPELINE_MAKER_ContextKV","INJECT_OK","TSV_CATALOGO_DRAFT_ENC","INFO","from_step=2; from_prompt=PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4; source=captured_vars",""
+"96","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","PLACEHOLDER_REPLACED|TSV_CATALOGO_DRAFT_ENC","","Placeholder substituído (6348 chars).","","PIPELINE_MAKER_ContextKV","PLACEHOLDER_REPLACED","TSV_CATALOGO_DRAFT_ENC","INFO","Placeholder substituído (6348 chars).",""
+"97","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","PLACEHOLDER_REPLACED|TSV_CATALOGO_DRAFT_ENC","","Placeholder substituído (6348 chars).","","PIPELINE_MAKER_ContextKV","PLACEHOLDER_REPLACED","TSV_CATALOGO_DRAFT_ENC","INFO","Placeholder substituído (6348 chars).",""
+"98","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","PLACEHOLDER_REPLACED|TSV_CATALOGO_DRAFT_ENC","","Placeholder substituído (6348 chars).","","PIPELINE_MAKER_ContextKV","PLACEHOLDER_REPLACED","TSV_CATALOGO_DRAFT_ENC","INFO","Placeholder substituído (6348 chars).",""
+"99","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","INJECT_END","","Injeção concluída. injected_vars chars=161.","","PIPELINE_MAKER_ContextKV","INJECT_END","","INFO","Injeção concluída. injected_vars chars=161.",""
+"100","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=after_context_inject","stage=after_context_inject | injectOk=SIM","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"101","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=before_inputs_attach","stage=before_inputs_attach","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"102","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=after_inputs_attach | prompt=20908","stage=after_inputs_attach | lenPrompt=20908","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"103","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=config_parse_start","stage=config_parse_start | lenConfigExtra=263","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"104","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=config_parsed","stage=config_parsed | lenAudit=281|lenInputJson=0","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"105","14/03/2026 23:34:10","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=files_prepare_start","stage=files_prepare_start | temFiles=SIM","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"106","14/03/2026 23:34:10","0","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","TEXT_EMBED_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Rastreio de integridade de text_embed (name/len_chars/hash_short)","name=FLOW_TEMPLATE.csv | len_chars=1825 | hash_short=380af404","Trace tecnico de text_embed para diagnostico de consistencia de conteudo.","","","","","",""
+"107","14/03/2026 23:34:10","0","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","TEXT_EMBED_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Rastreio de integridade de text_embed (name/len_chars/hash_short)","name=FLOW_TEMPLATE.csv | len_chars=1825 | hash_short=a59a8e54","Trace tecnico de text_embed para diagnostico de consistencia de conteudo.","","","","","",""
+"108","14/03/2026 23:34:10","0","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","FILES_ITEM_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Resolucao de item FILES declarado no INPUTS | Aplicacao de flags required/latest/as_pdf/as_is/text_embed | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload | contexto: requested=FLOW_TEMPLATE*.csv | resolved=FLOW_TEMPLATE.csv | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\FLOW_TEMPLATE.csv | status=OK | mode=text_embed","status=OK | required=SIM | requested=FLOW_TEMPLATE*.csv | resolved=FLOW_TEMPLATE.csv | mode=text_embed | file_id= | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\FLOW_TEMPLATE.csv | problema_tipo=ANEXADO_COM_SUCESSO | explicacao=Ficheiro resolvido e processado sem erro para o modo pedido/efetivo. Regra latest ativa.","Sem acao necessaria.","","","","","",""
+"109","14/03/2026 23:34:14","0","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","FILES UPLOAD","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload | contexto: file_id=file-HuGHXV8pThoZR7TUTpCGNH","Upload OK | HTTP 200 | file_id=file-HuGHXV8pThoZR7TUTpCGNH | purpose=user_data | reuse=TRUE (config) | cache_invalida: file_id inativo (GET /v1/files/file-XPU7AQoAbjaxysxzqji7Yq => HTTP 404 | {
+  ""error"": {
+    ""message"": ""No such File object: file-XPU7AQoAbjaxysxzqji7Yq"",
+    ""type"": ""invalid_request_error"",
+    ""param"": ""id"",
+    ""code"": null
+  },
+  ""detail"": {
+    ""message"": ""No such Fi); cache_invalida(path): file_id inativo (GET /v1/files/file-XPU7AQoAbjaxysxzqji7Yq => HTTP 404 | {
+  ""error"": {
+    ""message"": ""No such File object: file-XPU7AQoAbjaxysxzqji7Yq"",
+    ""type"": ""invalid_request_error"",
+    ""param"": ""id"",
+    ""code"": null
+  },
+  ""detail"": {
+    ""message"": ""No such Fi)","","","","","","",""
+"110","14/03/2026 23:34:14","0","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","FILES_ITEM_TRACE","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Resolucao de item FILES declarado no INPUTS | Aplicacao de flags required/latest/as_pdf/as_is/text_embed | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload | contexto: requested=ORIENTACOES_PIPELINE*.pdf | resolved=ORIENTACOES_PIPELINE_E_PROMPT_CREATION_automatica_2026-02-28_index_yaml_sec_id_v6_7.pdf | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\ORIENTACOES_PIPELINE_E_PROMPT_CREATION_automatica_2026-02-28_index_yaml_sec_id_v6_7.pdf | file_id=file-HuGHXV8pThoZR7TUTpCGNH | status=OK | mode=pdf_upload","status=OK | required=SIM | requested=ORIENTACOES_PIPELINE*.pdf | resolved=ORIENTACOES_PIPELINE_E_PROMPT_CREATION_automatica_2026-02-28_index_yaml_sec_id_v6_7.pdf | mode=pdf_upload | file_id=file-HuGHXV8pThoZR7TUTpCGNH | full_path=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\ORIENTACOES_PIPELINE_E_PROMPT_CREATION_automatica_2026-02-28_index_yaml_sec_id_v6_7.pdf | problema_tipo=ANEXADO_COM_SUCESSO | explicacao=Ficheiro resolvido e processado sem erro para o modo pedido/efetivo. Regra latest ativa.","Sem acao necessaria.","","","","","",""
+"111","14/03/2026 23:34:14","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","FILES","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload","Anexacao OK (input_file/input_image com file_id). fileIds=[file-HuGHXV8pThoZR7TUTpCGNH]","Nota: file_id presente implica que houve upload anterior ou reutilizacao valida.","","","","","",""
+"112","14/03/2026 23:34:14","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","FILES","Gestao de anexos e transformacao de ficheiros da pipeline.
+ACAO EM CURSO: Preparacao e transformacao de anexos | Upload/ligacao de anexos no pedido | Associacao de ficheiro por file_id no payload","Anexacao OK via text_embed. blocos_text_embed=1","Nota: text_embed coexiste com input_file/input_image quando ha anexos mistos; neste modo nao existe file_id para os ficheiros textuais.","","","","","",""
+"113","14/03/2026 23:34:14","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","REQ_INPUT_JSON","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem do bloco input do request | Validacao de anexos (input_file/input_image/text_embed) | Associacao de ficheiro por file_id no payload | contexto: file=SIM","len=23999 | has_input_file=SIM | has_input_image=NAO | has_text_embed=SIM | preview=[{""role"":""user"",""content"":[{""type"":""input_file"",""file_id"":""file-HuGHXV8pThoZR7TUTpCGNH""},{""type"":""input_text"",""text"":""ROLE\nÉs um(a) Auditor(a) de QA para automação PIPELINER. Foco: consistência, determinismo, integridade referencial e conformidade com o template.\n\nOBJETIVO\n1) Ler o TSV_CATALOGO_DRAFT (via ContextKV): ID\\\tNome curto\\\tNome de","Input final construído; este retrato confirma se anexos seguiram como file/image e/ou text_embed. Se esperava text_embed, validar has_text_embed=SIM e blocos BEGIN/END FILE no payload dump.","","","","","",""
+"114","14/03/2026 23:34:14","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | Preparacao da chamada /v1/responses | contexto: stage=before_api","stage=before_api | lenInputJsonFinal=23999","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"115","14/03/2026 23:34:14","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | Disparo do pedido HTTP para a API | contexto: stage=api_call_start","stage=api_call_start | model=gpt-5.2","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"116","14/03/2026 23:34:14","0","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","M05_CI_INTENT_EVAL","Download, validacao e contrato dos ficheiros finais gerados pelo Code Interpreter.
+ACAO EM CURSO: Avaliacao da intencao explicita de Code Interpreter | Gate da auto-injecao da tool code_interpreter | Inspecao de artefactos de output no container do Code Interpreter | contexto: file=SIM | resolved=NAO","ci_in_extra=NAO | ci_intent_resolved=NAO | ci_explicit_intent=NAO | modos_ci=NAO | has_input_file=SIM | has_input_image=NAO","Diagnostico de origem da intencao de CI (extraFragment vs modo efetivo resolvido no orquestrador).","","","","","",""
+"117","14/03/2026 23:34:14","0","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","M05_UTF8_ROUNDTRIP","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | contexto: payload_len=24446","roundtrip UTF-8 OK | payload_len=24446","Gate de codificacao concluido antes do envio HTTP.","","","","","",""
+"118","14/03/2026 23:34:14","0","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","M05_PAYLOAD_DUMP","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP","Payload final gravado em C:\Temp\payload.json | len=24446","Use este ficheiro para validar text.format.schema e outros fragmentos antes de novo envio.","","","","","",""
+"119","14/03/2026 23:34:14","0","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","M05_PAYLOAD_CHECK","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | Checklist pre-envio do payload (tools/input/tamanho) | Associacao de ficheiro por file_id no payload | contexto: file=SIM | endpoint=https://api.openai.com/v1/responses | prompt=PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2 | pipeline=PIPELINE_MAKER_ContextKV | file_id=SIM | mode=text/metadata | payload_len=24446","FP=pipeline=PIPELINE_MAKER_ContextKV|step=3|prompt=PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2|mode=text/metadata|resp=[pendente]|model=gpt-5.2|ok_http=[pendente]|mode=[pendente] | endpoint=https://api.openai.com/v1/responses | model=gpt-5.2 | input_is_array=SIM | has_input_file=SIM | has_file_data=NAO | has_file_id=SIM | has_input_image=NAO | web_search=OFF | code_interpreter=OFF | payload_len=24446","Pedido preparado e enviado com sucesso técnico; validação de contrato de output será feita após resposta (correlacionar com M10_* do mesmo FP).","","","","","",""
+"120","14/03/2026 23:34:14","0","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","M05_HTTP_TIMEOUTS","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | Calculo e aplicacao de timeouts efetivos | contexto: prompt=PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2 | pipeline=PIPELINE_MAKER_ContextKV | mode=text/metadata","FP=pipeline=PIPELINE_MAKER_ContextKV|step=3|prompt=PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2|mode=text/metadata|resp=[pendente]|model=gpt-5.2|ok_http=[pendente]|mode=[pendente] | resolve_ms=15000 | connect_ms=15000 | send_ms=480000 | receive_ms=360000","Time-outs aplicados nesta execucao; util para distinguir lentidao de erro logico. Se houver timeout, aumentar HTTP_TIMEOUT_RECEIVE_MS e repetir 1 vez.","","","","","",""
+"121","14/03/2026 23:34:55","0","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","M05_RUN_DUMP","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso | contexto: status=200","Dumps request/response guardados para a run.","step=3 | status=200 | folder=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\DEBUG_PAYLOAD_DUMPS\20260314_233113_PIPELINE_MAKER_ContextKV","","","","","",""
+"122","14/03/2026 23:34:55","0","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","M05_HTTP_RESULT","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | Correlacao de status HTTP com acao de recuperacao | contexto: prompt=PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2 | pipeline=PIPELINE_MAKER_ContextKV | status=200 | http_status=200 | mode=text/metadata","FP=pipeline=PIPELINE_MAKER_ContextKV|step=3|prompt=PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2|mode=text/metadata|resp=resp_02d69874ac3ede820069b5f079335481a28803a568622a7fbe|model=gpt-5.2|ok_http=SIM|mode=[pendente] | http_status=200","Transporte HTTP concluido com sucesso (2xx). O contrato funcional de output deve ser confirmado pelos eventos M10.","","","","","",""
+"123","14/03/2026 23:34:55","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","CONTRACT_EVAL_START","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso | contexto: promptId=PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2]","[RunID: 20260314_233046_4007]
+[Passo: 3]
+[PromptID: PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2]
+[Contrato: SEM_CONTRATO]
+[Estado: OK]
+[Regra: C0_NO_CONTRACT]
+[Severidade: INFO]
+Validacao de consistencia desativada neste passo.","Se houver intermitencia de ficheiros, considerar ativar diagnostic_contract: ci_csv_v1.
+[DetailJsonCompact]
+{""contract"":""SEM_CONTRATO""}","","","","","",""
+"124","14/03/2026 23:34:55","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","ALERTA","","CONTRACT_SUGGEST_ENABLE","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso | contexto: promptId=PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2]","[RunID: 20260314_233046_4007]
+[Passo: 3]
+[PromptID: PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2]
+[Contrato: SEM_CONTRATO]
+[Estado: OK]
+[Regra: C0_SUGGEST]
+[Severidade: ALERTA]
+Este passo menciona CSV/LOAD_CSV sem contrato ativo.","Sugestao: ativar diagnostic_contract: ci_csv_v1 e exigir prova textual minima (CSV_EXISTE_EM_MNT_DATA, FILE_CSV, MNT_DATA_LIST).
+[DetailJsonCompact]
+{""hint"":""csv_or_execute_without_contract"",""hasFlowTemplateCsvMention"":true,""hasExecute"":false,""hasLoadCsv"":false,""processModeHint"":""""}","","","","","",""
+"125","14/03/2026 23:34:55","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","CONTRACT_STATE_DECISION","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso | contexto: promptId=PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2]","[RunID: 20260314_233046_4007]
+[Passo: 3]
+[PromptID: PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2]
+[Contrato: SEM_CONTRATO]
+[Estado: OK]
+[Regra: C0_NO_CONTRACT]
+[Severidade: INFO]
+Passo sem contrato explicito; execucao segue com observacao diagnostica.","Sem acao obrigatoria. Se houver falhas recorrentes, ativar diagnostic_contract: ci_csv_v1 no passo.
+[DetailJsonCompact]
+{""contract"":""SEM_CONTRATO""}","","","","","",""
+"126","14/03/2026 23:34:55","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","CONTRACT_NEXT_ACTION","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Controlo de transicao/limites da pipeline | contexto: promptId=PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2]","[RunID: 20260314_233046_4007]
+[Passo: 3]
+[PromptID: PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2]
+[Contrato: SEM_CONTRATO]
+[Estado: OK]
+[Regra: C0_NO_CONTRACT]
+[Severidade: INFO]
+Proxima acao recomendada definida.","Sem acao obrigatoria. Se houver falhas recorrentes, ativar diagnostic_contract: ci_csv_v1 no passo.
+[DetailJsonCompact]
+{""action"":""continue_pipeline""}","","","","","",""
+"127","14/03/2026 23:34:55","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","OUTPUT_EXECUTE_FOUND","Aplicacao do plano de output e validacao dos artefactos guardados no OUTPUT Folder.
+ACAO EM CURSO: Execucao da diretiva OUTPUT_EXECUTE | Importacao/validacao de CSV em worksheet dedicada | Validacao de output esperado e artefacto final | contexto: response_id=resp_02d69874ac3ede820069b5f079335481a28803a568622a7fbe","response_id=resp_02d69874ac3ede820069b5f079335481a28803a568622a7fbe | directives=0 | m10_ctx=filesUsed= | filesOps=","","","","","","",""
+"128","14/03/2026 23:34:55","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | Fecho tecnico do passo com logging final | contexto: stage=step_completed | response_id=resp_02d69874ac3ede82006","stage=step_completed | http=200 | response_id=resp_02d69874ac3ede82006","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"129","14/03/2026 23:34:55","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","CAPTURE_START","","Início da captura (ContextKV). Output chars=10455.","","PIPELINE_MAKER_ContextKV","CAPTURE_START","","INFO","Início da captura (ContextKV). Output chars=10455.",""
+"130","14/03/2026 23:34:55","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","CAPTURE_OK","","Captura concluída. Keys=5 | captured_vars chars=23680.","","PIPELINE_MAKER_ContextKV","CAPTURE_OK","","INFO","Captura concluída. Keys=5 | captured_vars chars=23680.",""
+"131","14/03/2026 23:34:55","3","PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2","INFO","","DEBUG_SNAPSHOT","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso","DEBUG consolidado no catalogo com sucesso para consulta rapida.","Foi atualizado o bloco de Notas para desenvolvimento (linhas 3 e 4 da prompt), substituindo conteudo anterior.","","","","","",""
+"132","14/03/2026 23:34:55","0","PIPELINE_MAKER_ContextKV","INFO","","GH_CONFIG","Leitura e validacao das configuracoes necessarias para correr a pipeline.
+ACAO EM CURSO: Leitura e validacao de configuracao","Fonte do token GitHub resolvida.","token_source=ENV:GH_TOKEN@PROCESS","","","","","",""
+"133","14/03/2026 23:34:55","0","PIPELINE_MAKER_ContextKV","INFO","","GH_CONFIG","Leitura e validacao das configuracoes necessarias para correr a pipeline.
+ACAO EM CURSO: Leitura e validacao de configuracao","Run folder resolvida por prompt.","prompt_id=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5 | remote_folder=pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/01_WF_PROMPT_AUDIT/v1.5/2026-03-14 2334","","","","","",""
+"134","14/03/2026 23:34:55","0","PIPELINE_MAKER_ContextKV","INFO","","GH_CONFIG","Leitura e validacao das configuracoes necessarias para correr a pipeline.
+ACAO EM CURSO: Leitura e validacao de configuracao","Run folder resolvida por prompt.","prompt_id=PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4 | remote_folder=pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/02_WF_LAYOUT_FROM_TXT/v1.4/2026-03-14 2334","","","","","",""
+"135","14/03/2026 23:34:55","0","PIPELINE_MAKER_ContextKV","INFO","","GH_CONFIG","Leitura e validacao das configuracoes necessarias para correr a pipeline.
+ACAO EM CURSO: Leitura e validacao de configuracao","Run folder resolvida por prompt.","prompt_id=PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2 | remote_folder=pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/03_WF_LAYOUT_QA/v1.2/2026-03-14 2334","","","","","",""
+"136","14/03/2026 23:34:55","0","PIPELINE_MAKER_ContextKV","INFO","","GH_CONFIG","Leitura e validacao das configuracoes necessarias para correr a pipeline.
+ACAO EM CURSO: Leitura e validacao de configuracao","Pasta remota principal resolvida.","remote_folder=pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/01_WF_PROMPT_AUDIT/v1.5/2026-03-14 2334 | total_prompt_folders=3","","","","","",""
