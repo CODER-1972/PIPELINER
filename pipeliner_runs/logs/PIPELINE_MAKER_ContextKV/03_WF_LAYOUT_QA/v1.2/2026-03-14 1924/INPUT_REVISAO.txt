@@ -1,0 +1,1 @@
+VARS: TSV_CATALOGO_DRAFT_ENC; FILES: FLOW_TEMPLATE*.csv (required) (latest); ORIENTACOES_PIPELINE*.pdf (required) (latest)

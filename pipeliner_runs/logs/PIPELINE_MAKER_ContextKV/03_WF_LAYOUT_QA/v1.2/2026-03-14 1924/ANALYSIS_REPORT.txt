@@ -1,0 +1,216 @@
+1) Resumo Executivo
+[CONCLUSÃO:] FALHA — a prompt WF_LAYOUT_QA v1.2 executou sem erro HTTP, mas falhou o objetivo funcional por receber/consumir a variável errada no handoff.
+- Objetivo em linguagem simples: validar/corrigir um TSV de catálogo draft e preparar saída final para o passo seguinte.
+- Esperado vs observado:
+  - OBSERVADO: HTTP 200 e resposta concluída.
+  - OBSERVADO: output devolvido foi erro de ContextKV (`[ERRO:CONTEXTKV_MISSING_RESULTS_JSON]`) e não um TSV válido.
+  - INFERIDO: execução técnica OK, execução de negócio falhada.
+- Classificação final: Não aprovada.
+- Decisão operacional: No-Go.
+- Top riscos reais:
+  1. Quebra de handoff por variável inconsistente (RESULTS_JSON vs TSV_CATALOGO_DRAFT_ENC).
+  2. Passo seguinte sem insumo utilizável (risco de cadeia quebrada silenciosa).
+  3. Contradição entre contrato da prompt e metadados/handoff declarados.
+  4. Ambiguidade operacional para operadores (qual variável é fonte de verdade).
+  5. Falha repetível (não é evento aleatório; é estrutural).
+- Top ações recomendadas:
+  - P1: corrigir TEXTO DA PROMPT para consumir `{{VAR:TSV_CATALOGO_DRAFT_ENC}}` e não `{{VAR:RESULTS_JSON}}`.
+  - P1: alinhar secção INPUTS da prompt com o handoff real do passo 02.
+  - P1: reforçar validação de pré-condição no orquestrador (falhar cedo quando variável esperada não existir).
+  - P2: adicionar teste de contrato de variáveis entre passos 02→03.
+  - P3: enriquecer DEBUG com evento explícito de mismatch de variável de handoff.
+- Nota para leigo: o sistema “funcionou” tecnicamente, mas estava a pedir o ficheiro/variável errada, por isso não produziu o resultado útil.
+
+2) Contexto na Cadeia de Prompts (visão de fluxo)
+[CONCLUSÃO:] RISCO — a run foi corretamente identificada, mas a cadeia está funcionalmente frágil por inconsistência de contrato entre passos.
+2.1 Fontes, pasta e seleção da run
+[CONCLUSÃO:] OK — run mais recente da prompt-alvo encontrada e usada sem ambiguidade.
+- TARGET_PROMPT_ID validado: `PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2`.
+- Normalização aplicada: `03/WF_LAYOUT_QA` → `03_WF_LAYOUT_QA`.
+- Pasta analisada: `pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/03_WF_LAYOUT_QA/v1.2`.
+- Runs encontradas: `2026-03-12 1356`, `2026-03-14 1924`.
+- Run escolhida: `2026-03-14 1924` (mais recente por ordem temporal real).
+
+2.2 Artefactos e cobertura de leitura
+[CONCLUSÃO:] OK — cobertura 100% dos artefactos mínimos presentes.
+- Seguimento.csv: 100% lido.
+- DEBUG.csv: 100% lido (apenas cabeçalho).
+- catalogo_prompts_executadas.csv: 100% lido.
+- painel_pipeline.txt: 100% lido.
+- payload_dumps/*.json e *_meta.txt: 100% lidos.
+- Artefactos em falta: nenhum dos mínimos listados está ausente nesta run.
+
+2.3 Papel da prompt na cadeia e impacto no objetivo global
+[CONCLUSÃO:] FALHA — passo 03 deveria fazer QA/layout draft e preparar handoff; em vez disso devolveu erro de pré-condição.
+- Papel observável: passo 3 de uma sequência operacional (01→02→03; painel INICIAR inclui STOP após 03).
+- Dependência da prompt anterior (passo 02): deveria entregar dados para QA.
+- Entregável esperado para próxima prompt: `TSV_CATALOGO_FINAL_ENC` (conforme metadados da própria prompt v1.2).
+- Resposta explícita: Se esta prompt falhar parcialmente, o processo global ainda serve o objetivo final?
+  - INFERIDO: Não, porque este passo é de validação/consolidação e bloqueia catálogo final consumível.
+
+3) I/O de Negócio (o que entra e o que sai)
+[CONCLUSÃO:] FALHA — input de negócio esperado pela lógica de cadeia não foi o que a prompt efetivamente exigiu.
+- Entradas esperadas (cadeia):
+  - VAR principal do passo 03: `TSV_CATALOGO_DRAFT_ENC` (inferido por handoff do passo 02 e secção INPUTS da linha estrutural do catálogo).
+  - Ficheiros: FLOW_TEMPLATE + ORIENTACOES.
+- Entradas observadas:
+  - OBSERVADO no request do passo 03: 1 `input_file` + `input_text` com variável embebida como texto de erro relativo a `RESULTS_JSON`.
+  - OBSERVADO em injected_vars: `RESULTS_JSON` veio do passo 02 mas com conteúdo de erro, não JSON útil.
+- Saídas esperadas:
+  - `TSV_CATALOGO_FINAL_ENC` + validações/changelog para handoff seguinte.
+- Saídas observadas:
+  - `TSV_CATALOGO_DRAFT_ENC: [ERRO:CONTEXTKV_MISSING_RESULTS_JSON]`.
+- Critério de sucesso: produzir TSV válido e parsing-safe para consumo automático.
+- Critério de falha: emitir erro de ContextKV em vez de artefacto válido.
+- Tradução leiga: este passo não “arranjou” o catálogo; só reportou que lhe faltava matéria-prima adequada.
+
+4) Integridade de Handoff (prompt anterior -> atual -> próxima)
+[CONCLUSÃO:] QUEBRADO — há mismatch de variável e propagação de erro entre passos.
+
+4.1 Receção da prompt anterior
+[CONCLUSÃO:] RISCO — handoff recebido existe, mas semanticamente inválido para o objetivo do passo 03.
+- Variável esperada vs recebida:
+  - OBSERVADO: passo 03 usa `{{VAR:RESULTS_JSON}}` no texto da prompt.
+  - OBSERVADO: passo 02 devolveu erro exatamente sobre ausência de RESULTS_JSON válido.
+- Ficheiros: anexos base presentes (FLOW/ORIENTACOES), sem evidência de falha de upload.
+- Lacuna: variável crítica de trabalho não está no formato necessário.
+
+4.2 Preparação para a prompt seguinte
+[CONCLUSÃO:] FALHA — não há output pronto para consumo automático no passo seguinte.
+- Captura: output contém marcador de erro, não TSV final.
+- Parsing-safe: apenas para erro; não para produção.
+- Risco de quebra silenciosa: alto se pipeline não travar por contrato.
+
+4.3 Encadeamento e rotas
+[CONCLUSÃO:] FRÁGIL — next/default/allowed no catálogo parecem coerentes, mas contrato de dados entre passos não está coerente.
+- OBSERVADO: Next/default/allowed do passo 03 apontam para passo 04.
+- INFERIDO: apesar da rota estar definida, a carga útil não cumpre o contrato esperado para avançar com qualidade.
+
+5) Contrato da Prompt (clareza operacional)
+[CONCLUSÃO:] FALHA — contrato interno da prompt v1.2 é contraditório com o papel declarado de QA do layout draft.
+- ROLE/objetivo/límites: bem definidos ao nível textual.
+- Problema central:
+  - OBSERVADO: objetivo e nome indicam QA de TSV draft.
+  - OBSERVADO: instruções nucleares exigem `RESULTS_JSON` como entrada primária (próprio texto da prompt).
+  - OBSERVADO: metadados da chamada indicam `handoff_in=TSV_CATALOGO_DRAFT_ENC`.
+- Resultado: margem perigosa para comportamento ambíguo e falhas repetíveis.
+- Web policy e idioma: observados como conformes.
+
+6) Qualidade e Robustez (PASS/FAIL)
+[CONCLUSÃO:] RISCO — robustez técnica razoável, robustez funcional insuficiente para produção.
+
+| Teste | Resultado | Evidência | Impacto | Camada de correcção | Ação correctiva |
+|---|---|---|---|---|---|
+| run correcta identificada | PASS | run `2026-03-14 1924` é a mais recente | evita análise errada | OPERAÇÃO | [adicionar] regra automática de seleção temporal |
+| artefactos obrigatórios encontrados | PASS | Seguimento/DEBUG/catalogo/painel/payload presentes | cobertura auditável | OPERAÇÃO | [manter] |
+| cobertura integral de leitura | PASS | todos os artefactos lidos integralmente | confiança da análise | OPERAÇÃO | [manter] |
+| prompt executada identificada sem ambiguidade | PASS | passo 3 id exato no Seguimento/meta | rastreabilidade | OPERAÇÃO | [manter] |
+| input recebido da prompt anterior | FAIL | variável recebida é erro textual e não JSON útil | quebra funcional | ORQUESTRADOR/PIPELINE | [substituir] contrato de variável entre passos 02→03 |
+| ficheiros resolvidos/anexados corretamente | PASS | file_id presente, HTTP 200 | anexação base OK | DADOS/ANEXOS | [manter] |
+| integridade de ContextKV / variáveis | FAIL | `RESULTS_JSON` inválido propagado | cadeia quebrada | ORQUESTRADOR/PIPELINE | [adicionar] validação de schema antes do passo 03 |
+| parsing de config extra | AMBÍGUO | DEBUG sem eventos; sem prova de validação detalhada | observabilidade limitada | CONFIG EXTRA | [adicionar] log explícito de parse PASS |
+| coerência do payload/request | FAIL | payload passo 03 contém requisito de variável desalinhado com handoff esperado | erro repetível | TEXTO DA PROMPT | [substituir] referências a RESULTS_JSON por TSV_CATALOGO_DRAFT_ENC |
+| resultado HTTP e resposta | PASS | status 200 completed | transporte OK | MODELO/API | [manter] |
+| captura de output | PASS | output capturado integralmente | auditoria possível | OUTPUT | [manter] |
+| handoff para a etapa seguinte | FAIL | output é erro, não artefacto final | impede avanço robusto | ORQUESTRADOR/PIPELINE | [adicionar] gate de bloqueio por marcador `[ERRO:` |
+| determinismo/parsing-safe do output | AMBÍGUO | determinístico para erro, não para objetivo | utilidade operacional baixa | OUTPUT | [substituir] contrato de sucesso/erro explícito |
+| coerência de IDs/versões/placeholders | FAIL | placeholder de variável desalinhado | risco alto | TEXTO DA PROMPT | [substituir] placeholder |
+| coerência de next/default/allowed | PASS | estrutura de rota observada no catálogo | fluxo formal existe | ORQUESTRADOR/PIPELINE | [manter] |
+| aderência idioma/regras/web policy | PASS | PT-PT, web não usada | conformidade | TEXTO DA PROMPT | [manter] |
+| segurança e exposição de segredos | PASS | sem API key em logs analisados | risco de segredo baixo | OPERAÇÃO/GOVERNAÇÃO | [manter] |
+| rastreabilidade e auditabilidade | PASS | response_id, status, payload dumps presentes | diagnósticos possíveis | ORQUESTRADOR | [manter] |
+| production-readiness | FAIL | falha funcional bloqueante | No-Go | TEXTO + ORQUESTRADOR | [substituir] contrato + [adicionar] validações |
+| coerência entre artefactos | FAIL | conflito entre texto da prompt e metadados handoff_in | erro de desenho | TEXTO DA PROMPT | [substituir] secção OBJETIVO/INPUTS |
+
+7) Ficheiros e Anexos (técnico-operacional)
+[CONCLUSÃO:] production-ready com ressalvas técnicas de anexos, mas não production-ready funcionalmente por contrato de variável.
+- Anexos obrigatórios observados para passo 03:
+  - FLOW/ORIENTACOES: OK (via file_id único presente no payload).
+- Modo de transporte: `file_id` (observado em `input_file`).
+- Compatibilidades/limites: sem erro de upload/HTTP no passo 03.
+- Evidência de files_used/file_ids/inject:
+  - files_used preenchido em Seguimento.
+  - file_ids_used preenchido.
+  - injected_vars presente com origem do passo 02.
+- Conclusão técnica: anexação não foi a causa raiz; causa raiz está no contrato de dados/variáveis.
+
+8) Evidência de Execução (Seguimento + DEBUG em linguagem leiga)
+[CONCLUSÃO:] FALHA funcional claramente evidenciada; sem ruído de erros técnicos de API.
+- Linha temporal:
+  - 19:23:00 passo 01 (HTTP 200).
+  - 19:24:01 passo 02 (HTTP 200, mas devolve erro ContextKV missing RESULTS_JSON).
+  - 19:24:30 passo 03 (HTTP 200, repete erro por variável inválida).
+- Seguimento.csv mostra:
+  - modelo gpt-5.4, status 200, response_id em todos os passos.
+  - output do passo 03 com `[ERRO:CONTEXTKV_MISSING_RESULTS_JSON]`.
+- DEBUG.csv:
+  - apenas cabeçalho; sem alertas explícitos adicionais.
+- catalogo_prompts_executadas.csv:
+  - passo 03 textualiza objetivo de QA de layout, mas usa RESULTS_JSON como input principal.
+- painel_pipeline.txt:
+  - pipeline INICIAR inclui passo 03 e STOP, coerente com sequência observada.
+- Inconsistência principal:
+  - Texto da prompt passo 03 vs metadados `handoff_in` vs tipo de output do passo 02.
+  - Peso probatório maior: payload/request e output real (evidência de execução direta).
+- Tradução sem jargão: o sistema levou “mensagem de erro” como se fosse “dados de trabalho” e ficou bloqueado.
+
+9) Segurança, Privacidade e Conformidade
+[CONCLUSÃO:] aceitável com ressalvas.
+- Exposição de segredos: não observada nesta run.
+- Dados sensíveis em output/log: não identificado conteúdo sensível evidente.
+- Minimização: logs têm detalhe técnico adequado sem dumps de segredo.
+- Desvio relevante: falta de alerta explícito em DEBUG sobre mismatch de contrato de variável.
+
+10) Decisão Operacional (Go/No-Go)
+[CONCLUSÃO:] No-Go até correção do contrato de entrada da prompt 03 e validação de handoff.
+- Decisão: No-Go.
+- Condições mínimas para avançar:
+  1) Corrigir prompt 03 para consumir `TSV_CATALOGO_DRAFT_ENC`.
+  2) Garantir que passo 02 captura/publica variável no formato esperado pelo passo 03.
+  3) Reexecutar cadeia 02→03 e validar output final não-erro.
+- Pode ficar para depois:
+  - melhoria de telemetria DEBUG para diagnóstico mais rápido.
+- Responsáveis e prazo: [POR CONFIRMAR].
+- Critério de revalidação: run limpa sem marcador `[ERRO:` e com output final parseável.
+- Para leigo: ainda não — precisa de correção pequena mas crítica antes de uso.
+
+11) Apêndice Técnico
+[CONCLUSÃO:] Evidência suficiente e coerente para concluir falha de contrato de variável no passo 03.
+- Trechos curtos de evidência:
+  - OUTPUT passo 03: `TSV_CATALOGO_DRAFT_ENC: [ERRO:CONTEXTKV_MISSING_RESULTS_JSON]`.
+  - injected_vars passo 03: origem em passo 02, variável RESULTS_JSON com conteúdo de erro.
+  - metadados passo 03: `handoff_in=TSV_CATALOGO_DRAFT_ENC`.
+- Runs encontradas:
+  - `2026-03-12 1356`
+  - `2026-03-14 1924` (analisada)
+- Artefactos encontrados:
+  - Seguimento.csv, DEBUG.csv, catalogo_prompts_executadas.csv, painel_pipeline.txt, payload_dumps/*
+- Checklist final PASS/FAIL:
+  1. run mais recente confirmada — PASS
+  2. artefactos obrigatórios lidos ou assinalados — PASS
+  3. input da prompt anterior confirmado — PASS
+  4. output transmitível para a seguinte confirmado — FAIL
+  5. coerência com objetivo global confirmada — FAIL
+  6. next/default/allowed sem rotas perigosas — PASS
+  7. rastreabilidade por evidência — PASS
+  8. contradições entre artefactos identificadas — PASS
+  9. separação prompt vs config vs orquestrador vs dados — PASS
+  10. alterações propostas com valor real — PASS
+  11. prompt integral corrigida apenas com segurança — PASS
+  12. verificação interna da proposta — PASS
+  13. legibilidade para leigo — PASS
+
+PROPOSTAS DE ALTERAÇÕES
+Subsecção PROMPT
+- Problema: passo 03 pede `RESULTS_JSON`, mas o papel do passo e metadados indicam QA de `TSV_CATALOGO_DRAFT_ENC`.
+- Evidência: output de erro de missing RESULTS_JSON + metadata `handoff_in`.
+- Impacto: bloqueio funcional da cadeia.
+- Racional: alinhar objetivo, input e handoff.
+- Ficheiro: `PROMPT_REVISAO.txt`.
+
+Subsecção INPUT
+- Problema: secção INPUTS textual está desalinhada com contrato real da cadeia.
+- Evidência: passo 02 devolve `TSV_CATALOGO_DRAFT_ENC`; passo 03 pede RESULTS_JSON.
+- Impacto: injeção de variável incorreta e erro repetível.
+- Racional: garantir parsing e handoff determinístico.
+- Ficheiro: `INPUT_REVISAO.txt`.
