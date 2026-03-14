@@ -1,0 +1,171 @@
+1) Resumo Executivo
+[CONCLUSÃO:] OK com RISCO moderado de cadeia; classificação final = Aprovada com ressalvas; decisão operacional = Go condicionado.
+- Objetivo da prompt (passo 2): transformar RESULTS_JSON (ContextKV) + FLOW_TEMPLATE em TSV_CATALOGO_DRAFT_ENC determinístico para handoff.
+- Esperado vs observado: a execução HTTP foi 200, houve injeção de RESULTS_JSON, anexação de FLOW_TEMPLATE/ORIENTACOES e captura das chaves TSV_CATALOGO_DRAFT_ENC/TRACE/VALIDACOES/MEMORY_SHORT.
+- Top riscos reais:
+  1. Handoff para passo seguinte não ocorreu nesta run porque a sequência INICIAR tem STOP na posição 3 (painel_pipeline.txt), apesar de o catálogo do passo 2 apontar para /03/WF_LAYOUT_QA.
+  2. Alertas de governação de segredo: Config!B1 com key literal (ambiente foi priorizado).
+  3. Contrato técnico classificado como SEM_CONTRATO (apenas sugestão, sem bloqueio).
+  4. Dependência forte de qualidade do RESULTS_JSON vindo do passo anterior.
+  5. O output de passo 2 carrega FAILs herdados (modelo/storage [POR CONFIRMAR], file output do caso auditado), que não são falha de execução do passo 2 mas impactam operacionalização.
+- Top ações recomendadas:
+  - P1 ORQUESTRADOR/PIPELINE: alinhar sequência INICIAR com REGISTAR para permitir execução do passo 3 quando pretendido.
+  - P1 OPERAÇÃO/GOVERNAÇÃO: remover key literal de Config!B1 e manter apenas variável de ambiente.
+  - P2 ORQUESTRADOR: activar contrato estruturado (evitar SEM_CONTRATO) para melhor validação automática.
+  - P2 DADOS: garantir que RESULTS_JSON do passo anterior inclui sempre modelo/storage quando a política exigir.
+  - P3 PROMPT (opcional): acrescentar regra explícita de “não propagar FAILs herdados como erro de execução do próprio passo”.
+- Nota leiga: o passo funcionou e produziu o ficheiro lógico esperado, mas a cadeia completa não avançou automaticamente para o QA nesta run.
+
+2) Contexto na Cadeia de Prompts (visão de fluxo)
+[CONCLUSÃO:] OK com [POR CONFIRMAR] na resolução de pasta por normalização direta; a run alvo foi identificada por evidência em Seguimento.
+- Fontes: DEBUG.csv, Seguimento.csv, catalogo_prompts_executadas.csv, painel_pipeline.txt, payload_dumps/* (request/response/meta dos 2 passos).
+- Pasta inferida por regra normal: pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/02_WF_LAYOUT_FROM_TXT/v1.3 -> inexistente.
+- Estratégia conservadora aplicada: varrimento das runs e procura explícita do Prompt ID alvo em Seguimento.csv.
+- Runs encontradas para a prompt-alvo: 1 run com ocorrência explícita do Prompt ID em Seguimento: 2026-03-11 0111 sob 01_WF_PROMPT_AUDIT/v1.4.
+- Run escolhida: pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/01_WF_PROMPT_AUDIT/v1.4/2026-03-11 0111.
+- Motivo: única run com evidência direta de execução do Prompt ID alvo (step 2, timestamp 01:38:18).
+- Cobertura de leitura:
+  - Seguimento.csv: 100%
+  - DEBUG.csv: 100%
+  - catalogo_prompts_executadas.csv: 100%
+  - painel_pipeline.txt: 100%
+  - payload_dumps (6 ficheiros): 100%
+- Limitações:
+  - Não existe pasta dedicada 02_WF_LAYOUT_FROM_TXT/v1.3 no snapshot de logs local.
+  - [POR CONFIRMAR] se há outras runs fora desta árvore local.
+- Papel na cadeia: passo 2 de uma sequência observada de 2 passos executados nesta run.
+- Dependências da prompt anterior: RESULTS_JSON capturado no passo 1 e injectado no passo 2.
+- Entregáveis para seguinte: TSV_CATALOGO_DRAFT_ENC + TSV_TRACE_PROMPTS_ENC + TSV_VALIDACOES_ENC + MEMORY_SHORT capturados em ContextKV.
+- Impacto no objetivo global: bom para transformar auditoria em draft de catálogo; porém sem execução do passo 3 nesta run.
+- Pergunta crítica: “Se esta prompt falhar parcialmente, o processo global ainda serve o objetivo final?”
+  - Resposta: Parcialmente. Sem este passo, o catálogo draft não é produzido de forma determinística, comprometendo QA/layout final.
+
+3) I/O de Negócio (o que entra e o que sai)
+[CONCLUSÃO:] OK; I/O principal foi cumprido com rastreabilidade.
+- Entradas esperadas: VAR RESULTS_JSON + FILES FLOW_TEMPLATE*.csv e ORIENTACOES_PIPELINE*.pdf.
+- Entradas observadas:
+  - injected_vars mostra RESULTS_JSON vindo do passo 1.
+  - files_used mostra FLOW_TEMPLATE.csv (text_embed) + ORIENTACOES...pdf (file_id).
+  - REQ_INPUT_JSON confirma has_input_file=SIM e has_text_embed=SIM.
+- Saídas esperadas: TSV_CATALOGO_DRAFT_ENC (obrigatório), e opcional trace/validações/memory.
+- Saídas observadas: output contém as 4 secções; CAPTURE_OK com Keys=4.
+- Critérios de sucesso: HTTP 200, output com marcador obrigatório, captura ContextKV concluída.
+- Critérios de falha/paragem: falta de RESULTS_JSON deveria gerar [ERRO:CONTEXTKV_MISSING_RESULTS_JSON] (não ocorreu).
+- Diferenças esperado vs observado: nenhuma divergência bloqueante na prompt; divergência está na cadeia (não execução do passo 3 via INICIAR).
+- Tradução leiga: recebeu dados certos, gerou tabela codificada e guardou para reutilização.
+
+4) Integridade de Handoff (prompt anterior -> atual -> próxima)
+4.1 Receção da prompt anterior
+[CONCLUSÃO:] OK; receção íntegra de RESULTS_JSON e anexos esperados.
+- Variáveis: INJECT_OK|RESULTS_JSON com origem passo 1.
+- Ficheiros: FLOW_TEMPLATE resolvido em text_embed; ORIENTACOES resolvido com file_id reutilizado.
+- Integridade: logs FILES_ITEM_TRACE e REQ_INPUT_JSON coerentes com payload request do passo 2.
+- Lacunas/fallback: sem fallback de ausência de variável; caminho nominal.
+- Risco para prompt atual: baixo.
+
+4.2 Preparação para a prompt seguinte
+[CONCLUSÃO:] RISCO moderado; output está pronto mas o encadeamento operacional desta run ficou interrompido por STOP no INICIAR.
+- Variáveis capturadas: 4 chaves capturadas com metadados e hash fnv32.
+- Ficheiros para passo seguinte: não aplicável como file output; handoff é textual codificado via ContextKV.
+- Parsing-safe: maioritariamente sim (uso de \n e \t literais no bloco TSV codificado).
+- Risco de quebra silenciosa: médio se passo seguinte depender de execução automática INICIAR (não ocorreu nesta run).
+
+4.3 Encadeamento e rotas
+[CONCLUSÃO:] Frágil no plano de execução desta run; robusto no contrato do catálogo do passo.
+- Catálogo do passo 2: next/default/allowed apontam para passo 3 e incluem STOP.
+- Painel (INICIAR): posição 3 = STOP; Painel (REGISTAR): posição 3 = passo 3.
+- Conclusão handoff: frágil (mismatch operacional entre listas INICIAR e REGISTAR).
+
+5) Contrato da Prompt (clareza operacional)
+[CONCLUSÃO:] OK; contrato claro, executável e com regras anti-injection/determinismo adequadas.
+- ROLE/objetivo/limites claros; Web proibida; idioma pt-PT explícito.
+- Formato obrigatório de output definido com marcador fixo TSV_CATALOGO_DRAFT_ENC.
+- Governança [POR CONFIRMAR] tratada no próprio texto (lacunas explícitas).
+- Clareza I/O: boa (VARS + FILES + output estruturado).
+- Margem ambígua residual: baixa; principal risco vem de orquestração externa.
+
+6) Qualidade e Robustez (PASS/FAIL)
+[CONCLUSÃO:] PASS maioritário com 3 pontos de ressalva operacionais.
+- run correcta identificada | PASS | Prompt ID alvo executado no step 2 em Seguimento | Confiança alta | ORQUESTRADOR | manter indexação por Prompt ID.
+- artefactos obrigatórios encontrados | PASS | Seguimento/DEBUG/catálogo/painel/payload presentes | Sem bloqueio | OPERAÇÃO | nenhum.
+- cobertura integral de leitura | PASS | 100% dos artefactos da run lidos | Sem bloqueio | OPERAÇÃO | nenhum.
+- prompt executada sem ambiguidade | PASS | Prompt ID explícito em Seguimento e meta dump | Sem bloqueio | ORQUESTRADOR | nenhum.
+- input recebido da anterior | PASS | INJECT_OK e injected_vars preenchido | Sem bloqueio | ORQUESTRADOR | nenhum.
+- ficheiros resolvidos/anexados | PASS | FILES_ITEM_TRACE + REQ_INPUT_JSON | Sem bloqueio | DADOS/ANEXOS | nenhum.
+- integridade ContextKV | PASS | CAPTURE_OK Keys=4 | Sem bloqueio | ORQUESTRADOR | nenhum.
+- parsing config extra | PASS | stage=config_parsed sem erro | Baixo | CONFIG EXTRA | nenhum.
+- coerência payload/request | PASS | request model gpt-5.2 store true input list | Sem bloqueio | ORQUESTRADOR | nenhum.
+- resultado HTTP/resposta | PASS | M05_HTTP_RESULT 200 e response status completed | Sem bloqueio | ORQUESTRADOR | nenhum.
+- captura output | PASS | marcador obrigatório presente + CAPTURE_OK | Sem bloqueio | ORQUESTRADOR | nenhum.
+- handoff etapa seguinte | AMBÍGUO | output pronto, mas execução parou no STOP do INICIAR | Médio | ORQUESTRADOR/PIPELINE | [substituir] linha 3 do INICIAR por prompt /03 quando objectivo for cadeia completa.
+- determinismo/parsing-safe output | PASS | TSV codificado com \n/\t literais (residual de 2 newline estruturais) | Baixo | TEXTO DA PROMPT | [adicionar] instrução “não inserir texto antes/depois dos 4 blocos-chave”.
+- coerência IDs/versões/placeholders | PASS | ID v1.3 consistente; {{VAR:RESULTS_JSON}} injetado | Baixo | TEXTO DA PROMPT | nenhum.
+- next/default/allowed | PASS (catálogo) / FAIL (execução run) | catálogo coerente; INICIAR tem STOP prematuro | Médio | ORQUESTRADOR/PIPELINE | [reordenar] sequência INICIAR.
+- aderência idioma/regras/web policy | PASS | output em pt-PT e sem uso web observado | Baixo | TEXTO DA PROMPT | nenhum.
+- segurança/segredos | FAIL | alerta OPENAI_API_KEY literal em Config | Alto | OPERAÇÃO/GOVERNAÇÃO | [eliminar] key literal da folha Config.
+- rastreabilidade/auditabilidade | PASS | logs detalhados e payload dumps presentes | Sem bloqueio | ORQUESTRADOR | nenhum.
+- production-readiness | AMBÍGUO | passo isolado ready; cadeia completa depende de correção INICIAR | Médio | ORQUESTRADOR | corrigir fluxo.
+- coerência entre artefactos | PASS com ressalva | catálogos/payload/debug coerentes; painel INICIAR diverge de REGISTAR | Médio | ORQUESTRADOR | alinhar listas.
+
+7) Ficheiros e Anexos (técnico-operacional)
+[CONCLUSÃO:] production-ready com ressalvas operacionais.
+- Anexos obrigatórios do passo 2: FLOW_TEMPLATE (OK text_embed), ORIENTACOES PDF (OK file_id).
+- Modo transporte observado: híbrido (input_file por file_id + text_embed).
+- Compatibilidade/riscos: sem erro de upload; reuse de file_id ativo; sem sinais de overflow text_embed nesta run.
+- Dumps técnicos analisados: request/response/meta dos 2 passos, coerentes com Seguimento/DEBUG.
+- Evidência files_used/files_ops/file_ids/capture-inject: presente e consistente.
+- Ressalvas: dependência de qualidade do RESULTS_JSON e mismatch INICIAR/REGISTAR para continuidade.
+
+8) Evidência de Execução (Seguimento + DEBUG em linguagem leiga)
+[CONCLUSÃO:] execução técnica saudável, sem falhas HTTP, com alertas de governação e contrato opcional.
+- Linha temporal resumida:
+  - 01:36:04 início da run; alerta sobre API key literal em Config.
+  - Step 1 concluído 200; captura RESULTS_JSON.
+  - Step 2 injeta RESULTS_JSON, anexa ficheiros, chama API (200), captura 4 variáveis.
+  - Exportação de logs para GitHub concluída.
+- Seguimento.csv mostra: modelo gpt-5.2 no passo 2, HTTP 200, response_id preenchido, output capturado com marcadores esperados.
+- DEBUG.csv mostra: stages completos, REQ_INPUT_JSON com anexos esperados, M05_HTTP_RESULT=200, CAPTURE_OK.
+- catalogo_prompts_executadas.csv confirma texto integral da prompt alvo e next/default/allowed para passo 3.
+- painel_pipeline.txt revela inconsistência operacional: INICIAR para no STOP antes do passo 3.
+- Contradições: não há contradição técnica entre DEBUG/Seguimento; há inconsistencia de desenho entre catálogo e sequência INICIAR.
+- Tradução leiga: “o motor trabalhou bem, mas a rota automática escolhida nesta execução não avançou para o próximo controlo de qualidade”.
+
+9) Segurança, Privacidade e Conformidade
+[CONCLUSÃO:] aceitável com ressalvas.
+- Segredos: alerta explícito de key literal em Config (risco alto de higiene de segredo).
+- Dados sensíveis em log: não foi observado dump de key no conteúdo lido; prática de minimização aceitável.
+- Retenção/storage: store=true observado em requests; política de retenção detalhada [POR CONFIRMAR].
+- Desvios: apenas governação da key literal.
+
+10) Decisão Operacional (Go/No-Go)
+[CONCLUSÃO:] Go condicionado.
+- Decisão: Go condicionado.
+- Condições mínimas para avançar:
+  1) corrigir sequência INICIAR quando for necessária a continuação até ao passo 3;
+  2) remover key literal de Config.
+- Pode ficar para depois: activação de CONTRACT_* formal (melhoria P2).
+- Responsáveis/prazo: [POR CONFIRMAR].
+- Critério de revalidação: nova run com execução de passo 3 após passo 2, sem alerta OPENAI_API_KEY.
+- Resposta leiga: “Pode ser usado já para este passo, mas o circuito completo precisa de pequeno ajuste no painel e higiene de segredo.”
+
+11) Apêndice Técnico
+[CONCLUSÃO:] evidência suficiente para auditoria desta run, sem lacunas bloqueantes de leitura.
+- Runs encontradas para o target no acervo local: 1 (2026-03-11 0111).
+- Artefactos encontrados na run: DEBUG.csv, Seguimento.csv, catalogo_prompts_executadas.csv, painel_pipeline.txt, 6 payload_dumps.
+- Mapeamento variável/handoff:
+  - Entrada passo 2: RESULTS_JSON (inject from step1).
+  - Saída passo 2: RESULTS_JSON (novo conteúdo), MEMORY_SHORT, TSV_CATALOGO_DRAFT_ENC, TSV_VALIDACOES_ENC.
+- Checklist final PASS/FAIL:
+  1. run mais recente/justificada: PASS
+  2. leitura integral artefactos obrigatórios: PASS
+  3. input da prompt anterior confirmado: PASS
+  4. output transmitível para a seguinte confirmado: PASS
+  5. coerência com objetivo global da cadeia: PASS com ressalva
+  6. next/default/allowed sem rotas perigosas: PASS no catálogo / FAIL no INICIAR
+  7. rastreabilidade por evidência: PASS
+  8. contradições entre artefactos identificadas: PASS
+  9. separação prompt vs config/orquestrador/dados: PASS
+  10. alterações propostas com valor real: PASS
+  11. prompt integral corrigida só se segura: PASS (não necessária)
+  12. verificação interna da proposta: PASS
+  13. legível para leigo: PASS
