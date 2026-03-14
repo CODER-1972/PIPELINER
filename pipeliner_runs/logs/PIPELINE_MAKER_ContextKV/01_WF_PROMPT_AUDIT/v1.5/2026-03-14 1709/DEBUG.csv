@@ -1,0 +1,96 @@
+﻿"row_number","Timestamp","Passo","Prompt ID","Severidade","Linha (Config extra)","Parâmetro","Funcionalidade","Problema","Sugestão","pipeline_name","action","var","result","details","pipeline_name"
+"2","14/03/2026 17:08:29","0","PIPELINE_MAKER_ContextKV","INFO","","M05_RUN_DUMP","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso","Run dump ativo em C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\DEBUG_PAYLOAD_DUMPS\20260314_170829_PIPELINE_MAKER_ContextKV","Os ficheiros request/response desta run serao elegiveis para upload Git quando Git LOG estiver ON.","","","","","",""
+"3","14/03/2026 17:08:33","0","PIPELINE_MAKER_ContextKV","INFO","","PIPELINE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Validacao de transicao de Next PROMPT | Aplicacao de limites de execucao da pipeline | Controlo de transicao/limites da pipeline | contexto: inputFolder=[C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER]","Inicio pipeline. startId=[PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5] maxSteps=10 maxRep=3 inputFolder=[C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER]","OK","","","","","",""
+"4","14/03/2026 17:08:34","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","GIT_LOG_BIND","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso","Preflight Git LOG OK. target_sheet=GIT LOG | headers_count=10 | has_timestamp=SIM | has_prompt_id=SIM | meta_col=11","OK","","","","","",""
+"5","14/03/2026 17:08:34","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=enter_step","stage=enter_step | row=1/2","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"6","14/03/2026 17:08:34","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=before_context_inject","stage=before_context_inject","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"7","14/03/2026 17:08:34","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=catalog_loaded | prompt=4260","stage=catalog_loaded | lenPrompt=4260","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"8","14/03/2026 17:08:35","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=after_context_inject","stage=after_context_inject | injectOk=SIM","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"9","14/03/2026 17:08:35","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=before_inputs_attach","stage=before_inputs_attach","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"10","14/03/2026 17:08:35","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=after_inputs_attach | prompt=4260","stage=after_inputs_attach | lenPrompt=4260","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"11","14/03/2026 17:08:35","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=config_parse_start","stage=config_parse_start | lenConfigExtra=208","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"12","14/03/2026 17:08:36","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=config_parsed","stage=config_parsed | lenAudit=224|lenInputJson=0","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"13","14/03/2026 17:08:36","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | contexto: stage=files_prepare_skip","stage=files_prepare_skip | temFiles=NAO","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"14","14/03/2026 17:08:36","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","REQ_INPUT_JSON","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem do bloco input do request | Validacao de anexos (input_file/input_image/text_embed) | contexto: file=NAO","len=0 | has_input_file=NAO | has_input_image=NAO | has_text_embed=NAO | preview=","Input final construído; este retrato confirma se anexos seguiram como file/image e/ou text_embed. Se esperava text_embed, validar has_text_embed=SIM e blocos BEGIN/END FILE no payload dump.","","","","","",""
+"15","14/03/2026 17:08:36","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | Preparacao da chamada /v1/responses | contexto: stage=before_api","stage=before_api | lenInputJsonFinal=0","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"16","14/03/2026 17:08:36","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | Disparo do pedido HTTP para a API | contexto: stage=api_call_start","stage=api_call_start | model=gpt-5.4","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"17","14/03/2026 17:08:36","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","M05_CI_INTENT_EVAL","Download, validacao e contrato dos ficheiros finais gerados pelo Code Interpreter.
+ACAO EM CURSO: Avaliacao da intencao explicita de Code Interpreter | Gate da auto-injecao da tool code_interpreter | Inspecao de artefactos de output no container do Code Interpreter | contexto: file=NAO | resolved=NAO","ci_in_extra=NAO | ci_intent_resolved=NAO | ci_explicit_intent=NAO | modos_ci=NAO | has_input_file=NAO | has_input_image=NAO","Diagnostico de origem da intencao de CI (extraFragment vs modo efetivo resolvido no orquestrador).","","","","","",""
+"18","14/03/2026 17:08:40","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","M05_UTF8_ROUNDTRIP","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | contexto: payload_len=4761","roundtrip UTF-8 OK | payload_len=4761","Gate de codificacao concluido antes do envio HTTP.","","","","","",""
+"19","14/03/2026 17:08:40","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","M05_PAYLOAD_DUMP","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP","Payload final gravado em C:\Temp\payload.json | len=4761","Use este ficheiro para validar text.format.schema e outros fragmentos antes de novo envio.","","","","","",""
+"20","14/03/2026 17:08:41","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","M05_PAYLOAD_CHECK","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | Checklist pre-envio do payload (tools/input/tamanho) | Associacao de ficheiro por file_id no payload | contexto: file=NAO | endpoint=https://api.openai.com/v1/responses | prompt=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5 | pipeline=PIPELINE_MAKER_ContextKV | file_id=NAO | mode=text/metadata | payload_len=4761","FP=pipeline=PIPELINE_MAKER_ContextKV|step=1|prompt=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5|mode=text/metadata|resp=[pendente]|model=gpt-5.4|ok_http=[pendente]|mode=[pendente] | endpoint=https://api.openai.com/v1/responses | model=gpt-5.4 | input_is_array=NAO | has_input_file=NAO | has_file_data=NAO | has_file_id=NAO | has_input_image=NAO | web_search=OFF | code_interpreter=OFF | payload_len=4761","Pedido preparado e enviado com sucesso técnico; validação de contrato de output será feita após resposta (correlacionar com M10_* do mesmo FP).","","","","","",""
+"21","14/03/2026 17:08:41","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","M05_HTTP_TIMEOUTS","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | Calculo e aplicacao de timeouts efetivos | contexto: prompt=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5 | pipeline=PIPELINE_MAKER_ContextKV | mode=text/metadata","FP=pipeline=PIPELINE_MAKER_ContextKV|step=1|prompt=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5|mode=text/metadata|resp=[pendente]|model=gpt-5.4|ok_http=[pendente]|mode=[pendente] | resolve_ms=15000 | connect_ms=15000 | send_ms=480000 | receive_ms=360000","Time-outs aplicados nesta execucao; util para distinguir lentidao de erro logico. Se houver timeout, aumentar HTTP_TIMEOUT_RECEIVE_MS e repetir 1 vez.","","","","","",""
+"22","14/03/2026 17:09:03","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","M05_RUN_DUMP","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso | contexto: status=200","Dumps request/response guardados para a run.","step=1 | status=200 | folder=C:\Users\pnico\OneDrive - Universidade de Lisboa\Investigação - TÉCNICA IA\PIPELINE_MAKER\DEBUG_PAYLOAD_DUMPS\20260314_170829_PIPELINE_MAKER_ContextKV","","","","","",""
+"23","14/03/2026 17:09:04","0","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","M05_HTTP_RESULT","Comunicacao com a API e validacao tecnica do pedido.
+ACAO EM CURSO: Montagem e validacao tecnica do payload | Execucao/monitorizacao da chamada HTTP | Correlacao de status HTTP com acao de recuperacao | contexto: prompt=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5 | pipeline=PIPELINE_MAKER_ContextKV | status=200 | http_status=200 | mode=text/metadata","FP=pipeline=PIPELINE_MAKER_ContextKV|step=1|prompt=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5|mode=text/metadata|resp=resp_01d0621c9ba20e0f0069b5961bc9b88193bea2d11dddc3fd94|model=gpt-5.4|ok_http=SIM|mode=[pendente] | http_status=200","Transporte HTTP concluido com sucesso (2xx). O contrato funcional de output deve ser confirmado pelos eventos M10.","","","","","",""
+"24","14/03/2026 17:09:05","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","CONTRACT_EVAL_START","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso | contexto: promptId=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5]","[RunID: 20260314_170905_9147]
+[Passo: 1]
+[PromptID: PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5]
+[Contrato: SEM_CONTRATO]
+[Estado: OK]
+[Regra: C0_NO_CONTRACT]
+[Severidade: INFO]
+Validacao de consistencia desativada neste passo.","Se houver intermitencia de ficheiros, considerar ativar diagnostic_contract: ci_csv_v1.
+[DetailJsonCompact]
+{""contract"":""SEM_CONTRATO""}","","","","","",""
+"25","14/03/2026 17:09:05","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","CONTRACT_STATE_DECISION","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso | contexto: promptId=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5]","[RunID: 20260314_170905_9147]
+[Passo: 1]
+[PromptID: PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5]
+[Contrato: SEM_CONTRATO]
+[Estado: OK]
+[Regra: C0_NO_CONTRACT]
+[Severidade: INFO]
+Passo sem contrato explicito; execucao segue com observacao diagnostica.","Sem acao obrigatoria. Se houver falhas recorrentes, ativar diagnostic_contract: ci_csv_v1 no passo.
+[DetailJsonCompact]
+{""contract"":""SEM_CONTRATO""}","","","","","",""
+"26","14/03/2026 17:09:05","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","CONTRACT_NEXT_ACTION","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Controlo de transicao/limites da pipeline | contexto: promptId=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5]","[RunID: 20260314_170905_9147]
+[Passo: 1]
+[PromptID: PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5]
+[Contrato: SEM_CONTRATO]
+[Estado: OK]
+[Regra: C0_NO_CONTRACT]
+[Severidade: INFO]
+Proxima acao recomendada definida.","Sem acao obrigatoria. Se houver falhas recorrentes, ativar diagnostic_contract: ci_csv_v1 no passo.
+[DetailJsonCompact]
+{""action"":""continue_pipeline""}","","","","","",""
+"27","14/03/2026 17:09:06","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","OUTPUT_EXECUTE_FOUND","Aplicacao do plano de output e validacao dos artefactos guardados no OUTPUT Folder.
+ACAO EM CURSO: Execucao da diretiva OUTPUT_EXECUTE | Importacao/validacao de CSV em worksheet dedicada | Validacao de output esperado e artefacto final | contexto: response_id=resp_01d0621c9ba20e0f0069b5961bc9b88193bea2d11dddc3fd94","response_id=resp_01d0621c9ba20e0f0069b5961bc9b88193bea2d11dddc3fd94 | directives=0 | m10_ctx=filesUsed= | filesOps=","","","","","","",""
+"28","14/03/2026 17:09:11","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","STEP_STAGE","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Atualizacao do stage de execucao | Fecho tecnico do passo com logging final | contexto: stage=step_completed | response_id=resp_01d0621c9ba20e0f006","stage=step_completed | http=200 | response_id=resp_01d0621c9ba20e0f006","Use o ultimo stage para localizar o ponto em que a execucao parou antes do Seguimento.","","","","","",""
+"29","14/03/2026 17:09:11","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","CAPTURE_START","","Início da captura (ContextKV). Output chars=4961.","","PIPELINE_MAKER_ContextKV","CAPTURE_START","","INFO","Início da captura (ContextKV). Output chars=4961.",""
+"30","14/03/2026 17:09:11","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","CAPTURE_OK","","Captura concluída. Keys=2 | captured_vars chars=5055.","","PIPELINE_MAKER_ContextKV","CAPTURE_OK","","INFO","Captura concluída. Keys=2 | captured_vars chars=5055.",""
+"31","14/03/2026 17:09:11","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","ALERTA","","Next PROMPT default","Controlo do fluxo e dos limites de execucao da pipeline.
+ACAO EM CURSO: Controlo de transicao/limites da pipeline","Next PROMPT default vazio; o fallback pode terminar em STOP inesperado.","Sugestao: preencher Next PROMPT default com ID valido ou STOP explicito.","","","","","",""
+"32","14/03/2026 17:09:12","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","ALERTA","","NextDefault","Validacao de transicoes de Next PROMPT e protecao contra ciclos inesperados.
+ACAO EM CURSO: Validacao de transicao de Next PROMPT | Aplicacao de limites de execucao da pipeline | Aplicacao de regras default/allowed na transicao de prompt | Controlo de transicao/limites da pipeline","ID na linha seguinte nao permitido e Next PROMPT default esta vazio.","Sugestao: defina Next PROMPT default na folha do catalogo.","","","","","",""
+"33","14/03/2026 17:09:12","1","PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5","INFO","","DEBUG_SNAPSHOT","Monitorizacao tecnica de uma etapa da execucao.
+ACAO EM CURSO: Registo tecnico da operacao em curso","DEBUG consolidado no catalogo com sucesso para consulta rapida.","Foi atualizado o bloco de Notas para desenvolvimento (linhas 3 e 4 da prompt), substituindo conteudo anterior.","","","","","",""
+"34","14/03/2026 17:09:13","0","PIPELINE_MAKER_ContextKV","INFO","","GH_CONFIG","Leitura e validacao das configuracoes necessarias para correr a pipeline.
+ACAO EM CURSO: Leitura e validacao de configuracao","Fonte do token GitHub resolvida.","token_source=ENV:GH_TOKEN@PROCESS","","","","","",""
+"35","14/03/2026 17:09:13","0","PIPELINE_MAKER_ContextKV","INFO","","GH_CONFIG","Leitura e validacao das configuracoes necessarias para correr a pipeline.
+ACAO EM CURSO: Leitura e validacao de configuracao","Run folder resolvida por prompt.","prompt_id=PIPELINE_MAKER_ContextKV/01/WF_PROMPT_AUDIT/v1.5 | remote_folder=pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/01_WF_PROMPT_AUDIT/v1.5/2026-03-14 1709","","","","","",""
+"36","14/03/2026 17:09:13","0","PIPELINE_MAKER_ContextKV","INFO","","GH_CONFIG","Leitura e validacao das configuracoes necessarias para correr a pipeline.
+ACAO EM CURSO: Leitura e validacao de configuracao","Pasta remota principal resolvida.","remote_folder=pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/01_WF_PROMPT_AUDIT/v1.5/2026-03-14 1709 | total_prompt_folders=1","","","","","",""
