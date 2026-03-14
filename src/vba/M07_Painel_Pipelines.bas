@@ -8,6 +8,9 @@ Option Explicit
 ' - Gerir limites, fluxo de passos, integracao com catalogo/API/logs e geracao de mapa/registo.
 '
 ' Atualizações:
+' - 2026-03-14 | Codex | Corrige chamada ambigua de RUN_FINISH no Git LOG
+'   - Qualifica `GitLog_AppendEvent` como `M28_GitLogSheet.GitLog_AppendEvent` na saida limpa da pipeline.
+'   - Evita `Compile error: Ambiguous name detected: GitLog_AppendEvent` com modulos duplicados no VBAProject.
 ' - 2026-03-14 | Codex | Corrige chamada ambigua em escrita no Git LOG
 '   - Qualifica `GitLog_InsertEntryTop` como `M28_GitLog.GitLog_InsertEntryTop` no loop principal.
 '   - Evita `Compile error: Ambiguous name detected: GitLog_InsertEntryTop` quando existem modulos duplicados no VBAProject.
@@ -1453,7 +1456,7 @@ Private Sub Painel_IniciarPipeline(ByVal pipelineIndex As Long)
 
 SaidaLimpa:
     If gitLogEnabled Then
-        Call GitLog_AppendEvent(runToken, passoCtx, pipelineNome, promptCtx, "INFO", "RUN_FINISH", "PAINEL", _
+        Call M28_GitLogSheet.GitLog_AppendEvent(runToken, passoCtx, pipelineNome, promptCtx, "INFO", "RUN_FINISH", "PAINEL", _
             "Execucao da pipeline concluida.", _
             "executou_passos=" & IIf(runExecutouPassos, "SIM", "NAO") & " | ultimo_stage=" & mStepLastStage)
     End If
