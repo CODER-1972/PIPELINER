@@ -629,3 +629,9 @@ Se começar a ficar demasiado grande:
 - Em chamadas a helpers públicos que podem coexistir em módulos duplicados (ex.: importações que geram `...1`), preferir chamada qualificada `NomeModulo.Procedimento`; isto reduz `Compile error: Ambiguous name detected` em projetos com duplicação temporária.
 
 - Em preflights de auditoria Git (ex.: `GitLog_DiagnoseTarget`), usar sempre chamada qualificada com o módulo de origem (`M28_GitLog.<helper>`) para evitar colisões de nome quando o VBAProject contém cópias automáticas de módulos (`...1`).
+
+- Em chamadas de escrita no Git LOG a partir do loop principal (ex.: `GitLog_InsertEntryTop`), usar qualificação explícita com módulo (`M28_GitLog.<helper>`) para evitar `Compile error: Ambiguous name detected` quando existirem cópias automáticas de módulos (`...1`).
+
+- Em eventos de ciclo de vida da run (ex.: `GitLog_AppendEvent` para `RUN_FINISH`/`GH_UPLOAD_*`), usar chamada qualificada com o módulo (`M28_GitLogSheet.<helper>`) para evitar `Compile error: Ambiguous name detected` quando existirem cópias automáticas (`...1`).
+
+- No fecho da run no `M07_Painel_Pipelines` (`SaidaLimpa`), chamar `PipelineGitDebug_ExportIfEnabled` de forma qualificada (`M21_GitDebugExport.PipelineGitDebug_ExportIfEnabled`) para evitar ambiguidade quando coexistirem módulos duplicados (`...1`).

@@ -9,6 +9,9 @@ Option Explicit
 ' - Delegar configuracao, HTTP, blobs, tree/commit e logging aos modulos GH dedicados.
 '
 ' Atualizacoes:
+' - 2026-03-14 | Codex | Qualifica eventos Git LOG para evitar nome ambiguo
+'   - Troca chamadas `GitLog_AppendEvent` por `M28_GitLogSheet.GitLog_AppendEvent` no fluxo de auto-upload.
+'   - Evita `Compile error: Ambiguous name detected: GitLog_AppendEvent` quando houver modulos duplicados.
 ' - 2026-03-12 | Codex | Corrige timestamp de run folder para hora:minuto
 '   - Substitui formato `hhdd` por `hhmm` na composicao do `RUN_STAMP` usado na pasta remota.
 '   - Alinha o nome da pasta com granularidade temporal esperada para organizacao no GitHub.
@@ -203,7 +206,7 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     Dim retryCount As Long
     If Not GitDebug_RunUploadByMode(cfg, files, pipelineNome, uploadMode, reason, successCount, failCount, retryCount) Then
         Call GH_LogError(0, pipelineNome, GH_EVT_UPLOAD_FAILED, "Falha no auto-upload de debug.", reason & " | upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount))
-        Call GitLog_AppendEvent("", 0, pipelineNome, "", "ERRO", "GH_UPLOAD_FAILED", "M21_GitDebugExport", _
+        Call M28_GitLogSheet.GitLog_AppendEvent("", 0, pipelineNome, "", "ERRO", "GH_UPLOAD_FAILED", "M21_GitDebugExport", _
             "Falha no upload Git da run.", _
             "upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount) & " | reason=" & reason)
         Exit Sub
@@ -217,7 +220,7 @@ Public Sub PipelineGitDebug_ExportIfEnabled(ByVal pipelineIndex As Long, ByVal p
     Call GH_LogInfo(0, pipelineNome, GH_EVT_CONFIG, "Link registado em Seguimento/HISTORICO.", webUrl)
 
     Call GH_LogInfo(0, pipelineNome, GH_EVT_UPLOAD_DONE, "Debug export publicado no GitHub.", "upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount) & " | " & webUrl)
-    Call GitLog_AppendEvent("", 0, pipelineNome, "", "INFO", "GH_UPLOAD_DONE", "M21_GitDebugExport", _
+    Call M28_GitLogSheet.GitLog_AppendEvent("", 0, pipelineNome, "", "INFO", "GH_UPLOAD_DONE", "M21_GitDebugExport", _
         "Run publicado no GitHub.", _
         "upload_mode=" & uploadMode & " | success=" & CStr(successCount) & " | fail=" & CStr(failCount) & " | retries=" & CStr(retryCount) & " | link=" & webUrl)
 
