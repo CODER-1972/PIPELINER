@@ -1,0 +1,9 @@
+instructions: Responde em Português de Portugal. Mantém a saída curta e operacional. Web=Não.
+truncation: auto
+metadata: {projeto: PIPELINE_MAKER, prompt: WF_CATALOGO_FROM_LAYOUT_TXT, versao: v1.4, handoff_in: TSV_CATALOGO_FINAL_ENC, rev: ci_proof_gate_v2}
+output_kind: file
+process_mode: code_interpreter
+auto_save: Sim
+overwrite_mode: suffix
+structured_outputs_mode: off
+diagnostic_contract: ci_csv_v1
