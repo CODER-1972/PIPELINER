@@ -1,0 +1,276 @@
+1) Resumo Executivo
+[CONCLUSÃO:] RISCO — execução da prompt-alvo foi tecnicamente bem-sucedida (HTTP 200), mas com ressalvas de contrato e handoff semântico (capturas ContextKV redundantes/ambíguas).
+- Objetivo da prompt (linguagem simples): transformar o RESULTS_JSON vindo do passo anterior num TSV de catálogo (draft) compatível com FLOW_TEMPLATE, para QA no passo seguinte.
+- Esperado vs observado:
+  - OBSERVADO: a prompt PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4 correu no passo 2, modelo gpt-5.4, HTTP 200, e produziu TSV_CATALOGO_DRAFT_ENC + TSV_VALIDACOES_ENC + MEMORY_SHORT.
+  - OBSERVADO: houve injeção de RESULTS_JSON do passo 1 e anexação de FLOW_TEMPLATE.csv (text_embed) + ORIENTACOES...pdf (file_id).
+  - INFERIDO: o objetivo funcional principal foi atingido.
+- Classificação final: Aprovada com ressalvas.
+- Decisão operacional: Go condicionado.
+- Top riscos reais:
+  1. Captura ContextKV redundante: RESULTS_JSON e MEMORY_SHORT ficaram com o mesmo conteúdo de TSV_CATALOGO_DRAFT_ENC (ambiguidade semântica para consumidores futuros).
+  2. Ausência de contrato formal (CONTRACT_SUGGEST_ENABLE no passo-alvo).
+  3. ID final no TSV permanece [POR CONFIRMAR], com potencial impacto em automação de catálogo.
+  4. Campo “Next prompt decidido” vazio em Seguimento (rastreabilidade parcial da transição).
+  5. ALERTA de segredo operacional (Config!B1 com API key literal, apesar de env var priorizada).
+- Top ações recomendadas:
+  - P1: endurecer captura ContextKV por whitelist de chaves permitidas no passo 2 (ORQUESTRADOR / PIPELINE).
+  - P1: ativar contrato de output para passo 2 (ORQUESTRADOR / PIPELINE + OUTPUT).
+  - P2: reforçar instrução textual para impedir emissão de chaves não pedidas e preservar naming estrito (TEXTO DA PROMPT).
+  - P2: reforçar validação de ID canónico antes de promover draft para catálogo final (ORQUESTRADOR / PIPELINE).
+  - P3: eliminar API key literal da folha Config em ambiente operativo (OPERAÇÃO / GOVERNAÇÃO).
+- Nota para leigo: “A etapa funciona e entrega resultado útil, mas ainda há riscos de interpretação automática errada em integrações futuras se não forem afinadas regras de captura/contrato.”
+
+2) Contexto na Cadeia de Prompts (visão de fluxo)
+[CONCLUSÃO:] OK com ressalvas — run alvo foi identificada de forma inequívoca e os artefactos principais estão presentes.
+- Fontes da análise:
+  - DEBUG.csv, Seguimento.csv, catalogo_prompts_executadas.csv, painel_pipeline.txt.
+  - payload_dumps/* (request/response/meta dos passos 1..3).
+- Resolução da pasta de logs:
+  - TARGET_PROMPT_ID: PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4
+  - Normalização aplicada: 02 + WF_LAYOUT_FROM_TXT => 02_WF_LAYOUT_FROM_TXT, versão v1.4.
+  - Pasta analisada: pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/02_WF_LAYOUT_FROM_TXT/v1.4
+- Runs encontradas nesta versão:
+  - 2026-03-14 1924
+  - 2026-03-14 2334
+- Run escolhida: 2026-03-14 2334.
+- Motivo da escolha: mais recente por ordenação temporal real (YYYY-MM-DD HHMM).
+- Artefactos encontrados:
+  - obrigatórios: Seguimento.csv, DEBUG.csv, catalogo_prompts_executadas.csv, painel_pipeline.txt.
+  - técnicos: 9 ficheiros em payload_dumps (3 meta, 3 request raw, 3 response raw).
+- Cobertura de leitura por artefacto:
+  - DEBUG.csv: 100% (1298 linhas físicas / 577 registos lógicos CSV).
+  - Seguimento.csv: 100% (3 registos lógicos).
+  - catalogo_prompts_executadas.csv: 100% (15 registos lógicos).
+  - painel_pipeline.txt: 100%.
+  - payload_dumps/*.json/*.txt: 100% dos 9 ficheiros.
+- Limitações:
+  - [POR CONFIRMAR] conteúdo real dos anexos binários originais no disco de origem (fora da run); inferência baseada em logs e payload.
+- Papel desta prompt na cadeia:
+  - Passo 2 de 3 executados nesta run (01 audit -> 02 layout -> 03 QA).
+- Dependências da prompt anterior:
+  - RESULTS_JSON capturado no passo 1 e injetado no passo 2.
+- Entregáveis para a prompt seguinte:
+  - TSV_CATALOGO_DRAFT_ENC (observado e injetado no passo 3).
+- Impacto no objetivo global da cadeia:
+  - INFERIDO: alto, porque define o draft estrutural que o QA corrige/valida.
+- Resposta explícita: “Se esta prompt falhar parcialmente, o processo global ainda serve o objetivo final?”
+  - INFERIDO: parcialmente. O objetivo final pode sobreviver apenas se o QA (passo 3) detetar/corrigir integralmente as falhas; caso contrário, risco de catálogo inconsistente.
+
+3) I/O de Negócio (o que entra e o que sai)
+[CONCLUSÃO:] OK com risco moderado — entradas e saídas principais existem, mas há ruído de captura de variáveis.
+- Entradas esperadas (prompt/catálogo):
+  - VARS: RESULTS_JSON.
+  - FILES: FLOW_TEMPLATE*.csv (required/latest) + ORIENTACOES_PIPELINE*.pdf (required/latest).
+- Entradas observadas:
+  - injected_vars (passo 2): RESULTS_JSON veio do passo 1.
+  - files_used: FLOW_TEMPLATE.csv (text) + ORIENTACOES...pdf (pdf).
+  - file_ids_used: file-3992m861jLa98ydTqPp8j2 (PDF).
+- Saídas esperadas:
+  - TSV_CATALOGO_DRAFT_ENC obrigatório.
+  - opcionais: TSV_TRACE_PROMPTS_ENC, TSV_VALIDACOES_ENC, MEMORY_SHORT.
+  - handoff para passo 3 (WF_LAYOUT_QA).
+- Saídas observadas:
+  - Output contém: TSV_CATALOGO_DRAFT_ENC, TSV_TRACE_PROMPTS_ENC, TSV_VALIDACOES_ENC, MEMORY_SHORT.
+  - captured_vars no passo 2: RESULTS_JSON, MEMORY_SHORT, TSV_CATALOGO_DRAFT_ENC, TSV_VALIDACOES_ENC.
+- Critérios de sucesso (observáveis): HTTP 200, output com chave draft, injeção para passo seguinte.
+- Critérios de falha/paragem: não observados neste passo (sem ERRO/FAIL).
+- Diferenças esperado vs observado:
+  - OBSERVADO: outputs opcionais foram emitidos (positivo).
+  - OBSERVADO: chave RESULTS_JSON foi recapturada com conteúdo do draft (potencial ambiguidade).
+- Tradução leiga:
+  - “A etapa recebeu os dados certos e produziu o ficheiro textual esperado, mas gravou etiquetas extra que podem confundir etapas futuras.”
+
+4) Integridade de Handoff (prompt anterior -> atual -> próxima)
+[CONCLUSÃO:] frágil-controlado — handoff funcional, mas com risco de quebra silenciosa por semântica de variáveis.
+
+4.1 Receção da prompt anterior
+[CONCLUSÃO:] OK — RESULTS_JSON foi recebido e usado no payload do passo 2.
+- Variáveis esperadas vs recebidas:
+  - Esperado: RESULTS_JSON.
+  - Observado: injected_vars inclui RESULTS_JSON vindo do passo 1.
+- Ficheiros esperados vs anexados:
+  - FLOW_TEMPLATE*.csv resolvido para FLOW_TEMPLATE.csv (text_embed).
+  - ORIENTACOES_PIPELINE*.pdf resolvido para PDF e anexado por file_id.
+- Evidência de integridade:
+  - upload PDF HTTP 200 e file_id válido no payload.
+  - REQ_INPUT_JSON indica has_input_file=SIM e has_text_embed=SIM.
+- Lacunas/fallback:
+  - não observadas lacunas de ficheiros required.
+- Risco para prompt atual: baixo.
+
+4.2 Preparação para a prompt seguinte
+[CONCLUSÃO:] RISCO — o artefacto principal foi entregue, mas existe ruído de variáveis capturadas.
+- Variáveis capturadas e qualidade:
+  - TSV_CATALOGO_DRAFT_ENC capturado e posteriormente injetado no passo 3 (OK).
+  - RESULTS_JSON/MEMORY_SHORT com conteúdo igual ao draft (ruído semântico).
+- Ficheiros disponíveis para próximo passo:
+  - não houve produção de ficheiro binário, handoff foi textual via ContextKV.
+- Prontidão parsing-safe:
+  - draft está em linha chave-valor e foi consumido automaticamente no passo 3 (OK).
+- Risco de quebra silenciosa:
+  - moderado, caso outro consumidor priorize RESULTS_JSON errado em vez do draft.
+- Risco para prompt seguinte:
+  - baixo nesta run específica (passo 3 consumiu a chave correta).
+
+4.3 Encadeamento e rotas
+[CONCLUSÃO:] robusto (nesta run) / frágil (no desenho geral).
+- Next/default/allowed no catálogo do passo 2:
+  - Next prompt: PIPELINE_MAKER_ContextKV/03/WF_LAYOUT_QA/v1.2
+  - default idem; allowed inclui STOP + passo 3.
+- Rotas perigosas/ambíguas:
+  - não observadas no catálogo do passo 2.
+- Observação de execução:
+  - Seguimento deixa “Next prompt decidido” vazio, mas a cadeia avançou para passo 3.
+- Conclusão handoff:
+  - robusto nesta run; frágil por rastreabilidade incompleta e semântica de captura.
+
+5) Contrato da Prompt (clareza operacional)
+[CONCLUSÃO:] RISCO — contrato textual é bom, mas sem contrato técnico ativado no orquestrador.
+- ROLE/objetivo/limites:
+  - claros e alinhados com transformação de RESULTS_JSON para TSV draft.
+- Regras nucleares:
+  - idioma PT-PT, web desativada e orientação determinística observáveis no texto/config.
+- Formato obrigatório de output:
+  - existe estrutura por chaves com sufixo _ENC e MEMORY_SHORT.
+- [POR CONFIRMAR] governance:
+  - quem valida formalmente contrato por ambiente não está explicitado nos artefactos.
+- Clareza I/O:
+  - boa no catálogo (INPUTS/OUTPUTS explícitos).
+- Exequibilidade operacional:
+  - comprovada por HTTP 200 e consumo no passo 3.
+- Margem ambígua:
+  - captura automática por “key_colon_line” permite chaves semanticamente indevidas.
+
+6) Qualidade e Robustez (PASS/FAIL)
+[CONCLUSÃO:] PASS maioritário com 3 FAIL/AMBÍGUO relevantes para produção madura.
+
+Teste | Resultado | Evidência | Impacto | Camada de correção | Ação corretiva
+run correcta identificada | PASS | versão v1.4 com run mais recente 2026-03-14 2334 | base sólida | ORQUESTRADOR / PIPELINE | [manter]
+artefactos obrigatórios encontrados | PASS | 4/4 presentes | sem bloqueio | OPERAÇÃO / GOVERNAÇÃO | [manter]
+cobertura integral de leitura | PASS | leitura integral de CSV/TXT/JSON da run | confiança alta | OPERAÇÃO / GOVERNAÇÃO | [manter]
+prompt executada identificada sem ambiguidade | PASS | passo 2 em Seguimento + payload meta | rastreável | ORQUESTRADOR / PIPELINE | [manter]
+input recebido da prompt anterior | PASS | injected_vars com RESULTS_JSON do passo 1 | handoff ok | ORQUESTRADOR / PIPELINE | [manter]
+ficheiros resolvidos/anexados correctamente | PASS | FILES_ITEM_TRACE OK + upload 200 | contexto completo | DADOS / ANEXOS / INPUTS | [manter]
+integridade de ContextKV / variáveis | AMBÍGUO | captured_vars inclui RESULTS_JSON duplicado com draft | risco de leitura errada futura | ORQUESTRADOR / PIPELINE | [substituir] regra de captura por whitelist por passo
+parsing de config extra | PASS | config_parsed sem erro no passo 2 | sem bloqueio | CONFIG EXTRA | [manter]
+coerência do payload/request | PASS | REQ_INPUT_JSON com input_file+text_embed | execução correta | ORQUESTRADOR / PIPELINE | [manter]
+resultado HTTP e resposta | PASS | M05_HTTP_RESULT + Seguimento HTTP 200 | sucesso técnico | ORQUESTRADOR / PIPELINE | [manter]
+captura de output | PASS com ressalva | CAPTURE_OK (4 keys) mas com semântica redundante | risco moderado | ORQUESTRADOR / PIPELINE | [reordenar] prioridade de chaves e [eliminar] capturas não declaradas
+handoff para etapa seguinte | PASS | passo 3 injeta TSV_CATALOGO_DRAFT_ENC | continuidade ok | ORQUESTRADOR / PIPELINE | [manter]
+determinismo/parsing-safe do output | PASS | formato key: + conteúdo tabular escapado | automação viável | OUTPUT | [manter]
+coerência de IDs/versões/placeholders | FAIL parcial | ID ficou [POR CONFIRMAR]/... | risco de catálogo inválido | OUTPUT + ORQUESTRADOR / PIPELINE | [adicionar] validação de ID canónico antes de promover
+coerência next/default/allowed | PASS | catálogo passo 2 consistente | sem risco de rota | ORQUESTRADOR / PIPELINE | [manter]
+aderência idioma/regras/web policy | PASS | PT-PT e sem web observável | conformidade | TEXTO DA PROMPT | [manter]
+segurança e exposição de segredos | FAIL parcial | ALERTA OPENAI_API_KEY literal em Config | risco de governance | OPERAÇÃO / GOVERNAÇÃO | [eliminar] chave literal da folha Config
+rastreabilidade e auditabilidade | AMBÍGUO | “Next prompt decidido” vazio em Seguimento | diagnóstico menos claro | ORQUESTRADOR / PIPELINE | [adicionar] preenchimento explícito do next efetivo
+production-readiness | AMBÍGUO | funciona, mas com riscos de contrato/captura | precisa hardening leve | ORQUESTRADOR / PIPELINE | [adicionar] contrato + whitelist de capture
+coerência entre artefactos | PASS com ressalva | Seguimento, DEBUG e payload convergem; pequena lacuna em next decidido | risco baixo-médio | ORQUESTRADOR / PIPELINE | [manter] + melhoria de logging
+
+7) Ficheiros e Anexos (técnico-operacional)
+[CONCLUSÃO:] production-ready com ressalvas.
+- Anexos obrigatórios:
+  - FLOW_TEMPLATE*.csv: OK (resolvido para FLOW_TEMPLATE.csv, modo text_embed).
+  - ORIENTACOES_PIPELINE*.pdf: OK (upload file_id com HTTP 200).
+- Modo de transporte observado:
+  - híbrido: file_id para PDF + text_embed para CSV.
+- Compatibilidades/riscos:
+  - sem sinais de incompatibilidade MIME nesta run.
+  - cache de file_id antigo invalidada e substituída (comportamento robusto observado).
+- Ficheiros técnicos/dumps:
+  - presentes e íntegros para passo 2 (meta/request/response).
+- Evidência de files_used/files_ops/file_ids/capture-inject:
+  - presente em Seguimento e DEBUG com correspondência.
+- Conclusão operacional de anexos:
+  - “production-ready com ressalvas” (ressalvas não bloqueiam este caso, mas recomendam hardening de captura e contrato).
+
+8) Evidência de Execução (Seguimento + DEBUG em linguagem leiga)
+[CONCLUSÃO:] OK — narrativa técnica consistente entre artefactos, sem erro de API.
+- Linha temporal resumida:
+  - 23:33:26: entrada no passo 2, injeção ContextKV e anexação iniciadas.
+  - 23:33:30: payload pronto e chamada API iniciada.
+  - 23:34:09: resposta HTTP 200.
+  - 23:34:10: output capturado e passo concluído.
+- Seguimento.csv (passo 2):
+  - Prompt ID correto, modelo gpt-5.4, HTTP 200, response_id preenchido.
+  - files_used e injected_vars preenchidos.
+  - output contém chaves esperadas de draft/validações/memória.
+  - inconsistência menor: “Next prompt decidido” vazio.
+- DEBUG.csv (passo 2):
+  - STEP_STAGE completo (enter -> inject -> attach -> parse -> api -> completed).
+  - FILES_ITEM_TRACE e FILES UPLOAD sem erro.
+  - ALERTA único relevante: CONTRACT_SUGGEST_ENABLE (sem contrato explícito).
+  - CAPTURE_OK com 4 keys (incluindo chaves semanticamente redundantes).
+- catalogo_prompts_executadas.csv:
+  - confirma texto integral da prompt v1.4 e next/default/allowed alinhados para passo 3.
+- painel_pipeline.txt:
+  - confirma pipeline index, limites e sequência de IDs.
+- Outros ficheiros (payload_dumps):
+  - request/response raw confirmam conteúdo efetivo enviado/recebido.
+- Contradições:
+  - INCONSISTÊNCIA leve: next vazio em Seguimento vs execução real avançou para passo 3.
+  - prevalência probatória: DEBUG + payload têm maior peso técnico para fluxo efetivo.
+- Tradução sem jargão:
+  - “A máquina fez o que devia, mas os registos ainda podem ser melhorados para evitar confusões futuras.”
+
+9) Segurança, Privacidade e Conformidade
+[CONCLUSÃO:] aceitável com ressalvas.
+- Exposição de segredos:
+  - ALERTA explícito de API key literal em Config (não impressa no dump, mas presença foi detetada).
+- Dados sensíveis em output/log:
+  - não observada fuga direta de segredos no output do passo 2.
+- Minimização de dados:
+  - logs técnicos extensos, mas dentro de prática de troubleshooting.
+- Storage/retenção:
+  - store=True observado no payload.
+- Boas práticas/desvios:
+  - bom: prioridade à env var OPENAI_API_KEY.
+  - desvio: manter key literal na folha Config.
+- Conclusão:
+  - aceitável com ressalvas; ação de governance recomendada.
+
+10) Decisão Operacional (Go/No-Go)
+[CONCLUSÃO:] Go condicionado.
+- Decisão: Go condicionado.
+- Condições mínimas para avançar:
+  1. Definir política de captura ContextKV por chave permitida no passo 2.
+  2. Ativar/implementar contrato técnico de output para este passo.
+  3. Remover API key literal da Config em ambiente real.
+- O que pode ficar para depois:
+  - melhoria de logging do campo “Next prompt decidido”.
+- Responsáveis e prazo:
+  - [POR CONFIRMAR] equipa/responsável formal.
+  - recomendação prática: P1 em próximo ciclo de manutenção.
+- Critério de revalidação:
+  - nova run com: sem ALERTA de contrato, sem duplicação semântica de captures, e next decidido preenchido.
+- Resposta curta para leigo:
+  - “Podemos usar já, mas convém aplicar 2-3 ajustes para reduzir risco operacional.”
+
+11) Apêndice Técnico
+[CONCLUSÃO:] OK — checklist de auditoria cumprida com evidência e separação clara entre observado/inferido.
+- Lista de runs encontradas:
+  - 2026-03-14 1924
+  - 2026-03-14 2334 (selecionada)
+- Lista de artefactos encontrados:
+  - DEBUG.csv, Seguimento.csv, catalogo_prompts_executadas.csv, painel_pipeline.txt
+  - payload_dumps/step001_* (3), step002_* (3), step003_* (3)
+- Trechos curtos de evidência:
+  - DEBUG passo 2: REQ_INPUT_JSON com has_input_file=SIM e has_text_embed=SIM.
+  - DEBUG passo 2: M05_HTTP_RESULT com http_status=200.
+  - DEBUG passo 2: CONTRACT_SUGGEST_ENABLE (ALERTA).
+  - Seguimento passo 2: injected_vars com RESULTS_JSON vindo do passo 1.
+  - Seguimento passo 2: captured_vars com TSV_CATALOGO_DRAFT_ENC e também RESULTS_JSON.
+- Checklist final (PASS/FAIL):
+  1. confirmei a run mais recente ou justifiquei URL_RUN_FIXA: PASS
+  2. li integralmente os artefactos obrigatórios ou assinalei o que faltou: PASS
+  3. confirmei input da prompt anterior: PASS
+  4. confirmei output transmitível para a seguinte: PASS
+  5. confirmei coerência com o objetivo global da cadeia: PASS
+  6. confirmei next/default/allowed sem rotas perigosas: PASS
+  7. confirmei rastreabilidade por evidência: PASS
+  8. identifiquei contradições entre artefactos: PASS
+  9. separei problemas de prompt vs config vs orquestrador vs dados: PASS
+  10. só propus alterações com valor real: PASS
+  11. produzi prompt integral corrigida apenas se era seguro fazê-lo: PASS (não necessária)
+  12. fiz verificação interna da minha própria proposta: PASS
+  13. o relatório está legível para um leigo: PASS
