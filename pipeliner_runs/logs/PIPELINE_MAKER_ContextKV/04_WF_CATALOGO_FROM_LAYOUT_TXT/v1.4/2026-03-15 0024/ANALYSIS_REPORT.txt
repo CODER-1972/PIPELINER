@@ -1,0 +1,240 @@
+1) Resumo Executivo
+[CONCLUSÃO:] FALHA — a prompt alvo executou sem erro HTTP, mas não produziu CSV/DOCX nem EXECUTE, bloqueando o objetivo final da cadeia.
+- Objetivo em linguagem simples: transformar o TSV final em CSV compatível com FLOW_TEMPLATE, gerar DOCX e acionar importação no Excel via EXECUTE.
+- Esperado vs observado:
+  - OBSERVADO: HTTP 200, Code Interpreter ativo, variável TSV_CATALOGO_FINAL_ENC injetada, anexos presentes.
+  - OBSERVADO: output final reporta EXPORT_OK_CSV=false, EXPORT_OK_WORD=false, CSV_EXISTE_EM_MNT_DATA=NAO, FALHA_EXPORT por “CONTEXTKV_MISSING_TSV_CATALOGO_FINAL_ENC”.
+  - INFERIDO: houve falha lógica no comportamento do modelo no passo CI (não falha de transporte/API).
+- Classificação final: Não aprovada.
+- Decisão operacional: No-Go.
+- Top riscos reais:
+  1. Falha de exportação impede handoff para importação automática.
+  2. Diagnóstico emitido pelo modelo contradiz evidência técnica de injeção de ContextKV.
+  3. Ausência de contrato diagnóstico (ci_csv_v1) reduz capacidade de gate determinístico.
+  4. Sem variáveis capturadas no passo 4, reduz rastreabilidade para reprocessamento.
+  5. Risco de repetição intermitente em prompts CI com payload híbrido (input_file + text_embed + ContextKV longo).
+- Top ações recomendadas:
+  - P1: reforçar TEXTO DA PROMPT para validação explícita de presença da variável injetada (literal + fallback parse).
+  - P1: adicionar CONFIG EXTRA `diagnostic_contract: ci_csv_v1`.
+  - P1: reforçar ORQUESTRADOR/PIPELINE para marcar contradição “ContextKV missing” quando houve PLACEHOLDER_REPLACED.
+  - P2: tornar obrigatório no output do passo 4 um bloco de prova com “VAR_LEN/HEAD_HASH”.
+  - P3: rever captura de NEXT_PROMPT_ID no passo 3 para evitar ruído semântico em handoff.
+- Nota leiga: “A pipeline chegou ao fim técnico, mas não gerou o ficheiro que o Excel precisava; por isso, não está pronta para uso operacional nesta execução.”
+
+2) Contexto na Cadeia de Prompts (visão de fluxo)
+[CONCLUSÃO:] RISCO — a run correta foi identificada sem ambiguidade, mas o passo final não cumpriu a entrega.
+2.1 Fontes e resolução da run
+[CONCLUSÃO:] OK — TARGET_PROMPT_ID validado e pasta inferida corretamente.
+- TARGET_PROMPT_ID: PIPELINE_MAKER_ContextKV/04/WF_CATALOGO_FROM_LAYOUT_TXT/v1.4.
+- Normalização aplicada: `04/WF_CATALOGO_FROM_LAYOUT_TXT` -> `04_WF_CATALOGO_FROM_LAYOUT_TXT`.
+- Pasta analisada: `pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/04_WF_CATALOGO_FROM_LAYOUT_TXT/v1.4/`.
+- Runs encontradas: `2026-03-12 1356`, `2026-03-15 0024`.
+- Run escolhida: `2026-03-15 0024` (mais recente por ordenação temporal real).
+- URL_RUN_FIXA: [POR CONFIRMAR] (não fornecida).
+
+2.2 Artefactos encontrados e cobertura
+[CONCLUSÃO:] OK — artefactos mínimos presentes e lidos integralmente.
+- Seguimento.csv: 4 registos, leitura 100%.
+- DEBUG.csv: 902 registos, pré-análise de eventos críticos + leitura integral orientada a contexto, cobertura 100% dos eventos críticos e do passo alvo.
+- catalogo_prompts_executadas.csv: 20 registos, leitura 100%.
+- painel_pipeline.txt: leitura 100%.
+- payload_dumps step004 (meta, request, response): leitura 100%.
+- Evidência ContextKV capture/inject: presente (steps 3 e 4).
+- Evidência files_used/file_ids: presente.
+
+2.3 Papel da prompt na cadeia
+[CONCLUSÃO:] FALHA — passo 4/4 finalizador da cadeia sem entregável de negócio.
+- Passo atual: 4 de 4 antes de STOP (observado no painel).
+- Dependência crítica da anterior: receber TSV_CATALOGO_FINAL_ENC do passo 3.
+- Entregável esperado para operação: CSV em /mnt/data + EXECUTE LOAD_CSV.
+- Entregável observado: nenhum ficheiro elegível no container; sem EXECUTE.
+- Se falhar parcialmente, o objetivo global serve? Não; sem CSV, a importação no Excel não acontece.
+
+3) I/O de Negócio (o que entra e o que sai)
+[CONCLUSÃO:] FALHA — entradas existiram, mas saídas de negócio não foram materializadas.
+- Entradas esperadas:
+  - ContextKV: TSV_CATALOGO_FINAL_ENC.
+  - Ficheiros: FLOW_TEMPLATE*.csv, ORIENTACOES_PIPELINE*.pdf.
+- Entradas observadas:
+  - OBSERVADO: INJECT_OK + PLACEHOLDER_REPLACED (2 ocorrências, 5930 chars).
+  - OBSERVADO: `has_input_file=SIM` e `has_text_embed=SIM` no REQ_INPUT_JSON.
+  - OBSERVADO: file_id usado para PDF; FLOW_TEMPLATE via text_embed.
+- Saídas esperadas:
+  - Manifesto final com EXPORT_OK true quando aplicável.
+  - CSV e DOCX no /mnt/data.
+  - ACTION/EXECUTE se CSV existir.
+- Saídas observadas:
+  - EXPORT_OK_CSV=false, EXPORT_OK_WORD=false, ROWS=0.
+  - MNT_DATA_LIST apenas com ficheiro de input (PDF).
+  - directives=0 (sem EXECUTE).
+  - captured_vars vazio no passo 4.
+- Critério de sucesso: CSV válido criado + prova em /mnt/data + EXECUTE condicionado.
+- Critério de falha/paragem: input obrigatório em falta/ilegível, export false, sem EXECUTE.
+- Diferença chave: o modelo declarou falta de ContextKV apesar de evidência técnica de injeção.
+- Tradução leiga: “O sistema recebeu os ingredientes, mas o agente não cozinhou o prato.”
+
+4) Integridade de Handoff (prompt anterior -> atual -> próxima)
+[CONCLUSÃO:] FRÁGIL — handoff técnico existe, handoff funcional falha no passo alvo.
+
+4.1 Receção da prompt anterior
+[CONCLUSÃO:] OK com ressalva — variável foi entregue, mas diagnóstico do modelo contradisse essa entrega.
+- Variáveis esperadas vs recebidas:
+  - Esperada: TSV_CATALOGO_FINAL_ENC.
+  - Observada: INJECT_OK + placeholder substituído (5930 chars).
+- Ficheiros esperados vs resolvidos:
+  - PDF anexado por file_id.
+  - FLOW_TEMPLATE em text_embed.
+- Integridade: sem hash técnico da variável no passo 4 ([POR CONFIRMAR] validação de conteúdo semântico integral).
+- Fallback usado: nenhum fallback de orquestrador; fallback foi textual no output do modelo.
+- Risco para prompt atual: médio-alto (interpretação do conteúdo injetado).
+
+4.2 Preparação para a prompt seguinte
+[CONCLUSÃO:] FALHA — não houve output transmitível para próxima etapa operacional.
+- Variáveis capturadas: nenhuma (CAPTURE_MISS).
+- Ficheiros disponíveis: só input file listado no container.
+- Parsing-safe: manifesto veio estruturado, mas com estado de falha.
+- Risco de quebra silenciosa: alto (aparente “sucesso HTTP” sem sucesso de negócio).
+
+4.3 Encadeamento e rotas
+[CONCLUSÃO:] FRÁGIL — rota terminou sem entrega útil, embora sem loop.
+- Next/default/allowed no log de Seguimento: `Next prompt decidido` vazio nos 4 passos ([POR CONFIRMAR] se decisão foi exclusivamente por lista fixa no PAINEL).
+- Rotas perigosas: ausência de sinal forte de “hard fail” no fim pode mascarar erro funcional.
+- Conclusão handoff: frágil.
+
+5) Contrato da Prompt (clareza operacional)
+[CONCLUSÃO:] RISCO — contrato textual é forte, mas faltou robustez contra interpretação errada da variável injetada.
+- ROLE/objetivo/limites: claros e operacionais.
+- Regras nucleares: não web, anti-invenção de colunas, gating de EXECUTE, fallback definidos.
+- Formato de output: manifesto determinístico e operacional.
+- Governance [POR CONFIRMAR]: não há responsável explícito de validação humana no texto.
+- Clareza I/O: alta no desenho; execução real mostrou lacuna de robustez no passo “obter ContextKV”.
+- Exequibilidade: sim, mas sujeita a erro de interpretação do modelo em contextos CI.
+
+6) Qualidade e Robustez (PASS/FAIL)
+[CONCLUSÃO:] FALHA — pipeline técnica passou, objetivo funcional falhou.
+- Teste | Resultado | Evidência | Impacto | Camada | Ação
+- run correta identificada | PASS | pasta e timestamp mais recente confirmados | evita auditoria errada | Operação | manter
+- artefactos obrigatórios encontrados | PASS | Seguimento/DEBUG/catálogo/painel/payload presentes | base probatória completa | Operação | manter
+- cobertura integral de leitura | PASS | leitura total dos artefactos críticos | confiança analítica | Operação | manter
+- prompt executada sem ambiguidade | PASS | Prompt ID step4 único | rastreabilidade | Orquestrador | manter
+- input da prompt anterior recebido | PASS | INJECT_OK + PLACEHOLDER_REPLACED | handoff técnico ok | Orquestrador | manter
+- ficheiros resolvidos/anexados | PASS | FILES + REQ_INPUT_JSON has_input_file/text_embed | contexto disponível | Dados/Anexos | manter
+- integridade ContextKV | AMBÍGUO | injeção ok, mas sem validação semântica automática da variável no passo 4 | risco de falso negativo | Prompt | [adicionar] auto-check VAR_LEN/HASH
+- parsing config extra | PASS | config_parsed sem erro | estabilidade | Config extra | manter
+- coerência payload/request | PASS | M05_PAYLOAD_CHECK ok, HTTP 200 | transporte estável | API | manter
+- resultado HTTP/resposta | PASS | M05_HTTP_RESULT 200 | comunicação ok | API | manter
+- captura de output útil | FAIL | CAPTURE_MISS no passo final | sem memória para retries | Output | [adicionar] chaves de captura mínimas
+- handoff etapa seguinte | FAIL | sem CSV, sem EXECUTE | quebra operacional | Prompt/CI | [substituir] instrução de verificação de variável
+- determinismo/parsing-safe output | PASS parcial | manifesto estruturado | útil para diagnóstico | Prompt | reforçar campos prova
+- coerência IDs/versões/placeholders | PASS | ID v1.4 consistente | manutenção | Catálogo | manter
+- coerência next/default/allowed | AMBÍGUO | campo Next vazio no Seguimento | risco de opacidade | Orquestrador | [adicionar] log explícito da decisão
+- aderência idioma/regras/web | PASS | PT-PT e sem web | conformidade | Prompt | manter
+- segurança/segredos | RISCO | alerta API key literal em Config | exposição potencial | Operação | [eliminar] key literal em Config
+- rastreabilidade/auditabilidade | PASS com ressalva | DEBUG rico, mas sem contrato CI ativo | diagnóstico parcial | Config extra | [adicionar] diagnostic_contract
+- production-readiness | FAIL | sem artefacto final | No-Go | Prompt/Operação | corrigir P1 antes de uso
+- coerência entre artefactos | FAIL | output diz ContextKV missing, DEBUG mostra placeholder substituído | contradição material | Prompt/Orquestrador | validação cruzada automática
+
+7) Ficheiros e Anexos (técnico-operacional)
+[CONCLUSÃO:] production-ready com ressalvas técnicas nos anexos, mas não production-ready no resultado final.
+- Anexos obrigatórios:
+  - ORIENTACOES_PIPELINE*.pdf: OK (input_file/file_id).
+  - FLOW_TEMPLATE*.csv: OK (text_embed).
+  - TSV_CATALOGO_FINAL_ENC: OK técnico (injeção), FAIL funcional (não utilizado corretamente pelo modelo).
+- Modo de transporte observado:
+  - file_id para PDF.
+  - text_embed para ficheiro textual.
+- Compatibilidades/riscos:
+  - mistura file_id + text_embed é suportada (observado no payload).
+  - risco atual não é upload, é lógica da prompt em CI.
+- Dumps técnicos analisados: request/response/meta do step4 lidos integralmente.
+- Evidências files_used/files_ops/file_ids/capture-inject: presentes, sem files_ops_log no Seguimento.
+- Conclusão técnica final: não production-ready.
+
+8) Evidência de Execução (Seguimento + DEBUG em linguagem leiga)
+[CONCLUSÃO:] FALHA funcional com cronologia clara e causa provável identificável.
+- Linha temporal (resumo):
+  - 00:20:54: entrada no step4, placeholders detetados.
+  - 00:20:54: ContextKV injetada e placeholders substituídos.
+  - 00:20:59: payload preparado (file_id + text_embed), API chamada.
+  - 00:24:43: HTTP 200.
+  - 00:24:44: container sem artefactos elegíveis (apenas input file-*).
+  - 00:24:45: CAPTURE_MISS e fecho do passo.
+- Seguimento.csv (step4):
+  - modelo gpt-5.2, modo Code Interpreter, HTTP 200.
+  - output resumido para “[FILE OUTPUT/CI] ... 0 ficheiros elegíveis”.
+  - next decidido vazio.
+- DEBUG.csv:
+  - alertas-chave: CONFIG_LINT_CONTRACT, M10_CI_CONTAINER_ONLY_INPUTS, M10_CI_CONTAINER_EMPTY.
+  - causa provável (INFERIDO): lógica da prompt não obrigou validação robusta da variável já injetada em formato escapado, levando a falso “missing”.
+- catalogo_prompts_executadas.csv:
+  - texto da prompt confirma objetivo e gating, mas sem cláusula anti-falso-negativo para ContextKV já expandida.
+- painel_pipeline.txt:
+  - confirma cadeia 01->02->03->04->STOP.
+- Contradições e prevalência:
+  - INCONSISTÊNCIA: “CONTEXTKV_MISSING...” (output do modelo) vs “PLACEHOLDER_REPLACED...” (DEBUG).
+  - Maior peso probatório: DEBUG técnico do orquestrador para presença da injeção.
+- Tradução leiga: “O motor entregou os dados à IA, mas a IA comportou-se como se não os tivesse recebido.”
+
+9) Segurança, Privacidade e Conformidade
+[CONCLUSÃO:] aceitável com ressalvas.
+- Exposição de segredos:
+  - ALERTA de Config!B1 com key literal (ambiente priorizado).
+- Dados sensíveis em logs:
+  - não foi observada chave em claro no output final; logs mostram paths e nomes de ficheiros.
+- Minimização de dados:
+  - adequada para troubleshooting, mas caminhos locais podem exigir política de masking ([POR CONFIRMAR] requisito interno).
+- Storage/retenção:
+  - Storage=True observado; retenção operacional [POR CONFIRMAR].
+- Desvios relevantes:
+  - segredo potencialmente persistido no workbook origem (fora do repo).
+
+10) Decisão Operacional (Go/No-Go)
+[CONCLUSÃO:] No-Go até correções P1.
+- Decisão: No-Go.
+- Condições mínimas para avançar:
+  1. Corrigir prompt para consumir ContextKV injetada (inclusive formato escapado `\t`/`\n`).
+  2. Ativar `diagnostic_contract: ci_csv_v1` no Config extra.
+  3. Reexecutar e comprovar `CSV_EXISTE_EM_MNT_DATA: SIM` + `EXECUTE: LOAD_CSV([...])`.
+- Pode ficar para depois:
+  - melhoria de logs de next/default/allowed e tuning de CAPTURE no passo final.
+- Responsáveis e prazo: [POR CONFIRMAR].
+- Critério de revalidação:
+  - run nova com artefacto CSV elegível e directives>0.
+- Resposta curta para leigo: “Ainda não; primeiro tem de voltar a gerar o CSV de forma fiável.”
+
+PROPOSTAS DE ALTERAÇÕES
+[CONCLUSÃO:] OK — propostas localizadas, de alto impacto e sem aumento desnecessário de complexidade.
+- PROMPT (ficheiro: PROMPT_REVISAO.txt)
+  - Problema: falso negativo de ContextKV missing.
+  - Evidência: placeholder substituído no DEBUG e output contraditório no modelo.
+  - Impacto: bloqueia export e execução final.
+  - Racional: adicionar verificação explícita e fallback de leitura do valor injetado na própria secção INPUTS, antes de declarar falta.
+- CONFIG EXTRA (ficheiro: CONFIG_EXTRA_REVISAO.txt)
+  - Problema: contrato diagnóstico ausente.
+  - Evidência: ALERTA CONFIG_LINT_CONTRACT no passo 4.
+  - Impacto: menor capacidade de gate automático e troubleshooting.
+  - Racional: ativar `diagnostic_contract: ci_csv_v1` para reforçar prova mínima e consistência de sinais.
+
+11) Apêndice Técnico
+[CONCLUSÃO:] OK — checklist final concluída com rastreabilidade suficiente.
+- Lista de runs encontradas: 2026-03-12 1356; 2026-03-15 0024.
+- Lista de artefactos analisados: Seguimento.csv, DEBUG.csv, catalogo_prompts_executadas.csv, painel_pipeline.txt, payload_dumps step004.
+- Trechos curtos de evidência:
+  - DEBUG: PLACEHOLDER_REPLACED|TSV_CATALOGO_FINAL_ENC (5930 chars).
+  - DEBUG: M10_CI_CONTAINER_EMPTY.
+  - Seguimento step4: output “[FILE OUTPUT/CI] ... 0 ficheiros elegíveis.”
+  - Response raw: `FALHA_EXPORT: CONTEXTKV_MISSING_TSV_CATALOGO_FINAL_ENC`.
+- Checklist PASS/FAIL:
+  1. run mais recente confirmada: PASS
+  2. artefactos obrigatórios lidos: PASS
+  3. input da prompt anterior confirmado: PASS
+  4. output transmitível para seguinte: FAIL
+  5. coerência com objetivo global: FAIL
+  6. next/default/allowed sem rotas perigosas: AMBÍGUO
+  7. rastreabilidade por evidência: PASS
+  8. contradições identificadas: PASS
+  9. separação prompt/config/orquestrador/dados: PASS
+  10. só alterações com valor real: PASS
+  11. prompt integral corrigida apenas com segurança: PASS
+  12. verificação interna da proposta: PASS
+  13. legível para leigo: PASS
