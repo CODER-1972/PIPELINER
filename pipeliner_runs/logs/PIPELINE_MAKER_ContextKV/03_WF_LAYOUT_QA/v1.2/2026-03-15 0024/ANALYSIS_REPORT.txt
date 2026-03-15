@@ -1,0 +1,238 @@
+1) Resumo Executivo
+[CONCLUSÃO:] RISCO — execução técnica da prompt foi bem-sucedida (HTTP 200), mas há fragilidades de handoff e de determinismo de captura que impedem aprovação plena sem ressalvas.
+Objetivo em linguagem simples: esta prompt (WF_LAYOUT_QA v1.2) faz QA mecânico ao TSV de catálogo vindo do passo anterior e devolve uma versão final validada para o passo seguinte converter em CSV/output.
+Esperado vs observado:
+- [OBSERVADO] A prompt executou com HTTP 200 e produziu as variáveis principais (TSV_CATALOGO_FINAL_ENC, TSV_CHANGELOG_ENC, TSV_VALIDACOES_ENC, MEMORY_SHORT).
+- [OBSERVADO] O output incluiu "READY_FOR_CSV=NAO" e manteve campos críticos [POR CONFIRMAR] (ID, Modelo, Storage).
+- [OBSERVADO] A captura ContextKV gerou uma chave NEXT_PROMPT_ID preenchida com conteúdo não correspondente a um ID (bloco TSV_CHANGELOG_ENC), sinal de captura não determinística para esse campo.
+Classificação final: Aprovada com ressalvas.
+Decisão operacional: Go condicionado.
+Top riscos reais:
+1. Captura indevida de NEXT_PROMPT_ID (risco de quebra de routing dinâmico em cenários AUTO).
+2. Campos críticos [POR CONFIRMAR] no TSV final (não pronto para publicação final).
+3. "Sem contrato" (C0_NO_CONTRACT) no passo, reduz validação formal do output.
+4. Rastreabilidade inconsistente de hash entre captured_vars_meta e injected_vars.
+5. Next prompt decidido vazio em Seguimento (pouca transparência de decisão de fluxo).
+Top ações recomendadas:
+- P1: ajustar texto de output da prompt para emitir NEXT_PROMPT_ID explícito e determinístico.
+- P1: reforçar regra de ordem fixa dos blocos de output para captura estável.
+- P1: bloquear downstream quando READY_FOR_CSV=NAO (camada orquestrador).
+- P2: normalizar e validar hash/canonicalização entre captura e injeção de ContextKV.
+- P2: ativar/definir contrato formal para o passo (evitar C0_NO_CONTRACT).
+Nota para leigo: "Funcionou, mas ainda com sinais de risco silencioso; pode avançar apenas com travões de segurança e pequeno ajuste no formato de saída."
+
+2) Contexto na Cadeia de Prompts (visão de fluxo)
+[CONCLUSÃO:] OK — run alvo foi identificada de forma inequívoca e os artefactos essenciais existem, com cobertura de leitura integral dos ficheiros textuais relevantes.
+Fontes da análise:
+- Seguimento.csv, DEBUG.csv, catalogo_prompts_executadas.csv, painel_pipeline.txt, payload_dumps (request/response/meta dos 4 passos).
+Pasta de logs analisada:
+- pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/03_WF_LAYOUT_QA/v1.2
+Runs encontradas:
+- 2026-03-12 1356
+- 2026-03-14 1924
+- 2026-03-14 2334
+- 2026-03-15 0024
+Run escolhida e justificação:
+- 2026-03-15 0024 (mais recente por ordenação temporal real).
+Artefactos encontrados:
+- Obrigatórios: presentes (Seguimento.csv, DEBUG.csv, catalogo_prompts_executadas.csv).
+- Auxiliares: painel_pipeline.txt e payload_dumps presentes.
+Cobertura de leitura por artefacto:
+- Seguimento.csv: 100%
+- DEBUG.csv: 100%
+- catalogo_prompts_executadas.csv: 100%
+- painel_pipeline.txt: 100%
+- payload_dumps/*.json e *_meta.txt: 100%
+Limitações:
+- [POR CONFIRMAR] Não foi fornecido ficheiro de política de contrato para confirmar se C0_NO_CONTRACT era esperado/desligado por desenho.
+Papel desta prompt na cadeia:
+- Passo 3 de 4 na run.
+Dependências da prompt anterior:
+- Recebe TSV_CATALOGO_DRAFT_ENC do passo 2 via ContextKV.
+Entregáveis para a próxima:
+- TSV_CATALOGO_FINAL_ENC (observado como injetado no passo 4), mais changelog/validações/memória curta.
+Impacto no objetivo global:
+- Alto: é gate de qualidade antes da conversão final de catálogo.
+Resposta explícita:
+- Se falhar parcialmente, o processo global pode prosseguir tecnicamente, mas com risco de produzir catálogo inconsistente ou não publicável; portanto, serve o objetivo apenas de forma condicionada.
+
+3) I/O de Negócio (o que entra e o que sai)
+[CONCLUSÃO:] RISCO — I/O principal ocorreu, porém com sinal de ambiguidade em variável de controlo e com saída marcada como não pronta para CSV final.
+Entradas esperadas:
+- Variáveis: TSV_CATALOGO_DRAFT_ENC via ContextKV.
+- Ficheiros: ORIENTACOES_PIPELINE*.pdf e FLOW_TEMPLATE*.csv (required/latest).
+Entradas observadas:
+- ContextKV injetado: TSV_CATALOGO_DRAFT_ENC (from_step=2).
+- Ficheiros resolvidos/anexados: FLOW_TEMPLATE.csv (text_embed) e ORIENTACOES...pdf (pdf_upload com file_id).
+Saídas esperadas:
+- TSV_CATALOGO_FINAL_ENC, TSV_CHANGELOG_ENC, TSV_VALIDACOES_ENC, MEMORY_SHORT; idealmente sinal de next/handoff claro.
+Saídas observadas:
+- Capturadas 5 keys: NEXT_PROMPT_ID, MEMORY_SHORT, TSV_CATALOGO_FINAL_ENC, TSV_CHANGELOG_ENC, TSV_VALIDACOES_ENC.
+- READY_FOR_CSV=NAO no MEMORY_SHORT.
+Critérios de sucesso (observáveis):
+- HTTP 200; output com blocos exigidos; captura ContextKV estável; handoff para passo 4.
+Critérios de falha/paragem:
+- Variável de entrada ausente; output não parseável; ausência de variáveis para passo seguinte.
+Diferenças esperado vs observado:
+- NEXT_PROMPT_ID capturado sem estar explicitamente emitido como ID válido.
+- TSV final mantém [POR CONFIRMAR] críticos.
+Tradução leiga:
+- "Recebeu e devolveu quase tudo, mas com uma peça de controlo mal formatada e com conteúdo ainda por confirmar."
+
+4) Integridade de Handoff (prompt anterior -> atual -> próxima)
+[CONCLUSÃO:] RISCO — handoff funcional, mas frágil para cenários de routing automático e governança de qualidade.
+4.1 Receção da prompt anterior
+[CONCLUSÃO:] OK — variável principal e anexos necessários chegaram ao passo atual.
+- Variáveis esperadas vs recebidas: TSV_CATALOGO_DRAFT_ENC esperado e recebido.
+- Ficheiros esperados vs resolvidos: ambos resolvidos com status OK.
+- Integridade técnica: upload com file_id ativo; houve invalidação de cache prévia (404) e recuperação por novo upload (HTTP 200).
+- Lacunas/fallback: fallback de reuse acionado corretamente.
+- Risco para prompt atual: baixo.
+4.2 Preparação para a prompt seguinte
+[CONCLUSÃO:] RISCO — entrega principal existe, mas sem critério de bloqueio automático apesar de READY_FOR_CSV=NAO.
+- Variáveis capturadas: presentes, porém NEXT_PROMPT_ID inconsistente semanticamente.
+- Ficheiros disponíveis: passo 4 recebeu TSV_CATALOGO_FINAL_ENC.
+- Prontidão parsing-safe: parcial (blocos principais sim; variável NEXT_PROMPT_ID não confiável).
+- Risco de quebra silenciosa: médio-alto em pipelines AUTO.
+4.3 Encadeamento e rotas
+[CONCLUSÃO:] FRÁGIL — next/default/allowed no catálogo estão coerentes, mas a telemetria de next decidido está vazia e a captura de NEXT_PROMPT_ID é anómala.
+- Coerência estrutural em catálogo: Next PROMPT e default apontam para passo 4; allowed inclui STOP e passo 4.
+- Rotas perigosas: potencial uso indevido de NEXT_PROMPT_ID se orquestração futura depender desta variável.
+- Conclusão do handoff: frágil.
+
+5) Contrato da Prompt (clareza operacional)
+[CONCLUSÃO:] RISCO — contrato de output está quase completo, mas falta instrução explícita para NEXT_PROMPT_ID e ordem rígida dos blocos, o que afeta determinismo da captura.
+- ROLE/objetivo/limites: claros e adequados.
+- Regras nucleares: incluem anti-invenção, web proibida e idioma PT-PT.
+- Formato obrigatório: especifica 4 blocos ContextKV, mas não inclui NEXT_PROMPT_ID explícito.
+- Governance [POR CONFIRMAR]: sem indicação de validador humano explícito nesta prompt.
+- Clareza I/O: boa para conteúdo principal; incompleta para sinal de roteamento.
+- Exequibilidade: alta para QA mecânico; média para integração robusta de cadeia.
+
+6) Qualidade e Robustez (PASS/FAIL)
+[CONCLUSÃO:] RISCO — maioria dos testes passa, mas há falhas/ambiguidade em determinismo de captura e readiness operacional.
+Teste | Resultado | Evidência | Impacto | Camada de correção | Ação corretiva
+run correcta identificada | PASS | run 2026-03-15 0024 é a mais recente | evita análise errada | operação | [adicionar] regra de seleção automática + registo
+artefactos obrigatórios encontrados | PASS | 3 CSV obrigatórios presentes | cobertura mínima garantida | operação | nenhuma
+cobertura integral de leitura | PASS | leitura 100% dos ficheiros relevantes | confiança analítica | operação | nenhuma
+prompt executada sem ambiguidade | PASS | passo 3 = alvo exato | rastreabilidade | operação | nenhuma
+input da prompt anterior | PASS | injected_vars contém TSV_CATALOGO_DRAFT_ENC | handoff de entrada ok | orquestrador | nenhuma
+ficheiros resolvidos/anexados | PASS | DEBUG FILES status OK + file_id | base de validação correta | dados/anexos | nenhuma
+integridade ContextKV | FAIL | NEXT_PROMPT_ID capturado com conteúdo não-ID | risco de routing incorreto | TEXTO DA PROMPT + orquestrador | [substituir] contrato de output para NEXT_PROMPT_ID explícito
+parsing config extra | PASS | config extra sem chaves proibidas | evita erro parser | config extra | nenhuma
+coerência payload/request | PASS | request com model/store/truncation/metadata e file_id | execução estável | orquestrador | nenhuma
+resultado HTTP e resposta | PASS | HTTP 200 e status completed | execução concluída | API/orquestrador | nenhuma
+captura de output | AMBÍGUO | 5 keys capturadas, 1 key semanticamente errada | fragilidade silenciosa | orquestrador | [adicionar] validação regex para NEXT_PROMPT_ID
+handoff para etapa seguinte | PASS | passo 4 recebeu TSV_CATALOGO_FINAL_ENC | continuidade de cadeia | orquestrador | nenhuma
+determinismo/parsing-safe do output | FAIL | ausência de NEXT_PROMPT_ID explícito + captura indevida | comportamento não determinista | OUTPUT | [adicionar] bloco NEXT_PROMPT_ID fixo
+coerência IDs/versões/placeholders | AMBÍGUO | TSV final mantém [POR CONFIRMAR] em campos críticos | não pronto para produção final | dados/input | [eliminar] [POR CONFIRMAR] críticos antes de publicar
+coerência next/default/allowed | PASS | catálogo do passo 3 está coerente | fluxo básico protegido | catálogo | nenhuma
+aderência idioma/regras/web | PASS | prompt e output em PT-PT sem web | compliance funcional | prompt | nenhuma
+segurança/segredos | PASS | sem exposição de API key nos logs lidos | risco baixo | operação | manter higiene de logs
+rastreabilidade/auditabilidade | AMBÍGUO | Next decidido vazio em Seguimento | auditoria incompleta de roteamento | orquestrador | [adicionar] logging explícito de next efetivo
+production-readiness | FAIL | READY_FOR_CSV=NAO + [POR CONFIRMAR] críticos | No-Go para publicação final | dados + operação | [substituir] gate de avanço por critério READY_FOR_CSV
+coerência entre artefactos | FAIL | hash/meta de captura diverge da injeção em passos 2-4 | risco de confiança em cadeia | orquestrador | [adicionar] canonicalização única de hash
+
+7) Ficheiros e Anexos (técnico-operacional)
+[CONCLUSÃO:] production-ready com ressalvas — anexação funcionou, mas há sinais de fricção operacional e falta de travão para saída não pronta.
+- Anexos obrigatórios:
+  - FLOW_TEMPLATE*.csv: OK (resolved FLOW_TEMPLATE.csv; modo text_embed)
+  - ORIENTACOES_PIPELINE*.pdf: OK (resolved PDF; file_id presente)
+- Transporte observado: híbrido no input (input_file via file_id + input_text com conteúdo estruturado).
+- Compatibilidades/riscos:
+  - cache de file_id anterior inválido (404) foi tratado com novo upload (robustez positiva).
+  - sem evidência de overflow/text_embed excessivo nesta etapa.
+- Dumps técnicos: request/response/meta existem para os 4 passos, facilitando troubleshooting.
+- Evidência files_used/files_ops/file_ids/capture/inject: presente em Seguimento e DEBUG.
+Conclusão técnica desta secção: production-ready com ressalvas.
+
+8) Evidência de Execução (Seguimento + DEBUG em linguagem leiga)
+[CONCLUSÃO:] RISCO — execução técnica correu bem, porém os logs mostram fragilidades de governação de fluxo e de consistência de captura.
+Linha temporal:
+- 00:19:30–00:19:34: preparação de anexos e payload (passo 3).
+- 00:19:34: payload final registado (len=23700).
+- 00:20:54: HTTP 200 e fecho do passo 3; captura ContextKV concluída.
+Seguimento.csv (passo 3):
+- modelo gpt-5.4, modos None, storage True, HTTP 200, response_id presente.
+- output capturado com blocos TSV_* e MEMORY_SHORT.
+- next decidido vazio.
+DEBUG.csv (passo 3):
+- eventos FILES_* com status OK.
+- C0_NO_CONTRACT (informativo), indicando ausência de contrato explícito ativo.
+- CAPTURE_START/CAPTURE_OK com 5 chaves.
+catalogo_prompts_executadas.csv:
+- prompt de QA está presente e define outputs ContextKV sem NEXT_PROMPT_ID explícito.
+painel_pipeline.txt:
+- sequência inclui passos 1→2→3→4→STOP, Max Steps=10, Max Repetitions=3.
+Outros ficheiros:
+- payload_dumps confirmam request/response reais e metadata esperada.
+INCONSISTÊNCIAS:
+- Inconsistência A (relevante): NEXT_PROMPT_ID capturado sem linha correspondente no output.
+  - Fonte com maior peso probatório: output real da resposta (payload response + Seguimento) prevalece sobre interpretação de captura da key.
+- Inconsistência B (relevante): hashes/meta de captura não alinham com hashes referidos em injected_vars.
+  - Maior peso: cadeia de injected_vars (efeito real no passo seguinte) para impacto operacional; captured_vars_meta para diagnóstico.
+Tradução leiga:
+- "A máquina fez o trabalho, mas uma etiqueta de controlo foi lida de forma confusa; isto pode causar erros futuros se ninguém vigiar."
+
+9) Segurança, Privacidade e Conformidade
+[CONCLUSÃO:] aceitável com ressalvas — não foram observados segredos expostos, mas há rastros de caminhos locais e falta de contrato formal.
+- Exposição de segredos: não observada (sem API key em claro nos artefactos lidos).
+- Dados sensíveis em log: paths locais completos aparecem no DEBUG (aceitável internamente; avaliar minimização em ambientes partilhados).
+- Minimização de dados: razoável; sem dumps de credenciais.
+- Storage/retenção: store=True observado no request.
+- Desvios: ausência de contrato explícito (C0_NO_CONTRACT) reduz controlo de conformidade técnica.
+
+10) Decisão Operacional (Go/No-Go)
+[CONCLUSÃO:] Go condicionado — pode operar em continuidade interna, mas não deve publicar resultado final sem correções mínimas.
+Decisão: Go condicionado.
+Condições mínimas para avançar:
+1. Ajustar output da prompt para NEXT_PROMPT_ID explícito e determinístico.
+2. Bloquear avanço final quando READY_FOR_CSV=NAO.
+3. Validar/remover [POR CONFIRMAR] críticos (ID, Modelo, Storage) antes da publicação.
+O que pode ficar para depois:
+- Normalização de hashes de ContextKV e melhoria de telemetria do next decidido.
+Responsáveis e prazo: [POR CONFIRMAR].
+Critério de revalidação:
+- Nova run com mesma cadeia, sem captura anómala de NEXT_PROMPT_ID e com READY_FOR_CSV=SIM para material final.
+Resposta curta para leigo:
+- "Podemos usar já para continuar a iteração técnica, mas ainda não para versão final de produção do catálogo."
+
+11) Apêndice Técnico
+[CONCLUSÃO:] OK — checklist de auditoria foi cumprida, com identificação explícita de lacunas e conflitos.
+Trechos curtos de evidência:
+- Captura: "Captura concluída. Keys=5" (DEBUG).
+- Estado de qualidade: "READY_FOR_CSV=NAO" (Output passo 3).
+- Handoff: passo 4 injeta TSV_CATALOGO_FINAL_ENC vindo do passo 3.
+Lista de runs encontradas:
+- 2026-03-12 1356; 2026-03-14 1924; 2026-03-14 2334; 2026-03-15 0024.
+Lista de artefactos encontrados:
+- DEBUG.csv; Seguimento.csv; catalogo_prompts_executadas.csv; painel_pipeline.txt; payload_dumps (12 ficheiros).
+Checklist final obrigatória (PASS/FAIL):
+1. confirmei a run mais recente ou justifiquei URL_RUN_FIXA — PASS
+2. li integralmente artefactos obrigatórios ou assinalei faltas — PASS
+3. confirmei input da prompt anterior — PASS
+4. confirmei output transmitível para a seguinte — PASS
+5. confirmei coerência com objetivo global — PASS
+6. confirmei next/default/allowed sem rotas perigosas — PASS (com ressalva de captura NEXT_PROMPT_ID)
+7. confirmei rastreabilidade por evidência — PASS
+8. identifiquei contradições entre artefactos — PASS
+9. separei problemas de prompt vs config vs orquestrador vs dados — PASS
+10. só propus alterações com valor real — PASS
+11. produzi prompt integral corrigida apenas com base segura — PASS
+12. fiz verificação interna da proposta — PASS
+13. relatório legível para leigo — PASS
+
+PROPOSTAS DE ALTERAÇÕES
+[CONCLUSÃO:] OK — propostas localizadas, de baixo esforço e alto retorno, sem conflito entre secções.
+PROMPT
+- Problema: ausência de NEXT_PROMPT_ID explícito no contrato de output.
+- Evidência: key NEXT_PROMPT_ID foi capturada com conteúdo não-ID.
+- Impacto: risco de routing incorreto em cadeias AUTO.
+- Racional: tornar parsing determinístico e auditável.
+- Ficheiro: PROMPT_REVISAO.txt.
+OUTPUT
+- Problema: formato não obriga ordem rígida + terminador claro para captura.
+- Evidência: captura mista por métodos key_colon_line/section_until_next_header.
+- Impacto: parsing frágil e inconsistência de meta.
+- Racional: bloco de output estrito e validável por regex.
+- Ficheiro: OUTPUT_REVISAO.txt.
