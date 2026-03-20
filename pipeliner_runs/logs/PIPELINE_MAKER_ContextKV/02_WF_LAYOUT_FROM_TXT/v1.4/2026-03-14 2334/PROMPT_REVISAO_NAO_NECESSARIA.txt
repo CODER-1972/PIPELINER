@@ -1,0 +1,16 @@
+1) Justificação objetiva para não alterar a prompt
+A prompt PIPELINE_MAKER_ContextKV/02/WF_LAYOUT_FROM_TXT/v1.4 cumpriu o objetivo operacional principal nesta run: recebeu RESULTS_JSON, processou anexos esperados e produziu TSV_CATALOGO_DRAFT_ENC consumido com sucesso pelo passo seguinte.
+
+2) Evidência resumida
+- HTTP 200 no passo 2.
+- output com as chaves esperadas para handoff (TSV_CATALOGO_DRAFT_ENC, TSV_VALIDACOES_ENC, MEMORY_SHORT).
+- injeção de RESULTS_JSON proveniente do passo 1 confirmada em Seguimento.
+- passo 3 (WF_LAYOUT_QA) recebeu TSV_CATALOGO_DRAFT_ENC e executou com HTTP 200.
+
+3) Confirmação sobre a camada dos problemas observados
+Os principais problemas observados pertencem sobretudo a:
+- ORQUESTRADOR / PIPELINE (captura ContextKV redundante e ausência de contrato formal ativo);
+- OPERAÇÃO / GOVERNAÇÃO (presença de API key literal na Config);
+- RASTREABILIDADE de logging (campo “Next prompt decidido” vazio em Seguimento).
+
+Não foi encontrada evidência suficiente de falha intrínseca no texto da prompt que justifique revisão textual obrigatória nesta execução específica.
