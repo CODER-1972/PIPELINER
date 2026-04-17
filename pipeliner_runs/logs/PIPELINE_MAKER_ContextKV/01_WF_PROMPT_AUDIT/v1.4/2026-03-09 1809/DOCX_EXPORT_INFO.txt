@@ -1,0 +1,20 @@
+Estado de exportação DOCX (run 2026-03-09 1809)
+
+Motivo da alteração
+- O fluxo de PR atual não suporta ficheiros binários neste contexto.
+- Para manter o PR compatível, os artefactos .docx não são versionados.
+
+Ficheiros fonte mantidos no repositório
+- ANALYSIS_REPORT.txt
+- PROMPT_REVISAO.txt
+
+Como gerar DOCX localmente (fora do PR)
+1) Executar:
+   python pipeliner_runs/logs/PIPELINE_MAKER_ContextKV/01_WF_PROMPT_AUDIT/v1.4/2026-03-09\ 1809/generate_docx_from_txt.py
+2) Serão criados:
+   - ANALYSIS_REPORT.docx
+   - PROMPT_REVISAO.docx
+
+Validação sugerida
+- unzip -t ANALYSIS_REPORT.docx
+- unzip -t PROMPT_REVISAO.docx
